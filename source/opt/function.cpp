@@ -44,5 +44,12 @@ void Function::ForEachInst(const std::function<void(const Instruction*)>& f,
         ->ForEachInst(f, run_on_debug_line_insts);
 }
 
+void Function::ForEachParam(const std::function<void(const Instruction*)>& f,
+    bool run_on_debug_line_insts) const {
+    for (const auto& param : params_)
+        static_cast<const Instruction*>(param.get())
+        ->ForEachInst(f, run_on_debug_line_insts);
+}
+
 }  // namespace ir
 }  // namespace spvtools

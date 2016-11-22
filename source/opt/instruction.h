@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "operand.h"
+
 #include "spirv-tools/libspirv.h"
 #include "spirv/1.1/spirv.h"
 
@@ -99,6 +101,7 @@ class Instruction {
   // TODO(qining): Remove this function when instruction building and insertion
   // is well implemented.
   void SetOpcode(SpvOp op) { opcode_ = op; }
+  void SetResultId(uint32_t id) { result_id_ = id; }
   uint32_t type_id() const { return type_id_; }
   uint32_t result_id() const { return result_id_; }
   // Returns the vector of line-related debug instructions attached to this
@@ -161,6 +164,8 @@ class Instruction {
                           bool run_on_debug_line_insts = false);
   inline void ForEachInst(const std::function<void(const Instruction*)>& f,
                           bool run_on_debug_line_insts = false) const;
+
+  inline void ForEachInId(const std::function<void(uint32_t*)>& f);
 
   // Pushes the binary segments for this instruction into the back of *|binary|.
   void ToBinaryWithoutAttachedDebugInsts(std::vector<uint32_t>* binary) const;
@@ -226,6 +231,10 @@ inline void Instruction::ForEachInst(
   if (run_on_debug_line_insts)
     for (auto& dbg_line : dbg_line_insts_) f(&dbg_line);
   f(this);
+}
+
+inline void Instruction::ForEachInId(const std::function<void(uint32_t*)>& f) {
+  for (auto& opnd : operands_) if (opnd.type == SPV_OPERAND_TYPE_ID) f(&opnd.words[0]);
 }
 
 }  // namespace ir
