@@ -48,6 +48,7 @@ class InlinePass : public Pass {
 
   void InlinePass::GenInlineCode(
         std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
+        std::vector<std::unique_ptr<ir::Instruction>>& newVars,
         ir::UptrVectorIterator<ir::Instruction> ii,
         ir::UptrVectorIterator<ir::BasicBlock> bi,
         ir::Function* func);

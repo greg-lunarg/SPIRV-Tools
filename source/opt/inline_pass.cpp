@@ -24,6 +24,9 @@
 #define SPV_FUNCTION_CALL_ARGUMENT_ID 3
 #define SPV_FUNCTION_PARAMETER_RESULT_ID 1
 #define SPV_STORE_OBJECT_ID 1
+#define SPV_RETURN_VALUE_ID 0
+#define SPV_TYPE_POINTER_STORAGE_CLASS 1
+#define SPV_TYPE_POINTER_TYPE_ID 2
 
 namespace spvtools {
 namespace opt {
@@ -33,6 +36,7 @@ namespace opt {
 
 void InlinePass::GenInlineCode(
     std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
+    std::vector<std::unique_ptr<ir::Instruction>>& newVars,
     ir::UptrVectorIterator<ir::Instruction> call_ii,
     ir::UptrVectorIterator<ir::BasicBlock> call_bi,
     ir::Function* callerFn) {
@@ -54,7 +58,6 @@ void InlinePass::GenInlineCode(
   // Define caller local variables for all callee variables and create map to them
   auto cbi = calleeFn->begin();
   auto cii = cbi->begin();
-  std::vector<std::unique_ptr<ir::Instruction>> newVars;
   while (cii->opcode() == SpvOp::SpvOpVariable) {
     std::unique_ptr<ir::Instruction> var_inst(new ir::Instruction(*cii));
     uint32_t newId = getNextId();
@@ -65,24 +68,43 @@ void InlinePass::GenInlineCode(
   }
 
   // Create return var if needed
-  uint32_t funcTypeId = calleeFn->GetTypeId();
-  ir::Instruction *type_inst = def_use_mgr_->id_to_defs().find(funcTypeId)->second;
+  // TODO: fix type to be ptr
+  uint32_t calleeTypeId = calleeFn->GetTypeId();
+  ir::Instruction *type_inst = def_use_mgr_->id_to_defs().find(calleeTypeId)->second;
   uint32_t returnVarId = 0;
   if ( type_inst->opcode() != SpvOpTypeVoid) {
+    // find or create ptr to callee return type
+    ir::Module::inst_iterator inst_iter = module_->types_values_begin();
+    for (; inst_iter != module_->types_values_end(); ++inst_iter) {
+      ir::Instruction* type_inst = &*inst_iter;
+      if (type_inst->opcode() == SpvOpTypePointer &&
+          type_inst->GetOperand(SPV_TYPE_POINTER_TYPE_ID).words[0] == calleeTypeId &&
+          type_inst->GetOperand(SPV_TYPE_POINTER_STORAGE_CLASS).words[0] == SpvStorageClassFunction)
+        break;
+    }
+    uint32_t returnVarTypeId;
+    if (inst_iter != module_->types_values_end()) {
+      returnVarTypeId = inst_iter->result_id();
+    }
+    else {
+      // add pointer type to module      
+      returnVarTypeId = getNextId();
+      std::vector<ir::Operand> in_operands;
+      in_operands.emplace_back(spv_operand_type_t::SPV_OPERAND_TYPE_STORAGE_CLASS,
+          std::initializer_list<uint32_t>{uint32_t(SpvStorageClassFunction)});
+      in_operands.emplace_back(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+          std::initializer_list<uint32_t>{uint32_t(calleeTypeId)});
+      std::unique_ptr<ir::Instruction> type_inst(new ir::Instruction(SpvOpTypePointer,
+          0, returnVarTypeId, in_operands));
+      module_->AddType(std::move(type_inst));
+    }
     returnVarId = getNextId();
     std::vector<ir::Operand> in_operands;
     in_operands.emplace_back(spv_operand_type_t::SPV_OPERAND_TYPE_STORAGE_CLASS,
       std::initializer_list<uint32_t>{uint32_t(SpvStorageClassFunction)});
     std::unique_ptr<ir::Instruction> var_inst(new ir::Instruction(SpvOpVariable,
-      funcTypeId, returnVarId, in_operands));
+      returnVarTypeId, returnVarId, in_operands));
     newVars.push_back(std::move(var_inst));
-  }
-
-  // Insert new callee vars into caller function
-  if (newVars.size() > 0) {
-    auto vbi = callerFn->begin();
-    auto vii = vbi->begin();
-    vii.MoveBefore(newVars);
   }
 
   // Clone and map callee code
@@ -90,7 +112,7 @@ void InlinePass::GenInlineCode(
   uint32_t returnLabelId = 0;
   std::unique_ptr<ir::BasicBlock> bp;
   calleeFn->ForEachInst([&newBlocks,&inline2func,&call_bi,&call_ii,&bp,&returned,&returnLabelId,
-      &returnVarId,this](const ir::Instruction* cpi) {
+      &returnVarId,&calleeTypeId,this](const ir::Instruction* cpi) {
     switch (cpi->opcode()) {
     case SpvOpFunction:
     case SpvOpFunctionParameter:
@@ -136,20 +158,24 @@ void InlinePass::GenInlineCode(
         }
       }
       break;
+    case SpvOpReturnValue: {
+        // store return value to return variable
+        assert(returnVarId != 0);
+        auto valId = cpi->GetInOperand(SPV_RETURN_VALUE_ID).words[0];
+        std::vector<ir::Operand> store_in_operands;
+        store_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+            std::initializer_list<uint32_t>{returnVarId}));
+        store_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+            std::initializer_list<uint32_t>{valId}));
+        std::unique_ptr<ir::Instruction> newBranch(new ir::Instruction(
+            SpvOpStore, 0, 0, store_in_operands));
+        bp->AddInstruction(std::move(newBranch));
+
+        // Remember we saw a return; if followed by a label, will need to insert branch
+        returned = true;
+      }
+      break;
     case SpvOpReturn: {
-        // if return variable created, store return value to it
-        if (returnVarId != 0) {
-          auto objId = cpi->GetInOperand(SPV_STORE_OBJECT_ID).words[0];
-          assert(objId != 0);
-          std::vector<ir::Operand> store_in_operands;
-          store_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-              std::initializer_list<uint32_t>{returnVarId}));
-          store_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-              std::initializer_list<uint32_t>{objId}));
-          std::unique_ptr<ir::Instruction> newBranch(new ir::Instruction(
-              SpvOpStore, 0, 0, store_in_operands));
-          bp->AddInstruction(std::move(newBranch));
-        }
         // Remember we saw a return; if followed by a label, will need to insert branch
         returned = true;
       }
@@ -170,11 +196,9 @@ void InlinePass::GenInlineCode(
           std::vector<ir::Operand> load_in_operands;
           load_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
               std::initializer_list<uint32_t>{returnVarId}));
-          load_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-              std::initializer_list<uint32_t>{resId}));
-          std::unique_ptr<ir::Instruction> newBranch(new ir::Instruction(
-              SpvOpLoad, 0, 0, load_in_operands));
-          bp->AddInstruction(std::move(newBranch));
+          std::unique_ptr<ir::Instruction> newLoad(new ir::Instruction(
+              SpvOpLoad, calleeTypeId, resId, load_in_operands));
+          bp->AddInstruction(std::move(newLoad));
         }
         // copy remaining instructions from caller block
         auto cii = call_ii;
@@ -184,6 +208,8 @@ void InlinePass::GenInlineCode(
               new ir::Instruction(*cii));
           bp->AddInstruction(std::move(spv_inst));
         }
+        // finalize
+        newBlocks.push_back(std::move(bp));
       }
       break;
     default: {
@@ -207,8 +233,6 @@ void InlinePass::GenInlineCode(
       }
       break;
     }
-    // finalize
-    newBlocks.push_back(std::move(bp));
   });
 }
 
@@ -218,9 +242,15 @@ bool InlinePass::Inline(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end();) {
       if (ii->opcode() == SpvOp::SpvOpFunctionCall) {
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
-        GenInlineCode(newBlocks, ii, bi, func);
+        std::vector<std::unique_ptr<ir::Instruction>> newVars;
+        GenInlineCode(newBlocks, newVars, ii, bi, func);
         bi = bi.Erase();
         bi = bi.MoveBefore(newBlocks);
+        if (newVars.size() > 0) {
+          auto vbi = func->begin();
+          auto vii = vbi->begin();
+          vii.MoveBefore(newVars);
+        }
         ii = bi->begin();
         modified = true;
       } else {
@@ -236,6 +266,7 @@ void InlinePass::Initialize(ir::Module* module) {
     for (const auto& id_def : def_use_mgr_->id_to_defs()) {
         nextId_ = std::max(nextId_, id_def.first);
     }
+    nextId_++;
     module_ = module;
 };
 

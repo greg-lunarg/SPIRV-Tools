@@ -101,7 +101,6 @@ class Instruction {
   // TODO(qining): Remove this function when instruction building and insertion
   // is well implemented.
   void SetOpcode(SpvOp op) { opcode_ = op; }
-  void SetResultId(uint32_t id) { result_id_ = id; }
   uint32_t type_id() const { return type_id_; }
   uint32_t result_id() const { return result_id_; }
   // Returns the vector of line-related debug instructions attached to this
@@ -138,6 +137,8 @@ class Instruction {
   inline void SetInOperand(uint32_t index, std::vector<uint32_t>&& data);
   // Sets the result type id.
   inline void SetResultType(uint32_t ty_id);
+  // Sets the result id
+  inline void SetResultId(uint32_t res_id);
 
   // The following methods are similar to the above, but are for in operands.
   uint32_t NumInOperands() const {
@@ -197,6 +198,13 @@ inline void Instruction::SetInOperand(uint32_t index,
   assert(index + TypeResultIdCount() < operands_.size() &&
          "operand index out of bound");
   operands_[index + TypeResultIdCount()].words = std::move(data);
+}
+
+inline void Instruction::SetResultId(uint32_t res_id) {
+  result_id_ = res_id;
+  auto ridx = (type_id_ != 0) ? 1 : 0;
+  assert(operands_[ridx].type == SPV_OPERAND_TYPE_RESULT_ID);
+  operands_[ridx].words = { res_id };
 }
 
 inline void Instruction::SetResultType(uint32_t ty_id) {
