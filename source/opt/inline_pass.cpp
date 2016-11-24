@@ -162,6 +162,10 @@ void InlinePass::GenInlineCode(
         // store return value to return variable
         assert(returnVarId != 0);
         auto valId = cpi->GetInOperand(SPV_RETURN_VALUE_ID).words[0];
+        auto s = inline2func.find(valId);
+        if (s != inline2func.end()) {
+          valId = s->second;
+        }
         std::vector<ir::Operand> store_in_operands;
         store_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
             std::initializer_list<uint32_t>{returnVarId}));
