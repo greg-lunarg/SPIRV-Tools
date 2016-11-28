@@ -146,7 +146,7 @@ void InlinePass::GenInlineCode(
         }
         const std::vector<ir::Operand> label_in_operands;
         std::unique_ptr<ir::Instruction> newLabel(new ir::Instruction(
-            SpvOpLabel, labelId, 0, label_in_operands));
+            SpvOpLabel, 0, labelId, label_in_operands));
         bp.reset(new ir::BasicBlock(std::move(newLabel)));
         if (firstBlock) {
           // Copy contents of original caller block up to call instruction
@@ -190,7 +190,7 @@ void InlinePass::GenInlineCode(
           newBlocks.push_back(std::move(bp));
           const std::vector<ir::Operand> label_in_operands;
           std::unique_ptr<ir::Instruction> newLabel(new ir::Instruction(
-              SpvOpLabel, returnLabelId, 0, label_in_operands));
+              SpvOpLabel, 0, returnLabelId, label_in_operands));
           bp.reset(new ir::BasicBlock(std::move(newLabel)));
         }
         // load return value into result id of call, if it exists
