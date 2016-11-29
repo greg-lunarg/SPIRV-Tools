@@ -121,6 +121,7 @@ void InlinePass::GenInlineCode(
       break;
     case SpvOpLabel: {
         // if previous instruction was early return, insert branch instruction
+        // to return block
         if (returned) {
           if (returnLabelId == 0)
             returnLabelId = this->getNextId();
@@ -137,7 +138,10 @@ void InlinePass::GenInlineCode(
         bool firstBlock = false;
         if (bp != nullptr) {
           newBlocks.push_back(std::move(bp));
-          labelId = this->getNextId();
+          // if result id is already mapped, use it, otherwise get a new one.
+          auto rid = cpi->result_id();
+          auto s = inline2func.find(rid);
+          labelId = (s != inline2func.end()) ? s->second : this->getNextId();
         }
         else {
           // first block needs to use label of original block
@@ -220,10 +224,20 @@ void InlinePass::GenInlineCode(
         // copy callee instruction and remap all input Ids
         std::unique_ptr<ir::Instruction> spv_inst(
             new ir::Instruction(*cpi));
-        spv_inst->ForEachInId([&inline2func](uint32_t* iid) {
+        spv_inst->ForEachInId([&inline2func,&cpi,this](uint32_t* iid) {
           auto s = inline2func.find(*iid);
           if (s != inline2func.end()) {
             *iid = s->second;
+          }
+          else if (cpi->IsControlFlow()) {
+            ir::Instruction *inst = def_use_mgr_->id_to_defs().find(*iid)->second;
+            if (inst->opcode() == SpvOpLabel) {
+              // forward label reference. allocate a new label id, map it, use it
+              // and check for it at each label.
+              auto nid = this->getNextId();
+              inline2func[*iid] = nid;
+              *iid = nid;
+            }
           }
         });
         // map and reset result id
