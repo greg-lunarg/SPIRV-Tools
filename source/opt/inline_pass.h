@@ -30,7 +30,7 @@ namespace opt {
 // See optimizer.hpp for documentation.
 class InlinePass : public Pass {
  public:
-  InlinePass::InlinePass();
+  InlinePass();
   const char* name() const override { return "inline"; }
   Status Process(ir::Module*) override;
 
