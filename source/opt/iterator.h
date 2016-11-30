@@ -220,7 +220,7 @@ inline
 typename std::enable_if<!IsConstForMethod, UptrVectorIterator<VT, IC>>::type
 UptrVectorIterator<VT, IC>::Erase() {
     auto index = iterator_ - container_->begin();
-    auto after = container_->erase(iterator_);
+    (void) container_->erase(iterator_);
     return UptrVectorIterator(container_, container_->begin() + index);
 }
 
