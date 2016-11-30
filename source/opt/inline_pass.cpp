@@ -38,8 +38,7 @@ void InlinePass::GenInlineCode(
     std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
     std::vector<std::unique_ptr<ir::Instruction>>& newVars,
     ir::UptrVectorIterator<ir::Instruction> call_ii,
-    ir::UptrVectorIterator<ir::BasicBlock> call_bi,
-    ir::Function* callerFn) {
+    ir::UptrVectorIterator<ir::BasicBlock> call_bi) {
 
   // Map from callee id to caller id
   std::unordered_map<uint32_t, uint32_t> inline2func;
@@ -272,7 +271,7 @@ bool InlinePass::Inline(ir::Function* func) {
       if (ii->opcode() == SpvOp::SpvOpFunctionCall) {
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
         std::vector<std::unique_ptr<ir::Instruction>> newVars;
-        GenInlineCode(newBlocks, newVars, ii, bi, func);
+        GenInlineCode(newBlocks, newVars, ii, bi);
         // update block map
         for (auto& blk : newBlocks) {
           id2block[blk->GetLabelId()] = &*blk;

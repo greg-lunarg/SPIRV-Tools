@@ -52,9 +52,8 @@ class InlinePass : public Pass {
   void GenInlineCode(
         std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
         std::vector<std::unique_ptr<ir::Instruction>>& newVars,
-        ir::UptrVectorIterator<ir::Instruction> ii,
-        ir::UptrVectorIterator<ir::BasicBlock> bi,
-        ir::Function* func);
+        ir::UptrVectorIterator<ir::Instruction> call_ii,
+        ir::UptrVectorIterator<ir::BasicBlock> call_bi);
 
    void Initialize(ir::Module* module);
    Pass::Status ProcessImpl();
