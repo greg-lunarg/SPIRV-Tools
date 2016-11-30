@@ -38,6 +38,9 @@ class InlinePass : public Pass {
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function;
 
+  // Map from block's label id to block
+  std::unordered_map<uint32_t, ir::BasicBlock*> id2block;
+
   // Next ID
   uint32_t nextId_;
 

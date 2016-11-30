@@ -59,6 +59,14 @@ class BasicBlock {
   inline void ForEachInst(const std::function<void(const Instruction*)>& f,
                           bool run_on_debug_line_insts = false) const;
 
+  // Runs the given function |f| on each label id of each successor block
+  inline void ForEachSucc(const std::function<void(uint32_t)>& f);
+
+  // Runs the given function |f| on each Phi instruction in this basic block, and
+  // optionally on the debug line instructions that might precede them.
+  inline void ForEachPhiInst(const std::function<void(Instruction*)>& f,
+      bool run_on_debug_line_insts = false);
+
  private:
   // The enclosing function.
   Function* function_;
@@ -90,6 +98,35 @@ inline void BasicBlock::ForEachInst(
   for (const auto& inst : insts_)
     static_cast<const Instruction*>(inst.get())
         ->ForEachInst(f, run_on_debug_line_insts);
+}
+
+inline void BasicBlock::ForEachPhiInst(const std::function<void(Instruction*)>& f,
+    bool run_on_debug_line_insts) {
+    for (auto& inst : insts_) {
+      if (inst->opcode() != SpvOpPhi)
+        break;
+      inst->ForEachInst(f, run_on_debug_line_insts);
+    }
+}
+
+inline void BasicBlock::ForEachSucc(const std::function<void(uint32_t)>& f) {
+    auto br = insts_.end() - 1;
+    switch ((*br)->opcode()) {
+    case SpvOpBranch: {
+        f((*br)->GetOperand(0).words[0]);
+      }
+      break;
+    case SpvOpBranchConditional:
+    case SpvOpSwitch: {
+        int cnt = 0;
+        (*br)->ForEachInId([&cnt, &f](uint32_t *idp) {
+            if (cnt > 0)
+                f(*idp);
+            cnt++;
+        });
+      }
+      break;
+    }
 }
 
 }  // namespace ir

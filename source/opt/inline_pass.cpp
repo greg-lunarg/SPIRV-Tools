@@ -274,13 +274,35 @@ bool InlinePass::Inline(ir::Function* func) {
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
         std::vector<std::unique_ptr<ir::Instruction>> newVars;
         GenInlineCode(newBlocks, newVars, ii, bi, func);
+        // update block map
+        for (auto& blk : newBlocks) {
+          id2block[blk->GetLabelId()] = &*blk;
+        }
+        // update successor phi functions if more than one new block
+        if (newBlocks.size() > 1) {
+          auto firstBlk = newBlocks.begin();
+          auto lastBlk  = newBlocks.end() - 1;
+          uint32_t firstId = (*firstBlk)->GetLabelId();
+          uint32_t lastId  = (*lastBlk )->GetLabelId();
+          (*lastBlk)->ForEachSucc([&firstId,&lastId,this](uint32_t succ) {
+            ir::BasicBlock* sbp = this->id2block[succ];
+            sbp->ForEachPhiInst([&firstId,&lastId](ir::Instruction* phi) {
+              phi->ForEachInId([&firstId,&lastId](uint32_t* id) {
+                if (*id == firstId) *id = lastId;
+              });
+            });
+          });
+        }
+        // replace old calling block with new block(s)
         bi = bi.Erase();
         bi = bi.MoveBefore(newBlocks);
+        // insert new function variables
         if (newVars.size() > 0) {
           auto vbi = func->begin();
           auto vii = vbi->begin();
           vii.MoveBefore(newVars);
         }
+        // restart at beginning of calling block
         ii = bi->begin();
         modified = true;
       } else {
@@ -293,20 +315,27 @@ bool InlinePass::Inline(ir::Function* func) {
 
 void InlinePass::Initialize(ir::Module* module) {
     def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
+
+    nextId_ = 0;
     for (const auto& id_def : def_use_mgr_->id_to_defs()) {
         nextId_ = std::max(nextId_, id_def.first);
     }
     nextId_++;
+
     module_ = module;
+
+    // initialize function and block maps
+    id2function.clear();
+    id2block.clear();
+    for (auto& fn : *module_) {
+      id2function[fn.GetResultId()] = &fn;
+      for (auto& blk : fn) {
+        id2block[blk.GetLabelId()] = &blk;
+      }
+    }
 };
 
 Pass::Status InlinePass::ProcessImpl() {
-
-  // initialize function map
-  id2function.clear();
-  for (auto& fn : *module_) {
-    id2function[fn.GetResultId()] = &fn;
-  }
 
   // do inlining on each entry point function
   bool modified = false;
