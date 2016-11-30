@@ -47,17 +47,17 @@ class InlinePass : public Pass {
   inline void finalizeNextId(ir::Module* module) { module->SetIdBound(nextId_); }
   inline uint32_t getNextId() { return nextId_++; }
 
-  bool InlinePass::Inline(ir::Function* func);
+  bool Inline(ir::Function* func);
 
-  void InlinePass::GenInlineCode(
+  void GenInlineCode(
         std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
         std::vector<std::unique_ptr<ir::Instruction>>& newVars,
         ir::UptrVectorIterator<ir::Instruction> ii,
         ir::UptrVectorIterator<ir::BasicBlock> bi,
         ir::Function* func);
 
-   void InlinePass::Initialize(ir::Module* module);
-   Pass::Status InlinePass::ProcessImpl();
+   void Initialize(ir::Module* module);
+   Pass::Status ProcessImpl();
 
    ir::Module* module_;
    std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
