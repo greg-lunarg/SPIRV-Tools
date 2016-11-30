@@ -145,7 +145,9 @@ void InlinePass::GenInlineCode(
         }
         else {
           // first block needs to use label of original block
+          // but map callee label in case of phi reference
           labelId = call_bi->GetLabelId();
+          inline2func[cpi->result_id()] = labelId;
           firstBlock = true;
         }
         const std::vector<ir::Operand> label_in_operands;
