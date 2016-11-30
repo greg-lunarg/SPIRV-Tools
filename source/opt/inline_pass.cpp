@@ -190,7 +190,17 @@ void InlinePass::GenInlineCode(
       break;
     case SpvOpFunctionEnd: {
         // if there was an early return, create return label/block
+        // if previous instruction was return, insert branch instruction
+        // to return block
         if (returnLabelId != 0) {
+          if (returned) {
+            std::vector<ir::Operand> branch_in_operands;
+            branch_in_operands.push_back(ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+                std::initializer_list<uint32_t>{returnLabelId}));
+            std::unique_ptr<ir::Instruction> newBranch(new ir::Instruction(
+                SpvOpBranch, 0, 0, branch_in_operands));
+            bp->AddInstruction(std::move(newBranch));
+          }
           newBlocks.push_back(std::move(bp));
           const std::vector<ir::Operand> label_in_operands;
           std::unique_ptr<ir::Instruction> newLabel(new ir::Instruction(
