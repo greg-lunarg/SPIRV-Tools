@@ -57,14 +57,14 @@ void InlinePass::GenInlineCode(
 
   // Define caller local variables for all callee variables and create map to them
   auto cbi = calleeFn->begin();
-  auto cii = cbi->begin();
-  while (cii->opcode() == SpvOp::SpvOpVariable) {
-    std::unique_ptr<ir::Instruction> var_inst(new ir::Instruction(*cii));
+  auto cvi = cbi->begin();
+  while (cvi->opcode() == SpvOp::SpvOpVariable) {
+    std::unique_ptr<ir::Instruction> var_inst(new ir::Instruction(*cvi));
     uint32_t newId = getNextId();
     var_inst->SetResultId(newId);
-    inline2func[cii->result_id()] = newId;
+    inline2func[cvi->result_id()] = newId;
     newVars.push_back(std::move(var_inst));
-    cii++;
+    cvi++;
   }
 
   // Create return var if needed
