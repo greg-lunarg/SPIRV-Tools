@@ -68,11 +68,10 @@ void InlinePass::GenInlineCode(
   }
 
   // Create return var if needed
-  // TODO: fix type to be ptr
   uint32_t calleeTypeId = calleeFn->GetTypeId();
-  ir::Instruction *type_inst = def_use_mgr_->id_to_defs().find(calleeTypeId)->second;
+  ir::Instruction *calleeType = def_use_mgr_->id_to_defs().find(calleeTypeId)->second;
   uint32_t returnVarId = 0;
-  if ( type_inst->opcode() != SpvOpTypeVoid) {
+  if ( calleeType->opcode() != SpvOpTypeVoid) {
     // find or create ptr to callee return type
     ir::Module::inst_iterator inst_iter = module_->types_values_begin();
     for (; inst_iter != module_->types_values_end(); ++inst_iter) {
