@@ -126,6 +126,8 @@ inline void BasicBlock::ForEachSucc(const std::function<void(uint32_t)>& f) {
         });
       }
       break;
+    default:
+      break;
     }
 }
 
