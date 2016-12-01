@@ -41,14 +41,20 @@ class InlinePass : public Pass {
   // Map from block's label id to block
   std::unordered_map<uint32_t, ir::BasicBlock*> id2block;
 
-  // Next ID
+  // Next unused ID
   uint32_t nextId_;
 
   inline void finalizeNextId(ir::Module* module) { module->SetIdBound(nextId_); }
   inline uint32_t getNextId() { return nextId_++; }
 
+  // Exhaustively inline all function calls in func as well as in
+  // all code that is inlined into func.
   bool Inline(ir::Function* func);
 
+  // Return in newBlocks the result of inlining the call at call_ii within
+  // its block call_bi. Also return in newVars additional OpVariable instructions
+  // required by and to be inserted into the caller function after the block
+  // call_bi is replaced with newBlocks.
   void GenInlineCode(
         std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
         std::vector<std::unique_ptr<ir::Instruction>>& newVars,

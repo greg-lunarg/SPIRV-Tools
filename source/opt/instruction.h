@@ -166,6 +166,7 @@ class Instruction {
   inline void ForEachInst(const std::function<void(const Instruction*)>& f,
                           bool run_on_debug_line_insts = false) const;
 
+  // Runs the given function |f| on all "in" operand ids
   inline void ForEachInId(const std::function<void(uint32_t*)>& f);
 
   // Returns true if any operands can be labels
@@ -244,12 +245,10 @@ inline void Instruction::ForEachInst(
   f(this);
 }
 
-// Iterate over all id operands
 inline void Instruction::ForEachInId(const std::function<void(uint32_t*)>& f) {
   for (auto& opnd : operands_) if (opnd.type == SPV_OPERAND_TYPE_ID) f(&opnd.words[0]);
 }
 
-// This function returns true if the instruction has a label as an operand
 inline bool Instruction::IsControlFlow() const {
   bool hasLabels = false;
   switch (opcode_) {

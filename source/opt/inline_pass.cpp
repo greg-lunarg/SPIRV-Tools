@@ -269,14 +269,16 @@ bool InlinePass::Inline(ir::Function* func) {
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end();) {
       if (ii->opcode() == SpvOp::SpvOpFunctionCall) {
+        // Inline call
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
         std::vector<std::unique_ptr<ir::Instruction>> newVars;
         GenInlineCode(newBlocks, newVars, ii, bi);
-        // update block map
+        // update block map given replacement blocks
         for (auto& blk : newBlocks) {
           id2block[blk->GetLabelId()] = &*blk;
         }
-        // update successor phi functions if more than one new block
+        // update phi functions in succesor blocks if call block
+        // is replaced with more than one block
         if (newBlocks.size() > 1) {
           auto firstBlk = newBlocks.begin();
           auto lastBlk  = newBlocks.end() - 1;
@@ -300,7 +302,7 @@ bool InlinePass::Inline(ir::Function* func) {
           auto vii = vbi->begin();
           vii.MoveBefore(newVars);
         }
-        // restart at beginning of calling block
+        // restart inlining at beginning of calling block
         ii = bi->begin();
         modified = true;
       } else {
@@ -314,6 +316,7 @@ bool InlinePass::Inline(ir::Function* func) {
 void InlinePass::Initialize(ir::Module* module) {
     def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
 
+    // Initialize next unused Id
     nextId_ = 0;
     for (const auto& id_def : def_use_mgr_->id_to_defs()) {
         nextId_ = std::max(nextId_, id_def.first);
@@ -335,7 +338,7 @@ void InlinePass::Initialize(ir::Module* module) {
 
 Pass::Status InlinePass::ProcessImpl() {
 
-  // do inlining on each entry point function
+  // do exhaustive inlining on each entry point function in module
   bool modified = false;
   for (auto& e : module_->entry_points()) {
     ir::Function* fn = id2function[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];
