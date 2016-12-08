@@ -44,7 +44,7 @@ void InlinePass::GenInlineCode(
 
   uint32_t calleeId =
       call_ii->GetOperand(SPV_FUNCTION_CALL_FUNCTION_ID).words[0];
-  ir::Function* calleeFn = id2function[calleeId];
+  ir::Function* calleeFn = id2function_[calleeId];
 
   // Map parameters to actual arguments
   int i = 0;
@@ -282,7 +282,7 @@ bool InlinePass::Inline(ir::Function* func) {
         GenInlineCode(newBlocks, newVars, ii, bi);
         // update block map given replacement blocks
         for (auto& blk : newBlocks) {
-          id2block[blk->GetLabelId()] = &*blk;
+          id2block_[blk->GetLabelId()] = &*blk;
         }
         // update phi functions in succesor blocks if call block
         // is replaced with more than one block
@@ -292,7 +292,7 @@ bool InlinePass::Inline(ir::Function* func) {
           uint32_t firstId = (*firstBlk)->GetLabelId();
           uint32_t lastId = (*lastBlk)->GetLabelId();
           (*lastBlk)->ForEachSucc([&firstId, &lastId, this](uint32_t succ) {
-            ir::BasicBlock* sbp = this->id2block[succ];
+            ir::BasicBlock* sbp = this->id2block_[succ];
             sbp->ForEachPhiInst([&firstId, &lastId](ir::Instruction* phi) {
               phi->ForEachInId([&firstId, &lastId](uint32_t* id) {
                 if (*id == firstId) *id = lastId;
@@ -333,12 +333,12 @@ void InlinePass::Initialize(ir::Module* module) {
   module_ = module;
 
   // initialize function and block maps
-  id2function.clear();
-  id2block.clear();
+  id2function_.clear();
+  id2block_.clear();
   for (auto& fn : *module_) {
-    id2function[fn.GetResultId()] = &fn;
+    id2function_[fn.GetResultId()] = &fn;
     for (auto& blk : fn) {
-      id2block[blk.GetLabelId()] = &blk;
+      id2block_[blk.GetLabelId()] = &blk;
     }
   }
 };
@@ -348,7 +348,7 @@ Pass::Status InlinePass::ProcessImpl() {
   bool modified = false;
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
-        id2function[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];
+        id2function_[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];
     modified = modified || Inline(fn);
   }
 
