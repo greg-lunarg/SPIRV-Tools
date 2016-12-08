@@ -63,6 +63,9 @@ Options:
                Remove the duplicated constants.
   --inline
                Exhaustively inline all function calls
+  --sroa
+               Scalar Replacement of Aggregates. Specifically, transform
+               all loads and stores to scalar/vector/matrix types.
   -h, --help   Print this help.
   --version    Display optimizer version information.
 )",
@@ -125,6 +128,8 @@ int main(int argc, char** argv) {
         pass_manager.AddPass<opt::FreezeSpecConstantValuePass>();
       } else if (0 == strcmp(cur_arg, "--inline")) {
         pass_manager.AddPass<opt::InlinePass>();
+      } else if (0 == strcmp(cur_arg, "--sroa")) {
+        pass_manager.AddPass<opt::SRoAPass>();
       } else if (0 == strcmp(cur_arg, "--eliminate-dead-const")) {
         pass_manager.AddPass<opt::EliminateDeadConstantPass>();
       } else if (0 == strcmp(cur_arg, "--fold-spec-const-op-composite")) {
