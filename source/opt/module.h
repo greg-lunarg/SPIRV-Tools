@@ -209,11 +209,11 @@ inline IteratorRange<Module::const_inst_iterator> Module::debugs() const {
 }
 
 inline IteratorRange<Module::inst_iterator> Module::entry_points() {
-    return make_range(entry_points_);
+  return make_range(entry_points_);
 }
 
 inline IteratorRange<Module::const_inst_iterator> Module::entry_points() const {
-    return make_const_range(entry_points_);
+  return make_const_range(entry_points_);
 }
 
 inline IteratorRange<Module::inst_iterator> Module::annotations() {

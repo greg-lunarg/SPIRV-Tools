@@ -36,8 +36,8 @@ void Function::ForEachInst(const std::function<void(const Instruction*)>& f,
         ->ForEachInst(f, run_on_debug_line_insts);
 
   for (const auto& bb : blocks_)
-    static_cast<const BasicBlock*>(bb.get())->ForEachInst(
-        f, run_on_debug_line_insts);
+    static_cast<const BasicBlock*>(bb.get())
+        ->ForEachInst(f, run_on_debug_line_insts);
 
   if (end_inst_)
     static_cast<const Instruction*>(end_inst_.get())
@@ -45,9 +45,9 @@ void Function::ForEachInst(const std::function<void(const Instruction*)>& f,
 }
 
 void Function::ForEachParam(const std::function<void(const Instruction*)>& f,
-    bool run_on_debug_line_insts) const {
-    for (const auto& param : params_)
-        static_cast<const Instruction*>(param.get())
+                            bool run_on_debug_line_insts) const {
+  for (const auto& param : params_)
+    static_cast<const Instruction*>(param.get())
         ->ForEachInst(f, run_on_debug_line_insts);
 }
 

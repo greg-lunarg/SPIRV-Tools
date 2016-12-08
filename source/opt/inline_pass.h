@@ -44,7 +44,9 @@ class InlinePass : public Pass {
   // Next unused ID
   uint32_t nextId_;
 
-  inline void finalizeNextId(ir::Module* module) { module->SetIdBound(nextId_); }
+  inline void finalizeNextId(ir::Module* module) {
+    module->SetIdBound(nextId_);
+  }
   inline uint32_t getNextId() { return nextId_++; }
 
   // Exhaustively inline all function calls in func as well as in
@@ -52,20 +54,19 @@ class InlinePass : public Pass {
   bool Inline(ir::Function* func);
 
   // Return in newBlocks the result of inlining the call at call_ii within
-  // its block call_bi. Also return in newVars additional OpVariable instructions
-  // required by and to be inserted into the caller function after the block
-  // call_bi is replaced with newBlocks.
-  void GenInlineCode(
-        std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
-        std::vector<std::unique_ptr<ir::Instruction>>& newVars,
-        ir::UptrVectorIterator<ir::Instruction> call_ii,
-        ir::UptrVectorIterator<ir::BasicBlock> call_bi);
+  // its block call_bi. Also return in newVars additional OpVariable
+  // instructions required by and to be inserted into the caller function 
+  // after the block call_bi is replaced with newBlocks.
+  void GenInlineCode(std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
+                     std::vector<std::unique_ptr<ir::Instruction>>& newVars,
+                     ir::UptrVectorIterator<ir::Instruction> call_ii,
+                     ir::UptrVectorIterator<ir::BasicBlock> call_bi);
 
-   void Initialize(ir::Module* module);
-   Pass::Status ProcessImpl();
+  void Initialize(ir::Module* module);
+  Pass::Status ProcessImpl();
 
-   ir::Module* module_;
-   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
+  ir::Module* module_;
+  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 };
 
 }  // namespace opt

@@ -208,7 +208,7 @@ inline void Instruction::SetResultId(uint32_t res_id) {
   result_id_ = res_id;
   auto ridx = (type_id_ != 0) ? 1 : 0;
   assert(operands_[ridx].type == SPV_OPERAND_TYPE_RESULT_ID);
-  operands_[ridx].words = { res_id };
+  operands_[ridx].words = {res_id};
 }
 
 inline void Instruction::SetResultType(uint32_t ty_id) {
@@ -246,21 +246,22 @@ inline void Instruction::ForEachInst(
 }
 
 inline void Instruction::ForEachInId(const std::function<void(uint32_t*)>& f) {
-  for (auto& opnd : operands_) if (opnd.type == SPV_OPERAND_TYPE_ID) f(&opnd.words[0]);
+  for (auto& opnd : operands_)
+    if (opnd.type == SPV_OPERAND_TYPE_ID) f(&opnd.words[0]);
 }
 
 inline bool Instruction::IsControlFlow() const {
   bool hasLabels = false;
   switch (opcode_) {
-  case SpvOpSelectionMerge:
-  case SpvOpBranch:
-  case SpvOpLoopMerge:
-  case SpvOpBranchConditional:
-  case SpvOpSwitch:
-  case SpvOpPhi:
+    case SpvOpSelectionMerge:
+    case SpvOpBranch:
+    case SpvOpLoopMerge:
+    case SpvOpBranchConditional:
+    case SpvOpSwitch:
+    case SpvOpPhi:
       hasLabels = true;
       break;
-  default:
+    default:
       break;
   }
   return hasLabels;
