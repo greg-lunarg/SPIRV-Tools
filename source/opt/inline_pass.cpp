@@ -114,12 +114,12 @@ void InlinePass::GenInlineCode(
   }
 
   // Clone and map callee code
-  bool returned = false;
+  bool prevInstWasReturn = false;
   uint32_t returnLabelId = 0;
   std::unique_ptr<ir::BasicBlock> bp;
   calleeFn->ForEachInst([&newBlocks, &inline2func, &call_bi, &call_ii, &bp,
-                         &returned, &returnLabelId, &returnVarId, &calleeTypeId,
-                         this](const ir::Instruction* cpi) {
+                         &prevInstWasReturn, &returnLabelId, &returnVarId, 
+                         &calleeTypeId, this](const ir::Instruction* cpi) {
     switch (cpi->opcode()) {
       case SpvOpFunction:
       case SpvOpFunctionParameter:
@@ -129,7 +129,7 @@ void InlinePass::GenInlineCode(
       case SpvOpLabel: {
         // if previous instruction was early return, insert branch instruction
         // to return block
-        if (returned) {
+        if (prevInstWasReturn) {
           if (returnLabelId == 0) returnLabelId = this->getNextId();
           std::vector<ir::Operand> branch_in_operands;
           branch_in_operands.push_back(
@@ -138,7 +138,7 @@ void InlinePass::GenInlineCode(
           std::unique_ptr<ir::Instruction> newBranch(
               new ir::Instruction(SpvOpBranch, 0, 0, branch_in_operands));
           bp->AddInstruction(std::move(newBranch));
-          returned = false;
+          prevInstWasReturn = false;
         }
         // finish current block (if it exists) and create next block
         uint32_t labelId;
@@ -190,19 +190,19 @@ void InlinePass::GenInlineCode(
 
         // Remember we saw a return; if followed by a label, will need to insert
         // branch
-        returned = true;
+        prevInstWasReturn = true;
       } break;
       case SpvOpReturn: {
         // Remember we saw a return; if followed by a label, will need to insert
         // branch
-        returned = true;
+        prevInstWasReturn = true;
       } break;
       case SpvOpFunctionEnd: {
         // if there was an early return, create return label/block
         // if previous instruction was return, insert branch instruction
         // to return block
         if (returnLabelId != 0) {
-          if (returned) {
+          if (prevInstWasReturn) {
             std::vector<ir::Operand> branch_in_operands;
             branch_in_operands.push_back(
                 ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
