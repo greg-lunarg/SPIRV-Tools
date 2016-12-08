@@ -23,6 +23,7 @@
 #include "freeze_spec_constant_value_pass.h"
 #include "null_pass.h"
 #include "set_spec_constant_default_value_pass.h"
+#include "sroa_pass.h"
 #include "strip_debug_info_pass.h"
 #include "unify_const_pass.h"
 
