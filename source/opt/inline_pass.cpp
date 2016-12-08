@@ -40,7 +40,7 @@ void InlinePass::GenInlineCode(
     ir::UptrVectorIterator<ir::Instruction> call_ii,
     ir::UptrVectorIterator<ir::BasicBlock> call_bi) {
   // Map from callee id to caller id
-  std::unordered_map<uint32_t, uint32_t> inline2func;
+  std::unordered_map<uint32_t, uint32_t> callee2caller;
 
   uint32_t calleeId =
       call_ii->GetOperand(SPV_FUNCTION_CALL_FUNCTION_ID).words[0];
@@ -49,9 +49,9 @@ void InlinePass::GenInlineCode(
   // Map parameters to actual arguments
   int i = 0;
   calleeFn->ForEachParam(
-      [&call_ii, &i, &inline2func](const ir::Instruction* cpi) {
+      [&call_ii, &i, &callee2caller](const ir::Instruction* cpi) {
         auto pid = cpi->GetOperand(SPV_FUNCTION_PARAMETER_RESULT_ID).words[0];
-        inline2func[pid] =
+        callee2caller[pid] =
             call_ii->GetOperand(SPV_FUNCTION_CALL_ARGUMENT_ID + i).words[0];
         i++;
       });
@@ -64,7 +64,7 @@ void InlinePass::GenInlineCode(
     std::unique_ptr<ir::Instruction> var_inst(new ir::Instruction(*cvi));
     uint32_t newId = getNextId();
     var_inst->SetResultId(newId);
-    inline2func[cvi->result_id()] = newId;
+    callee2caller[cvi->result_id()] = newId;
     newVars.push_back(std::move(var_inst));
     cvi++;
   }
@@ -117,7 +117,7 @@ void InlinePass::GenInlineCode(
   bool prevInstWasReturn = false;
   uint32_t returnLabelId = 0;
   std::unique_ptr<ir::BasicBlock> bp;
-  calleeFn->ForEachInst([&newBlocks, &inline2func, &call_bi, &call_ii, &bp,
+  calleeFn->ForEachInst([&newBlocks, &callee2caller, &call_bi, &call_ii, &bp,
                          &prevInstWasReturn, &returnLabelId, &returnVarId, 
                          &calleeTypeId, this](const ir::Instruction* cpi) {
     switch (cpi->opcode()) {
@@ -147,13 +147,13 @@ void InlinePass::GenInlineCode(
           newBlocks.push_back(std::move(bp));
           // if result id is already mapped, use it, otherwise get a new one.
           auto rid = cpi->result_id();
-          auto s = inline2func.find(rid);
-          labelId = (s != inline2func.end()) ? s->second : this->getNextId();
+          auto s = callee2caller.find(rid);
+          labelId = (s != callee2caller.end()) ? s->second : this->getNextId();
         } else {
           // first block needs to use label of original block
           // but map callee label in case of phi reference
           labelId = call_bi->GetLabelId();
-          inline2func[cpi->result_id()] = labelId;
+          callee2caller[cpi->result_id()] = labelId;
           firstBlock = true;
         }
         const std::vector<ir::Operand> label_in_operands;
@@ -173,8 +173,8 @@ void InlinePass::GenInlineCode(
         // store return value to return variable
         assert(returnVarId != 0);
         auto valId = cpi->GetInOperand(SPV_RETURN_VALUE_ID).words[0];
-        auto s = inline2func.find(valId);
-        if (s != inline2func.end()) {
+        auto s = callee2caller.find(valId);
+        if (s != callee2caller.end()) {
           valId = s->second;
         }
         std::vector<ir::Operand> store_in_operands;
@@ -242,9 +242,9 @@ void InlinePass::GenInlineCode(
       default: {
         // copy callee instruction and remap all input Ids
         std::unique_ptr<ir::Instruction> spv_inst(new ir::Instruction(*cpi));
-        spv_inst->ForEachInId([&inline2func, &cpi, this](uint32_t* iid) {
-          auto s = inline2func.find(*iid);
-          if (s != inline2func.end()) {
+        spv_inst->ForEachInId([&callee2caller, &cpi, this](uint32_t* iid) {
+          auto s = callee2caller.find(*iid);
+          if (s != callee2caller.end()) {
             *iid = s->second;
           } else if (cpi->IsControlFlow()) {
             ir::Instruction* inst =
@@ -253,7 +253,7 @@ void InlinePass::GenInlineCode(
               // forward label reference. allocate a new label id, map it, use
               // it and check for it at each label.
               auto nid = this->getNextId();
-              inline2func[*iid] = nid;
+              callee2caller[*iid] = nid;
               *iid = nid;
             }
           }
@@ -262,7 +262,7 @@ void InlinePass::GenInlineCode(
         auto rid = spv_inst->result_id();
         if (rid != 0) {
           auto nid = this->getNextId();
-          inline2func[rid] = nid;
+          callee2caller[rid] = nid;
           spv_inst->SetResultId(nid);
         }
         bp->AddInstruction(std::move(spv_inst));
