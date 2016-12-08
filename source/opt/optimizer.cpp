@@ -122,4 +122,8 @@ Optimizer::PassToken CreateInlinePass() {
   return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::InlinePass>());
 }
 
+Optimizer::PassToken CreateSRoAPass() {
+    return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::SRoAPass>());
+}
+
 }  // namespace spvtools
