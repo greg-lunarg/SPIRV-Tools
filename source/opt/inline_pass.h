@@ -53,6 +53,20 @@ class InlinePass : public Pass {
   // all code that is inlined into func.
   bool Inline(ir::Function* func);
 
+  // Find pointer to type in module, return its resultId. 0 if not found.
+  uint32_t FindPointerToType(uint32_t typeId);
+
+  // Add pointer to type to module and return resultId.
+  uint32_t AddPointerToType(uint32_t typeId);
+
+  void AddBranch(uint32_t labelId, std::unique_ptr<ir::BasicBlock>& bp);
+
+  void AddStore(uint32_t destId, uint32_t valId, 
+                std::unique_ptr<ir::BasicBlock>& bp);
+
+  void AddLoad(uint32_t typeId, uint32_t resultId,  uint32_t srcId, 
+               std::unique_ptr<ir::BasicBlock>& bp);
+
   // Return in newBlocks the result of inlining the call at call_ii within
   // its block call_bi. Also return in newVars additional OpVariable
   // instructions required by and to be inserted into the caller function 
