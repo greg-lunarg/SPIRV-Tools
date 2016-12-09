@@ -50,7 +50,8 @@ void InlinePass::GenInlineCode(
   int i = 0;
   calleeFn->ForEachParam(
       [&call_ii, &i, &callee2caller](const ir::Instruction* cpi) {
-        auto pid = cpi->GetOperand(SPV_FUNCTION_PARAMETER_RESULT_ID).words[0];
+        const uint32_t pid =
+            cpi->GetOperand(SPV_FUNCTION_PARAMETER_RESULT_ID).words[0];
         callee2caller[pid] =
             call_ii->GetOperand(SPV_FUNCTION_CALL_ARGUMENT_ID + i).words[0];
         i++;
@@ -58,7 +59,6 @@ void InlinePass::GenInlineCode(
 
   // Define caller local variables for all callee variables and create map to
   // them
-  // const auto cbi = calleeFn->begin();
   auto cbi = calleeFn->begin();
   auto cvi = cbi->begin();
   while (cvi->opcode() == SpvOp::SpvOpVariable) {
@@ -119,7 +119,7 @@ void InlinePass::GenInlineCode(
   uint32_t returnLabelId = 0;
   std::unique_ptr<ir::BasicBlock> bp;
   calleeFn->ForEachInst([&newBlocks, &callee2caller, &call_bi, &call_ii, &bp,
-                         &prevInstWasReturn, &returnLabelId, &returnVarId, 
+                         &prevInstWasReturn, &returnLabelId, &returnVarId,
                          &calleeTypeId, this](const ir::Instruction* cpi) {
     switch (cpi->opcode()) {
       case SpvOpFunction:
@@ -147,9 +147,10 @@ void InlinePass::GenInlineCode(
         if (bp != nullptr) {
           newBlocks.push_back(std::move(bp));
           // if result id is already mapped, use it, otherwise get a new one.
-          const auto rid = cpi->result_id();
-          const auto s = callee2caller.find(rid);
-          labelId = (s != callee2caller.end()) ? s->second : this->getNextId();
+          const uint32_t rid = cpi->result_id();
+          const auto mapItr = callee2caller.find(rid);
+          labelId = (mapItr != callee2caller.end()) ? mapItr->second
+                                                    : this->getNextId();
         } else {
           // first block needs to use label of original block
           // but map callee label in case of phi reference
@@ -173,10 +174,10 @@ void InlinePass::GenInlineCode(
       case SpvOpReturnValue: {
         // store return value to return variable
         assert(returnVarId != 0);
-        auto valId = cpi->GetInOperand(SPV_RETURN_VALUE_ID).words[0];
-        const auto s = callee2caller.find(valId);
-        if (s != callee2caller.end()) {
-          valId = s->second;
+        uint32_t valId = cpi->GetInOperand(SPV_RETURN_VALUE_ID).words[0];
+        const auto mapItr = callee2caller.find(valId);
+        if (mapItr != callee2caller.end()) {
+          valId = mapItr->second;
         }
         std::vector<ir::Operand> store_in_operands;
         store_in_operands.push_back(
@@ -220,7 +221,7 @@ void InlinePass::GenInlineCode(
         }
         // load return value into result id of call, if it exists
         if (returnVarId != 0) {
-          const auto resId = call_ii->result_id();
+          const uint32_t resId = call_ii->result_id();
           assert(resId != 0);
           std::vector<ir::Operand> load_in_operands;
           load_in_operands.push_back(
@@ -244,25 +245,25 @@ void InlinePass::GenInlineCode(
         // copy callee instruction and remap all input Ids
         std::unique_ptr<ir::Instruction> spv_inst(new ir::Instruction(*cpi));
         spv_inst->ForEachInId([&callee2caller, &cpi, this](uint32_t* iid) {
-          const auto s = callee2caller.find(*iid);
-          if (s != callee2caller.end()) {
-            *iid = s->second;
+          const auto mapItr = callee2caller.find(*iid);
+          if (mapItr != callee2caller.end()) {
+            *iid = mapItr->second;
           } else if (cpi->IsControlFlow()) {
             const ir::Instruction* inst =
                 def_use_mgr_->id_to_defs().find(*iid)->second;
             if (inst->opcode() == SpvOpLabel) {
               // forward label reference. allocate a new label id, map it, use
               // it and check for it at each label.
-              const auto nid = this->getNextId();
+              const uint32_t nid = this->getNextId();
               callee2caller[*iid] = nid;
               *iid = nid;
             }
           }
         });
         // map and reset result id
-        const auto rid = spv_inst->result_id();
+        const uint32_t rid = spv_inst->result_id();
         if (rid != 0) {
-          const auto nid = this->getNextId();
+          const uint32_t nid = this->getNextId();
           callee2caller[rid] = nid;
           spv_inst->SetResultId(nid);
         }
