@@ -135,10 +135,10 @@ void InlinePass::GenInlineCode(
   }
 
   // Create return var if needed
+  uint32_t returnVarId = 0;
   const uint32_t calleeTypeId = calleeFn->GetTypeId();
   const ir::Instruction* calleeType =
       def_use_mgr_->id_to_defs().find(calleeTypeId)->second;
-  uint32_t returnVarId = 0;
   if (calleeType->opcode() != SpvOpTypeVoid) {
     // find or create ptr to callee return type
     uint32_t returnVarTypeId = FindPointerToType(calleeTypeId);
@@ -176,7 +176,7 @@ void InlinePass::GenInlineCode(
           AddBranch(returnLabelId, bp);
           prevInstWasReturn = false;
         }
-        // finish current block (if it exists) and create next block
+        // finish current block (if it exists) and get label for next block
         uint32_t labelId;
         bool firstBlock = false;
         if (bp != nullptr) {
@@ -193,6 +193,7 @@ void InlinePass::GenInlineCode(
           callee2caller[cpi->result_id()] = labelId;
           firstBlock = true;
         }
+        // create first/next block
         const std::vector<ir::Operand> label_in_operands;
         std::unique_ptr<ir::Instruction> newLabel(
             new ir::Instruction(SpvOpLabel, 0, labelId, label_in_operands));
