@@ -61,15 +61,15 @@ class InlinePass : public Pass {
 
   void AddBranch(uint32_t labelId, std::unique_ptr<ir::BasicBlock>& bp);
 
-  void AddStore(uint32_t destId, uint32_t valId, 
+  void AddStore(uint32_t destId, uint32_t valId,
                 std::unique_ptr<ir::BasicBlock>& bp);
 
-  void AddLoad(uint32_t typeId, uint32_t resultId,  uint32_t srcId, 
+  void AddLoad(uint32_t typeId, uint32_t resultId, uint32_t srcId,
                std::unique_ptr<ir::BasicBlock>& bp);
 
   // Return in newBlocks the result of inlining the call at call_ii within
   // its block call_bi. Also return in newVars additional OpVariable
-  // instructions required by and to be inserted into the caller function 
+  // instructions required by and to be inserted into the caller function
   // after the block call_bi is replaced with newBlocks.
   void GenInlineCode(std::vector<std::unique_ptr<ir::BasicBlock>>& newBlocks,
                      std::vector<std::unique_ptr<ir::Instruction>>& newVars,
