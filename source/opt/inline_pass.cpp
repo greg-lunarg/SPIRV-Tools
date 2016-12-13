@@ -59,7 +59,7 @@ uint32_t InlinePass::AddPointerToType(uint32_t typeId) {
   return resultId;
 }
 
-void InlinePass::AddBranch(uint32_t labelId, 
+void InlinePass::AddBranch(uint32_t labelId,
                            std::unique_ptr<ir::BasicBlock>& bp) {
   std::vector<ir::Operand> branch_in_operands;
   branch_in_operands.push_back(
@@ -70,7 +70,7 @@ void InlinePass::AddBranch(uint32_t labelId,
   bp->AddInstruction(std::move(newBranch));
 }
 
-void InlinePass::AddStore(uint32_t destId, uint32_t valId,  
+void InlinePass::AddStore(uint32_t destId, uint32_t valId,
                           std::unique_ptr<ir::BasicBlock>& bp) {
   std::vector<ir::Operand> store_in_operands;
   store_in_operands.push_back(
@@ -105,6 +105,10 @@ void InlinePass::GenInlineCode(
     ir::UptrVectorIterator<ir::BasicBlock> call_bi) {
   // Map from callee id to caller id
   std::unordered_map<uint32_t, uint32_t> callee2caller;
+  // Pre-call OpSampledImage Insts
+  std::unordered_map<uint32_t, ir::Instruction*> preCallSI;
+  // Post-call OpSampledImage Ids
+  std::unordered_map<uint32_t, uint32_t> postCallSI;
 
   const uint32_t calleeId =
       call_ii->GetOperand(SPV_FUNCTION_CALL_FUNCTION_ID).words[0];
@@ -158,10 +162,13 @@ void InlinePass::GenInlineCode(
   // Clone and map callee code
   bool prevInstWasReturn = false;
   uint32_t returnLabelId = 0;
+  bool multiBlocks = false;
   std::unique_ptr<ir::BasicBlock> bp;
   calleeFn->ForEachInst([&newBlocks, &callee2caller, &call_bi, &call_ii, &bp,
                          &prevInstWasReturn, &returnLabelId, &returnVarId,
-                         &calleeTypeId, this](const ir::Instruction* cpi) {
+                         &calleeTypeId, &multiBlocks, &postCallSI,
+                         &preCallSI, this]
+                        (const ir::Instruction* cpi) {
     switch (cpi->opcode()) {
       case SpvOpFunction:
       case SpvOpFunctionParameter:
@@ -203,9 +210,16 @@ void InlinePass::GenInlineCode(
           for (auto cii = call_bi->begin(); cii != call_ii; cii++) {
             std::unique_ptr<ir::Instruction> spv_inst(
                 new ir::Instruction(*cii));
+            // remember OpSampledImages for possible regeneration
+            if (spv_inst->opcode() == SpvOpSampledImage) {
+              auto* samp_inst_ptr = spv_inst.get();
+              preCallSI[spv_inst->result_id()] = samp_inst_ptr;
+            }
             bp->AddInstruction(std::move(spv_inst));
           }
         }
+        else
+          multiBlocks = true;
       } break;
       case SpvOpReturnValue: {
         // store return value to return variable
@@ -231,13 +245,14 @@ void InlinePass::GenInlineCode(
         // if previous instruction was return, insert branch instruction
         // to return block
         if (returnLabelId != 0) {
-          if (prevInstWasReturn) 
+          if (prevInstWasReturn)
             AddBranch(returnLabelId, bp);
           newBlocks.push_back(std::move(bp));
           const std::vector<ir::Operand> label_in_operands;
           std::unique_ptr<ir::Instruction> newLabel(new ir::Instruction(
               SpvOpLabel, 0, returnLabelId, label_in_operands));
           bp.reset(new ir::BasicBlock(std::move(newLabel)));
+          multiBlocks = true;
         }
         // load return value into result id of call, if it exists
         if (returnVarId != 0) {
@@ -245,11 +260,41 @@ void InlinePass::GenInlineCode(
           assert(resId != 0);
           AddLoad(calleeTypeId, resId, returnVarId, bp);
         }
-        // copy remaining instructions from caller block
+        // copy remaining instructions from caller block.
         auto cii = call_ii;
         cii++;
         for (; cii != call_bi->end(); cii++) {
           std::unique_ptr<ir::Instruction> spv_inst(new ir::Instruction(*cii));
+          // if multiple blocks generated, regenerate any OpSampledImage
+          // instruction that has not been seen in this last block.
+          if (multiBlocks) {
+            spv_inst->ForEachInId([&postCallSI, &preCallSI, &cpi, &bp, this]
+                                  (uint32_t* iid) {
+              const auto mapItr = postCallSI.find(*iid);
+              if (mapItr == postCallSI.end()) {
+                const auto mapItr2 = preCallSI.find(*iid);
+                if (mapItr2 != preCallSI.end()) {
+                  // clone pre-call OpSampledImage, map result id
+                  const ir::Instruction* inInst = mapItr2->second;
+                  std::unique_ptr<ir::Instruction> samp_inst(
+                      new ir::Instruction(*inInst));
+                  const uint32_t rid = samp_inst->result_id();
+                  const uint32_t nid = this->getNextId();
+                  samp_inst->SetResultId(nid);
+                  postCallSI[rid] = nid;
+                  *iid = nid;
+                  bp->AddInstruction(std::move(samp_inst));
+                }
+              } else
+                // reset OpSampledImage operand
+                *iid = mapItr->second;
+            });
+            // remember OpSampledImage in this block
+            if (spv_inst->opcode() == SpvOpSampledImage) {
+              const uint32_t rid = spv_inst->result_id();
+              postCallSI[rid] = rid;
+            }
+          }
           bp->AddInstruction(std::move(spv_inst));
         }
         // finalize
