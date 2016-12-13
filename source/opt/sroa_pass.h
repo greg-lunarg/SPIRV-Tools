@@ -49,15 +49,34 @@ class SRoAPass : public Pass {
   }
   inline uint32_t getNextId() { return nextId_++; }
 
-  // Exhaustively inline all function calls in func as well as in
-  // all code that is inlined into func.
+  // Perform Scalar Replacement of Aggregates on func.
+  //
+  // Specifically, transform all non-indexed load/store pairs of
+  // targeted structs to the equivalent loads and stores of
+  // their components. Target structs of function scope whose
+  // components are only scalars, vectors and matrices.
+  //
+  // Also transform all indexed loads and stores into vector and
+  // matrix types into the equivalent load or store of the vector
+  // or matrix with an extract or insert.
+  //
+  // This transform is generally intended to remove all aliasing
+  // between loads and stores for the targeted structs and ease
+  // store/load elimination in succeeding passes.
   bool SRoA(ir::Function* func);
 
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
+  // Return true if typeId is struct of all scalar, vector or
+  // matrix components
+  bool IsStructOfScalar(ir::Instruction* typeInst);
+
   ir::Module* module_;
   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
+
+  // Map from structure load id to first component load id 
+  std::unordered_map<uint32_t, uint32_t> struct2comp_;
 };
 
 }  // namespace opt

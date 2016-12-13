@@ -31,11 +31,51 @@
 namespace spvtools {
 namespace opt {
 
+bool SRoAPass::IsStructOfScalar(ir::Instruction* typeInst) {
+  if (typeInst->opcode() != SpvOpTypeStruct)
+    return false;
+  size_t aggCount = 0;
+  typeInst->ForEachInId([&aggCount,this](uint32_t* idp) {
+    auto compType = def_use_mgr_->GetDef(*idp);
+    auto typeOp = compType->opcode();
+    switch (typeOp) {
+      case SpvOpTypeFloat:
+      case SpvOpTypeVector:
+      case SpvOpTypeInt:
+      case SpvOpTypeMatrix:
+      case SpvOpTypeBool:
+        break;
+      default:
+        aggCount++;
+        break;
+    }
+  });
+  return aggCount == 0;
+}
+
 bool SRoAPass::SRoA(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end();) {
-      ii++;
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+        switch (ii->opcode()) { 
+          case SpvOpLoad: {
+            // Identify leading load of load/store pair(s) of targeted struct type
+            auto typeInst = def_use_mgr_->GetDef(ii->type_id());
+            if (!IsStructOfScalar(typeInst))
+              break;
+            size_t nonStoreUse = 0;
+            if (analysis::UseList* uses = def_use_mgr_->GetUses(ii->result_id())) {
+                nonStoreUse =
+                    std::count_if(uses->begin(), uses->end(), [](const analysis::Use& u) {
+                    return (u.inst->opcode() != SpvOpStore);
+                });
+            }
+            if (nonStoreUse > 0)
+              break;
+          } break;
+          case SpvOpStore: {
+          } break;
+      }
     }
   }
   return modified;
