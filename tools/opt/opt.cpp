@@ -63,6 +63,9 @@ Options:
                Remove the duplicated constants.
   --inline
                Exhaustively inline all function calls
+  --ssamem
+               Eliminate all function variables (and references) with only
+               one static assignment.
   -h, --help   Print this help.
   --version    Display optimizer version information.
 )",
@@ -125,6 +128,8 @@ int main(int argc, char** argv) {
         pass_manager.AddPass<opt::FreezeSpecConstantValuePass>();
       } else if (0 == strcmp(cur_arg, "--inline")) {
         pass_manager.AddPass<opt::InlinePass>();
+      } else if (0 == strcmp(cur_arg, "--ssamem")) {
+        pass_manager.AddPass<opt::SSAMemPass>();
       } else if (0 == strcmp(cur_arg, "--eliminate-dead-const")) {
         pass_manager.AddPass<opt::EliminateDeadConstantPass>();
       } else if (0 == strcmp(cur_arg, "--fold-spec-const-op-composite")) {
