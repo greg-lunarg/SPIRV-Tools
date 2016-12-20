@@ -236,12 +236,8 @@ void SSAMemPass::Initialize(ir::Module* module) {
 
   // Initialize function and block maps
   id2function.clear();
-  id2block.clear();
   for (auto& fn : *module_) {
     id2function[fn.GetResultId()] = &fn;
-    for (auto& blk : fn) {
-      id2block[blk.GetLabelId()] = &blk;
-    }
   }
 
   // Initialize Target Type Caches
