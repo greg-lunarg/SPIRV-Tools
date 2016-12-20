@@ -176,7 +176,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
         if (csi != ssaComps.end())
           replId = csi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
         else {
-          // See if the whole variable was stored with a load.
+          // See if the whole variable stored with a load of an SSA var.
           // If so, look for a component store into the load variable
           // and use the value Id that was stored.
           const auto vsi = ssaVars.find(varId);
@@ -190,6 +190,8 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
             continue;
           const uint32_t loadVarId =
               valInst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
+          if (nonSsaVars.find(loadVarId) != nonSsaVars.end())
+            continue;
           const auto lvcsi = ssaComps.find(std::make_pair(loadVarId, idxId));
           if (lvcsi == ssaComps.end())
             continue;
