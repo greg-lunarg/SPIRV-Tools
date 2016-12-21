@@ -218,20 +218,32 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
         modified = true;
       // remove load instruction
       def_use_mgr_->KillInst(&*ii);
+      // if access chain, see if it can be removed as well
+      if (ptrId != varId) {
+        analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
+        if (uses == nullptr)
+          def_use_mgr_->KillDef(ptrId);
+      }
     }
   }
   return modified;
 }
 
-bool SSAMemPass::isLiveStore(ir::Instruction* storeInst) {
+bool SSAMemPass::isLiveStore(ir::Instruction* storeInst,
+                             uint32_t& varId, uint32_t& chainId) {
   // get store's variable
-  const uint32_t ptrId = 
-      storeInst->GetInOperand(SPV_STORE_POINTER_ID).words[0];
+  const uint32_t ptrId =
+    storeInst->GetInOperand(SPV_STORE_POINTER_ID).words[0];
   const ir::Instruction* ptrInst =
-      def_use_mgr_->id_to_defs().find(ptrId)->second;
-  uint32_t varId = ptrInst->opcode() == SpvOpAccessChain ?
-      ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
-      ptrId;
+    def_use_mgr_->id_to_defs().find(ptrId)->second;
+  if (ptrInst->opcode() == SpvOpAccessChain) {
+    varId = ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0];
+    chainId = ptrId;
+  }
+  else {
+    varId = ptrId;
+    chainId = 0;
+  }
   // test if variable is loaded from
   analysis::UseList* uses = def_use_mgr_->GetUses(varId);
   if (uses->size() <= 1)
@@ -283,16 +295,29 @@ bool SSAMemPass::SSAMemDCE(ir::Function* func) {
   for (auto v : ssaVars) {
     if (nonSsaVars.find(v.first) != nonSsaVars.end())
       continue;
-    if (!isLiveStore(v.second)) {
+    uint32_t varId;
+    uint32_t chainId;
+    if (!isLiveStore(v.second, varId, chainId)) {
       def_use_mgr_->KillInst(v.second);
+      analysis::UseList* uses = def_use_mgr_->GetUses(varId);
+      if (uses == nullptr)
+        def_use_mgr_->KillDef(varId);
       modified = true;
     }
   }
   for (auto c : ssaComps) {
     if (nonSsaVars.find(c.first.first) != nonSsaVars.end())
       continue;
-    if (!isLiveStore(c.second)) {
+    uint32_t varId;
+    uint32_t chainId;
+    if (!isLiveStore(c.second, varId, chainId)) {
       def_use_mgr_->KillInst(c.second);
+      analysis::UseList* cuses = def_use_mgr_->GetUses(chainId);
+      if (cuses == nullptr)
+        def_use_mgr_->KillDef(chainId);
+      analysis::UseList* uses = def_use_mgr_->GetUses(varId);
+      if (uses == nullptr)
+        def_use_mgr_->KillDef(varId);
       modified = true;
     }
   }
