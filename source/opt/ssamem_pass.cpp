@@ -207,18 +207,53 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
           continue;
         replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
       }
+      // replace all instances of the load's id with the SSA value's id
       const uint32_t loadId = ii->result_id();
       const bool replaced = def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
       if (replaced)
         modified = true;
+      // remove load instruction
+      def_use_mgr_->KillInst(&*ii);
     }
   }
+  return modified;
+}
+
+bool SSAMemPass::isLiveStore(ir::Instruction* storeInst) {
+  // TODO
+  return true;
+}
+
+bool SSAMemPass::SSAMemDCE(ir::Function* func) {
+  bool modified = false;
+  func->ForEachInstReverse([&modified,this](ir::Instruction* ip) {
+    if (ip->opcode() == SpvOpStore) {
+      if (!isLiveStore(ip)) {
+        def_use_mgr_->KillInst(ip);
+        modified = true;
+      }
+      return;
+    }
+    if (ip->opcode() == SpvOpLabel)
+      return;
+    uint32_t rid = ip->result_id();
+    if (rid == 0)
+      return;
+    analysis::UseList* uses = def_use_mgr_->GetUses(rid);
+    if (uses->size() > 0)
+      return;
+    def_use_mgr_->KillInst(ip);
+    modified = true;
+  });
   return modified;
 }
 
 bool SSAMemPass::SSAMem(ir::Function* func) {
     SSAMemAnalyze(func);
     bool modified = SSAMemProcess(func);
+    bool eliminated = SSAMemDCE(func);
+    if (eliminated)
+      modified = true;
     return modified;
 }
 

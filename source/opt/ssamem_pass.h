@@ -102,6 +102,16 @@ class SSAMemPass : public Pass {
   // instructions are modified.
   bool SSAMemProcess(ir::Function* func);
 
+  // Return true if Store is not to function variable or if its
+  // variable has a load
+  bool isLiveStore(ir::Instruction* storeInst);
+
+  // Pass over function in reverse order, removing all instructions
+  // whose id's use count is 0. Also remove all stores to variables
+  // which do not have any loads. Return true if any instructions
+  // are changed.
+  bool SSAMemDCE(ir::Function* func);
+
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
   // instructions are modified. 

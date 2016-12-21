@@ -60,6 +60,12 @@ class BasicBlock {
   inline void ForEachInst(const std::function<void(const Instruction*)>& f,
                           bool run_on_debug_line_insts = false) const;
 
+  // Runs the given function |f| on each instruction in this basic block in
+  // reverse, and optionally on the debug line instructions that might precede
+  // them.
+  inline void ForEachInstReverse(const std::function<void(Instruction*)>& f,
+    bool run_on_debug_line_insts = false);
+
   // Runs the given function |f| on each label id of each successor block
   inline void ForEachSucc(const std::function<void(uint32_t)>& f);
 
@@ -99,6 +105,13 @@ inline void BasicBlock::ForEachInst(
   for (const auto& inst : insts_)
     static_cast<const Instruction*>(inst.get())
         ->ForEachInst(f, run_on_debug_line_insts);
+}
+
+inline void BasicBlock::ForEachInstReverse(const std::function<void(Instruction*)>& f,
+  bool run_on_debug_line_insts) {
+  for (auto inst = insts_.rbegin(); inst != insts_.rend(); inst++)
+    (*inst)->ForEachInst(f, run_on_debug_line_insts);
+  if (label_) label_->ForEachInst(f, run_on_debug_line_insts);
 }
 
 inline void BasicBlock::ForEachPhiInst(
