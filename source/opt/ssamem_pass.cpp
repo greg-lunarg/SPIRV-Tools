@@ -61,9 +61,9 @@ bool SSAMemPass::isTargetType(ir::Instruction* typeInst) {
     return false;
   int nonMathComp = 0;
   typeInst->ForEachInId([&nonMathComp,this](uint32_t* tid) {
-    ir::Instruction* typeInst =
+    ir::Instruction* compTypeInst =
         def_use_mgr_->id_to_defs().find(*tid)->second;
-    if (!isMathType(typeInst)) nonMathComp++;
+    if (!isMathType(compTypeInst)) nonMathComp++;
   });
   return nonMathComp == 0;
 }
@@ -290,7 +290,7 @@ bool SSAMemPass::SSAMemDCE(ir::Function* func) {
 }
 */
 
-bool SSAMemPass::SSAMemDCE(ir::Function* func) {
+bool SSAMemPass::SSAMemDCE() {
   bool modified = false;
   for (auto v : ssaVars) {
     if (nonSsaVars.find(v.first) != nonSsaVars.end())
@@ -327,7 +327,7 @@ bool SSAMemPass::SSAMemDCE(ir::Function* func) {
 bool SSAMemPass::SSAMem(ir::Function* func) {
     SSAMemAnalyze(func);
     bool modified = SSAMemProcess(func);
-    bool eliminated = SSAMemDCE(func);
+    bool eliminated = SSAMemDCE();
     modified |= eliminated;
     return modified;
 }
