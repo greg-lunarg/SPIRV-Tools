@@ -108,11 +108,10 @@ class SSAMemPass : public Pass {
                    uint32_t& varId,
                    uint32_t& chainId);
 
-  // Pass over function in reverse order, removing all instructions
-  // whose id's use count is 0. Also remove all stores to variables
-  // which do not have any loads. Return true if any instructions
-  // are changed.
-  bool SSAMemDCE(ir::Function* func);
+  // Remove all stores to useless SSA variables. Remove useless
+  // access chains and variables as well. Assumes Analyze and
+  // Process has been run.
+  bool SSAMemDCE();
 
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
