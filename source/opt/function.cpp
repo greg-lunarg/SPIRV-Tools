@@ -25,6 +25,15 @@ void Function::ForEachInst(const std::function<void(Instruction*)>& f,
   if (end_inst_) end_inst_->ForEachInst(f, run_on_debug_line_insts);
 }
 
+void Function::ForEachInstReverse(const std::function<void(Instruction*)>& f,
+  bool run_on_debug_line_insts) {
+  if (end_inst_) end_inst_->ForEachInst(f, run_on_debug_line_insts);
+  for (auto bb = blocks_.rbegin(); bb != blocks_.rend(); bb++)
+    (*bb)->ForEachInstReverse(f, run_on_debug_line_insts);
+  for (auto& param : params_) param->ForEachInst(f, run_on_debug_line_insts);
+  if (def_inst_) def_inst_->ForEachInst(f, run_on_debug_line_insts);
+}
+
 void Function::ForEachInst(const std::function<void(const Instruction*)>& f,
                            bool run_on_debug_line_insts) const {
   if (def_inst_)

@@ -70,6 +70,11 @@ class Function {
   void ForEachInst(const std::function<void(const Instruction*)>& f,
                    bool run_on_debug_line_insts = false) const;
 
+  // Runs the given function |f| on each instruction in this function in
+  // reverse, and optionally on debug line instructions that might precede them.
+  void ForEachInstReverse(const std::function<void(Instruction*)>& f,
+    bool run_on_debug_line_insts = false);
+
   // Runs the given function |f| on each parameter instruction in this function,
   // and optionally on debug line instructions that might precede them.
   void ForEachParam(const std::function<void(const Instruction*)>& f,
