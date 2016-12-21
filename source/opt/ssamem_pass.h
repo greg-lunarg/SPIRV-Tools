@@ -104,7 +104,9 @@ class SSAMemPass : public Pass {
 
   // Return true if Store is not to function variable or if its
   // variable has a load
-  bool isLiveStore(ir::Instruction* storeInst);
+  bool isLiveStore(ir::Instruction* storeInst,
+                   uint32_t& varId,
+                   uint32_t& chainId);
 
   // Pass over function in reverse order, removing all instructions
   // whose id's use count is 0. Also remove all stores to variables
