@@ -160,7 +160,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       if (ii->opcode() != SpvOpLoad)
         continue;
-      const uint32_t ptrId = ii->GetInOperand(SPV_STORE_POINTER_ID).words[0];
+      const uint32_t ptrId = ii->GetInOperand(SPV_LOAD_PTR_ID).words[0];
       const ir::Instruction* ptrInst =
           def_use_mgr_->id_to_defs().find(ptrId)->second;
       const uint32_t varId = ptrInst->opcode() == SpvOpAccessChain ?
@@ -298,10 +298,15 @@ bool SSAMemPass::SSAMemDCE() {
     uint32_t varId;
     uint32_t chainId;
     if (!isLiveStore(v.second, varId, chainId)) {
+      uint32_t valId = v.second->GetInOperand(SPV_STORE_VAL_ID).words[0];
       def_use_mgr_->KillInst(v.second);
       analysis::UseList* uses = def_use_mgr_->GetUses(varId);
       if (uses == nullptr)
         def_use_mgr_->KillDef(varId);
+      // The stored value could be a useless load. Clean it up now.
+      analysis::UseList* vuses = def_use_mgr_->GetUses(valId);
+      if (vuses == nullptr)
+        def_use_mgr_->KillDef(valId);
       modified = true;
     }
   }
