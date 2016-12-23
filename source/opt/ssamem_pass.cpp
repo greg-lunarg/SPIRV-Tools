@@ -29,7 +29,7 @@
 */
 
 static const int SPV_ENTRY_POINT_FUNCTION_ID = 1;
-static const int SPV_STORE_POINTER_ID = 0;
+static const int SPV_STORE_PTR_ID = 0;
 static const int SPV_STORE_VAL_ID = 1;
 static const int SPV_ACCESS_CHAIN_PTR_ID = 0;
 static const int SPV_ACCESS_CHAIN_IDX0_ID = 1;
@@ -68,6 +68,51 @@ bool SSAMemPass::isTargetType(ir::Instruction* typeInst) {
   return nonMathComp == 0;
 }
 
+ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t& varId) {
+  const uint32_t ptrId = ip->opcode() == SpvOpStore ?
+      ip->GetInOperand(SPV_STORE_PTR_ID).words[0] :
+      ip->GetInOperand(SPV_LOAD_PTR_ID).words[0];
+  ir::Instruction* ptrInst =
+    def_use_mgr_->id_to_defs().find(ptrId)->second;
+  varId = ptrInst->opcode() == SpvOpAccessChain ?
+    ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
+    ptrId;
+  return ptrInst;
+}
+
+bool SSAMemPass::isTargetPtr(ir::Instruction* ptrInst, uint32_t varId) {
+  const ir::Instruction* varInst =
+    def_use_mgr_->id_to_defs().find(varId)->second;
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varTypeId = varInst->type_id();
+  if (seenNonTargetTypes.find(varTypeId) != seenNonTargetTypes.end())
+    return false;
+  if (seenTargetTypes.find(varTypeId) == seenTargetTypes.end()) {
+    const ir::Instruction* varTypeInst =
+      def_use_mgr_->id_to_defs().find(varTypeId)->second;
+    if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
+      SpvStorageClassFunction) {
+      seenNonTargetTypes.insert(varTypeId);
+      return false;
+    }
+    const uint32_t varPteTypeId =
+      varTypeInst->GetInOperand(SPV_TYPE_PTR_TYPE_ID).words[0];
+    ir::Instruction* varPteTypeInst =
+      def_use_mgr_->id_to_defs().find(varPteTypeId)->second;
+    if (!isTargetType(varPteTypeInst)) {
+      seenNonTargetTypes.insert(varTypeId);
+      return false;
+    }
+    if (ptrInst->opcode() == SpvOpAccessChain &&
+      isMathType(varPteTypeInst)) {
+      seenNonTargetTypes.insert(varTypeId);
+      return false;
+    }
+    seenTargetTypes.insert(varTypeId);
+  }
+  return true;
+}
+
 void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
   ssaVars.clear();
   ssaComps.clear();
@@ -77,47 +122,13 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       if (ii->opcode() != SpvOpStore)
         continue;
-      const uint32_t ptrId = ii->GetInOperand(SPV_STORE_POINTER_ID).words[0];
-      const ir::Instruction* ptrInst =
-          def_use_mgr_->id_to_defs().find(ptrId)->second;
-      const uint32_t varId = ptrInst->opcode() == SpvOpAccessChain ?
-          ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
-          ptrId;
 
       // Verify store variable is target type
-      const ir::Instruction* varInst =
-          def_use_mgr_->id_to_defs().find(varId)->second;
-      assert(varInst->opcode() == SpvOpVariable);
-      const uint32_t varTypeId = varInst->type_id();
-      if (seenNonTargetTypes.find(varTypeId) != seenNonTargetTypes.end()) {
+      uint32_t varId;
+      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      if (!isTargetPtr(ptrInst, varId)) {
         nonSsaVars.insert(varId);
         continue;
-      }
-      if (seenTargetTypes.find(varTypeId) == seenTargetTypes.end()) {
-        const ir::Instruction* varTypeInst =
-            def_use_mgr_->id_to_defs().find(varTypeId)->second;
-        if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
-            SpvStorageClassFunction) {
-          seenNonTargetTypes.insert(varTypeId);
-          nonSsaVars.insert(varId);
-          continue;
-        }
-        const uint32_t varPteTypeId =
-            varTypeInst->GetInOperand(SPV_TYPE_PTR_TYPE_ID).words[0];
-        ir::Instruction* varPteTypeInst =
-            def_use_mgr_->id_to_defs().find(varPteTypeId)->second;
-        if (!isTargetType(varPteTypeInst)) {
-          seenNonTargetTypes.insert(varTypeId);
-          nonSsaVars.insert(varId);
-          continue;
-        }
-        if (ptrInst->opcode() == SpvOpAccessChain &&
-            isMathType(varPteTypeInst)) {
-          seenNonTargetTypes.insert(varTypeId);
-          nonSsaVars.insert(varId);
-          continue;
-        }
-        seenTargetTypes.insert(varTypeId);
       }
 
       // Verify store variable/component is not yet assigned.
@@ -233,7 +244,7 @@ bool SSAMemPass::isLiveStore(ir::Instruction* storeInst,
                              uint32_t& varId, uint32_t& chainId) {
   // get store's variable
   const uint32_t ptrId =
-    storeInst->GetInOperand(SPV_STORE_POINTER_ID).words[0];
+    storeInst->GetInOperand(SPV_STORE_PTR_ID).words[0];
   const ir::Instruction* ptrInst =
     def_use_mgr_->id_to_defs().find(ptrId)->second;
   if (ptrInst->opcode() == SpvOpAccessChain) {
@@ -324,6 +335,120 @@ bool SSAMemPass::SSAMemDCE() {
       if (uses == nullptr)
         def_use_mgr_->KillDef(varId);
       modified = true;
+    }
+  }
+  return modified;
+}
+
+void SSAMemPass::SBEraseComps(uint32_t varId) {
+  for (auto ci = sbCompStores.begin(); ci != sbCompStores.end();)
+    if (ci->first.first == varId)
+      ci = sbCompStores.erase(ci);
+    else
+      ci++;
+}
+
+bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    sbVarStores.clear();
+    sbVarLoads.clear();
+    sbCompStores.clear();
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      switch (ii->opcode()) {
+      case SpvOpStore: {
+        // Verify store variable is target type
+        uint32_t varId;
+        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (!isTargetPtr(ptrInst, varId))
+          continue;
+        // Register the store
+        if (ptrInst->opcode() == SpvOpVariable) {
+          sbVarStores[varId] = &*ii;
+          SBEraseComps(varId);
+        }
+        else {
+          assert(ptrInst->opcode() == SpvOpAccessChain);
+          const uint32_t idxId =
+              ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
+          sbCompStores[std::make_pair(varId, idxId)] = &*ii;
+          sbVarStores.erase(varId);
+          sbVarLoads.erase(varId);
+        }
+      } break;
+      case SpvOpLoad: {
+        // Verify store variable is target type
+        uint32_t varId;
+        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (!isTargetPtr(ptrInst, varId))
+          continue;
+        // Look for previous store or load
+        uint32_t replId = 0;
+        if (ptrInst->opcode() == SpvOpVariable) {
+          auto si = sbVarStores.find(varId);
+          if (si != sbVarStores.end()) {
+            replId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+          }
+          else {
+            auto li = sbVarStores.find(varId);
+            if (li != sbVarStores.end()) {
+              replId = li->second->result_id();
+            }
+          }
+        }
+        else {
+          assert(ptrInst->opcode() == SpvOpAccessChain);
+          const uint32_t idxId =
+            ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
+          auto ci = sbCompStores.find(std::make_pair(varId, idxId));
+          if (ci != sbCompStores.end()) {
+            replId = ci->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+          }
+          else {
+            // if live store to whole variable of load, look for component
+            // store to that load variable
+            auto si = sbVarStores.find(varId);
+            if (si != sbVarStores.end()) {
+              const uint32_t valId =
+                si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+              ir::Instruction* valInst =
+                def_use_mgr_->id_to_defs().find(valId)->second;
+              if (valInst->opcode() == SpvOpLoad) {
+                uint32_t loadVarId =
+                  valInst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
+                auto lvi = sbCompStores.find(std::make_pair(loadVarId, idxId));
+                if (lvi != sbCompStores.end()) {
+                  replId = lvi->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+                }
+              }
+            }
+          }
+        }
+        if (replId != 0) {
+          // replace load's result id and delete load
+          // GSF TODO: cut and paste from Process
+          const uint32_t loadId = ii->result_id();
+          const bool replaced = def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
+          if (replaced)
+            modified = true;
+          // remove load instruction
+          def_use_mgr_->KillInst(&*ii);
+          // if access chain, see if it can be removed as well
+          const uint32_t ptrId = ptrInst->result_id();
+          if (ptrId != varId) {
+            analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
+            if (uses == nullptr)
+              def_use_mgr_->KillDef(ptrId);
+          }
+        }
+        else {
+          // register load
+          // GSF TODO: add code
+        }
+      } break;
+      default:
+        break;
+      }
     }
   }
   return modified;

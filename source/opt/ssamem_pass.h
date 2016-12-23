@@ -72,6 +72,15 @@ class SSAMemPass : public Pass {
   // Set of verified target types
   std::unordered_set<uint32_t> seenNonTargetTypes;
 
+  // Map from variable to its live store in block
+  std::unordered_map<uint32_t, ir::Instruction*> sbVarStores;
+
+  // Map from variable to its live load in block
+  std::unordered_map<uint32_t, ir::Instruction*> sbVarLoads;
+
+  // Map from component (var, index pair) to its live store in block
+  std::unordered_map<CompKey, ir::Instruction*, pairhash> sbCompStores;
+
   // Returns true if type is a scalar type
   // or a vector or matrix
   bool isMathType(ir::Instruction* typeInst);
@@ -87,6 +96,10 @@ class SSAMemPass : public Pass {
     module->SetIdBound(nextId_);
   }
   inline uint32_t getNextId() { return nextId_++; }
+
+  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
+
+  bool isTargetPtr(ir::Instruction* ptrInst, uint32_t varId);
 
   // Find all function scope variables that are stored to only once
   // and create two maps: one for full variable stores and one for
@@ -112,6 +125,16 @@ class SSAMemPass : public Pass {
   // access chains and variables as well. Assumes Analyze and
   // Process has been run.
   bool SSAMemDCE();
+
+  void SBEraseComps(uint32_t varId);
+
+  // Do single block memory optimization of function variables.
+  // For loads, if previous load or store to same component,
+  // replace load id with previous id and delete load.
+  // For stores, if previous store to same component, delete
+  // previous store. Finally, check if remaining stores are
+  // useless, and delete store and variable.
+  bool SSAMemSingleBlock(ir::Function* func);
 
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
