@@ -165,6 +165,22 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
   }
 }
 
+void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
+                                      uint32_t replId,
+                                      ir::Instruction* ptrInst) {
+  const uint32_t loadId = loadInst->result_id();
+  (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
+  // remove load instruction
+  def_use_mgr_->KillInst(loadInst);
+  // if access chain, see if it can be removed as well
+  if (ptrInst->opcode() == SpvOpAccessChain) {
+    const uint32_t ptrId = ptrInst->result_id();
+    analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
+    if (uses == nullptr)
+      def_use_mgr_->KillDef(ptrId);
+  }
+}
+
 bool SSAMemPass::SSAMemProcess(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
@@ -172,7 +188,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       const uint32_t ptrId = ii->GetInOperand(SPV_LOAD_PTR_ID).words[0];
-      const ir::Instruction* ptrInst =
+      ir::Instruction* ptrInst =
           def_use_mgr_->id_to_defs().find(ptrId)->second;
       const uint32_t varId = ptrInst->opcode() == SpvOpAccessChain ?
           ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
@@ -223,18 +239,8 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
         replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
       }
       // replace all instances of the load's id with the SSA value's id
-      const uint32_t loadId = ii->result_id();
-      const bool replaced = def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
-      if (replaced)
-        modified = true;
-      // remove load instruction
-      def_use_mgr_->KillInst(&*ii);
-      // if access chain, see if it can be removed as well
-      if (ptrId != varId) {
-        analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
-        if (uses == nullptr)
-          def_use_mgr_->KillDef(ptrId);
-      }
+      ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+      modified = true;
     }
   }
   return modified;
@@ -275,6 +281,19 @@ bool SSAMemPass::isLiveStore(ir::Instruction* storeInst,
   return false;
 }
 
+void SSAMemPass::DeleteStore(ir::Instruction* storeInst,
+                             uint32_t varId, uint32_t chainId) {
+  def_use_mgr_->KillInst(storeInst);
+  if (chainId != 0) {
+    analysis::UseList* cuses = def_use_mgr_->GetUses(chainId);
+    if (cuses == nullptr)
+      def_use_mgr_->KillDef(chainId);
+  }
+  analysis::UseList* uses = def_use_mgr_->GetUses(varId);
+  if (uses == nullptr)
+    def_use_mgr_->KillDef(varId);
+}
+
 /*
 bool SSAMemPass::SSAMemDCE(ir::Function* func) {
   bool modified = false;
@@ -310,10 +329,7 @@ bool SSAMemPass::SSAMemDCE() {
     uint32_t chainId;
     if (!isLiveStore(v.second, varId, chainId)) {
       uint32_t valId = v.second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-      def_use_mgr_->KillInst(v.second);
-      analysis::UseList* uses = def_use_mgr_->GetUses(varId);
-      if (uses == nullptr)
-        def_use_mgr_->KillDef(varId);
+      DeleteStore(v.second, varId, 0);
       // The stored value could be a useless load. Clean it up now.
       analysis::UseList* vuses = def_use_mgr_->GetUses(valId);
       if (vuses == nullptr)
@@ -327,13 +343,7 @@ bool SSAMemPass::SSAMemDCE() {
     uint32_t varId;
     uint32_t chainId;
     if (!isLiveStore(c.second, varId, chainId)) {
-      def_use_mgr_->KillInst(c.second);
-      analysis::UseList* cuses = def_use_mgr_->GetUses(chainId);
-      if (cuses == nullptr)
-        def_use_mgr_->KillDef(chainId);
-      analysis::UseList* uses = def_use_mgr_->GetUses(varId);
-      if (uses == nullptr)
-        def_use_mgr_->KillDef(varId);
+      DeleteStore(c.second, varId, chainId);
       modified = true;
     }
   }
@@ -373,8 +383,8 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
               ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
           sbCompStores[std::make_pair(varId, idxId)] = &*ii;
           sbVarStores.erase(varId);
-          sbVarLoads.erase(varId);
         }
+        sbVarLoads.erase(varId);
       } break;
       case SpvOpLoad: {
         // Verify store variable is target type
@@ -387,11 +397,11 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
         if (ptrInst->opcode() == SpvOpVariable) {
           auto si = sbVarStores.find(varId);
           if (si != sbVarStores.end()) {
-            replId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+            replId = si->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
           }
           else {
-            auto li = sbVarStores.find(varId);
-            if (li != sbVarStores.end()) {
+            auto li = sbVarLoads.find(varId);
+            if (li != sbVarLoads.end()) {
               replId = li->second->result_id();
             }
           }
@@ -402,15 +412,15 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
             ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
           auto ci = sbCompStores.find(std::make_pair(varId, idxId));
           if (ci != sbCompStores.end()) {
-            replId = ci->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+            replId = ci->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
           }
           else {
             // if live store to whole variable of load, look for component
-            // store to that load variable
+            // store to the loaded variable
             auto si = sbVarStores.find(varId);
             if (si != sbVarStores.end()) {
               const uint32_t valId =
-                si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+                si->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
               ir::Instruction* valInst =
                 def_use_mgr_->id_to_defs().find(valId)->second;
               if (valInst->opcode() == SpvOpLoad) {
@@ -418,7 +428,7 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
                   valInst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
                 auto lvi = sbCompStores.find(std::make_pair(loadVarId, idxId));
                 if (lvi != sbCompStores.end()) {
-                  replId = lvi->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+                  replId = lvi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
                 }
               }
             }
@@ -426,29 +436,25 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
         }
         if (replId != 0) {
           // replace load's result id and delete load
-          // GSF TODO: cut and paste from Process
-          const uint32_t loadId = ii->result_id();
-          const bool replaced = def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
-          if (replaced)
-            modified = true;
-          // remove load instruction
-          def_use_mgr_->KillInst(&*ii);
-          // if access chain, see if it can be removed as well
-          const uint32_t ptrId = ptrInst->result_id();
-          if (ptrId != varId) {
-            analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
-            if (uses == nullptr)
-              def_use_mgr_->KillDef(ptrId);
-          }
+          ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+          modified = true;
         }
-        else {
-          // register load
-          // GSF TODO: add code
-        }
+        else if (ptrInst->opcode() == SpvOpVariable)
+          sbVarLoads[varId] = &*ii;  // register load
       } break;
       default:
         break;
       }
+    }
+    // Go back and delete useless stores in block
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpStore)
+        continue;
+      uint32_t varId;
+      uint32_t chainId;
+      if (isLiveStore(&*ii, varId, chainId))
+        continue;
+      DeleteStore(&*ii, varId, chainId);
     }
   }
   return modified;
@@ -457,8 +463,8 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
 bool SSAMemPass::SSAMem(ir::Function* func) {
     SSAMemAnalyze(func);
     bool modified = SSAMemProcess(func);
-    bool eliminated = SSAMemDCE();
-    modified |= eliminated;
+    modified |= SSAMemDCE();
+    modified |= SSAMemSingleBlock(func);
     return modified;
 }
 
