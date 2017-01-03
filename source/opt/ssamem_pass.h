@@ -109,6 +109,12 @@ class SSAMemPass : public Pass {
   // matrix types and struct types containing only these types.
   void SSAMemAnalyze(ir::Function* func);
 
+  // Replace all instances of load's id with replId and delete load
+  // and its access chain, if any
+  void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
+    uint32_t replId,
+    ir::Instruction* ptrInst);
+
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Assumes that SSAMemAnalyze
   // has just been run for func. Return true if the any
@@ -121,6 +127,11 @@ class SSAMemPass : public Pass {
                    uint32_t& varId,
                    uint32_t& chainId);
 
+  // Delete store instruction and if needed, its ChainAccess inst
+  void DeleteStore(ir::Instruction* storeInst,
+    uint32_t varId,
+    uint32_t chainId);
+
   // Remove all stores to useless SSA variables. Remove useless
   // access chains and variables as well. Assumes Analyze and
   // Process has been run.
@@ -130,10 +141,9 @@ class SSAMemPass : public Pass {
 
   // Do single block memory optimization of function variables.
   // For loads, if previous load or store to same component,
-  // replace load id with previous id and delete load.
-  // For stores, if previous store to same component, delete
-  // previous store. Finally, check if remaining stores are
-  // useless, and delete store and variable.
+  // replace load id with previous id and delete load. Finally,
+  // check if remaining stores are useless, and delete store
+  // and variable.
   bool SSAMemSingleBlock(ir::Function* func);
 
   // For each load of SSA variable, replace all uses of the load
