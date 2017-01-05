@@ -111,7 +111,7 @@ class SSAMemPass : public Pass {
 
   // Replace all instances of load's id with replId and delete load
   // and its access chain, if any
-  void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
+  void ReplaceAndDeleteLoad(ir::Instruction* loadInst,
     uint32_t replId,
     ir::Instruction* ptrInst);
 
