@@ -261,6 +261,16 @@ bool SSAMemPass::isLiveStore(ir::Instruction* storeInst,
     varId = ptrId;
     chainId = 0;
   }
+  // non-function scope vars are live
+  const ir::Instruction* varInst =
+    def_use_mgr_->id_to_defs().find(varId)->second;
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varTypeId = varInst->type_id();
+  const ir::Instruction* varTypeInst =
+    def_use_mgr_->id_to_defs().find(varTypeId)->second;
+  if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
+      SpvStorageClassFunction)
+    return true;
   // test if variable is loaded from
   analysis::UseList* uses = def_use_mgr_->GetUses(varId);
   if (uses->size() <= 1)
@@ -381,7 +391,10 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
           assert(ptrInst->opcode() == SpvOpAccessChain);
           const uint32_t idxId =
               ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-          sbCompStores[std::make_pair(varId, idxId)] = &*ii;
+          if (ptrInst->NumInOperands() == 2)
+            sbCompStores[std::make_pair(varId, idxId)] = &*ii;
+          else
+            sbCompStores.erase(std::make_pair(varId, idxId));
           sbVarStores.erase(varId);
         }
         sbVarLoads.erase(varId);
