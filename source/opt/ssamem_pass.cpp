@@ -57,12 +57,15 @@ bool SSAMemPass::isMathType(ir::Instruction* typeInst) {
 bool SSAMemPass::isTargetType(ir::Instruction* typeInst) {
   if (isMathType(typeInst))
     return true;
-  if (typeInst->opcode() != SpvOpTypeStruct)
+  if (typeInst->opcode() != SpvOpTypeStruct &&
+      typeInst->opcode() != SpvOpTypeArray)
     return false;
   int nonMathComp = 0;
   typeInst->ForEachInId([&nonMathComp,this](uint32_t* tid) {
     ir::Instruction* compTypeInst =
         def_use_mgr_->id_to_defs().find(*tid)->second;
+    // Ignore length operand in Array type
+    if (compTypeInst->opcode() == SpvOpConstant) return;
     if (!isMathType(compTypeInst)) nonMathComp++;
   });
   return nonMathComp == 0;
@@ -103,11 +106,11 @@ bool SSAMemPass::isTargetPtr(ir::Instruction* ptrInst, uint32_t varId) {
       seenNonTargetTypes.insert(varTypeId);
       return false;
     }
-    if (ptrInst->opcode() == SpvOpAccessChain &&
-      isMathType(varPteTypeInst)) {
-      seenNonTargetTypes.insert(varTypeId);
-      return false;
-    }
+    //if (ptrInst->opcode() == SpvOpAccessChain &&
+    //  isMathType(varPteTypeInst)) {
+    //  seenNonTargetTypes.insert(varTypeId);
+    //  return false;
+    //}
     seenTargetTypes.insert(varTypeId);
   }
   return true;
@@ -200,6 +203,8 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
         continue;
       uint32_t replId;
       if (ptrInst->opcode() == SpvOpAccessChain) {
+        if (ptrInst->NumInOperands() != 2)
+          continue;
         // process component load
         const uint32_t idxId =
             ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
@@ -419,7 +424,7 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
             }
           }
         }
-        else {
+        else if (ptrInst->NumInOperands() == 2) {
           assert(ptrInst->opcode() == SpvOpAccessChain);
           const uint32_t idxId =
             ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
