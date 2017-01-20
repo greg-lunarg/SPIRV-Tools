@@ -371,6 +371,11 @@ void SSAMemPass::SBEraseComps(uint32_t varId) {
       ci = sbCompStores.erase(ci);
     else
       ci++;
+  for (auto ci = sbPinnedComps.begin(); ci != sbPinnedComps.end();)
+    if (ci->first == varId)
+      ci = sbPinnedComps.erase(ci);
+    else
+      ci++;
 }
 
 bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
@@ -379,6 +384,8 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
     sbVarStores.clear();
     sbVarLoads.clear();
     sbCompStores.clear();
+    sbPinnedVars.clear();
+    sbPinnedComps.clear();
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       switch (ii->opcode()) {
       case SpvOpStore: {
@@ -389,6 +396,13 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
           continue;
         // Register the store
         if (ptrInst->opcode() == SpvOpVariable) {
+          // if deletable, look for WAW
+          if (sbPinnedVars.find(varId) == sbPinnedVars.end()) {
+            auto si = sbVarStores.find(varId);
+            if (si != sbVarStores.end()) {
+              def_use_mgr_->KillInst(si->second);
+            }
+          }
           sbVarStores[varId] = &*ii;
           SBEraseComps(varId);
         }
@@ -396,12 +410,22 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
           assert(ptrInst->opcode() == SpvOpAccessChain);
           const uint32_t idxId =
               ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
+          // if deletable, look for WAW
+          if (sbPinnedComps.find(std::make_pair(varId, idxId)) == sbPinnedComps.end()) {
+            auto si = sbCompStores.find(std::make_pair(varId, idxId));
+            if (si != sbCompStores.end()) {
+              uint32_t chainId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+              DeleteStore(si->second, varId, chainId);
+            }
+          }
           if (ptrInst->NumInOperands() == 2)
             sbCompStores[std::make_pair(varId, idxId)] = &*ii;
           else
             sbCompStores.erase(std::make_pair(varId, idxId));
+          sbPinnedComps.erase(std::make_pair(varId, idxId));
           sbVarStores.erase(varId);
         }
+        sbPinnedVars.erase(varId);
         sbVarLoads.erase(varId);
       } break;
       case SpvOpLoad: {
@@ -457,8 +481,23 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
           ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
           modified = true;
         }
-        else if (ptrInst->opcode() == SpvOpVariable)
-          sbVarLoads[varId] = &*ii;  // register load
+        else {
+          if (ptrInst->opcode() == SpvOpVariable) {
+            sbVarLoads[varId] = &*ii;  // register load
+            sbPinnedVars.insert(varId);
+            for (auto ci = sbCompStores.begin(); ci != sbCompStores.end(); ci++)
+              if (ci->first.first == varId)
+                sbPinnedComps.insert(std::make_pair(varId, ci->first.second));
+          }
+          else {
+            const uint32_t idxId =
+              ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
+            if (sbCompStores.find(std::make_pair(varId, idxId)) != sbCompStores.end())
+              sbPinnedComps.insert(std::make_pair(varId, idxId));
+            else
+              sbPinnedVars.insert(varId);
+          }
+        }
       } break;
       default:
         break;

@@ -81,6 +81,12 @@ class SSAMemPass : public Pass {
   // Map from component (var, index pair) to its live store in block
   std::unordered_map<CompKey, ir::Instruction*, pairhash> sbCompStores;
 
+  // Set of undeletable variables
+  std::unordered_set<uint32_t> sbPinnedVars;
+
+  // Map from component (var, index pair) to its live store in block
+  std::unordered_set<CompKey, pairhash> sbPinnedComps;
+
   // Returns true if type is a scalar type
   // or a vector or matrix
   bool isMathType(ir::Instruction* typeInst);
