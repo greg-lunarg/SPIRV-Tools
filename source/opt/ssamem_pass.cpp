@@ -298,6 +298,7 @@ bool SSAMemPass::isLiveStore(ir::Instruction* storeInst,
 
 void SSAMemPass::DeleteStore(ir::Instruction* storeInst,
                              uint32_t varId, uint32_t chainId) {
+  uint32_t valId = storeInst->GetInOperand(SPV_STORE_VAL_ID).words[0];
   def_use_mgr_->KillInst(storeInst);
   if (chainId != 0) {
     analysis::UseList* cuses = def_use_mgr_->GetUses(chainId);
@@ -307,6 +308,10 @@ void SSAMemPass::DeleteStore(ir::Instruction* storeInst,
   analysis::UseList* uses = def_use_mgr_->GetUses(varId);
   if (uses == nullptr)
     def_use_mgr_->KillDef(varId);
+  // The stored value could be a useless load. Clean it up now.
+  analysis::UseList* vuses = def_use_mgr_->GetUses(valId);
+  if (vuses == nullptr)
+    def_use_mgr_->KillDef(valId);
 }
 
 /*
@@ -343,12 +348,7 @@ bool SSAMemPass::SSAMemDCE() {
     uint32_t varId;
     uint32_t chainId;
     if (!isLiveStore(v.second, varId, chainId)) {
-      uint32_t valId = v.second->GetInOperand(SPV_STORE_VAL_ID).words[0];
       DeleteStore(v.second, varId, 0);
-      // The stored value could be a useless load. Clean it up now.
-      analysis::UseList* vuses = def_use_mgr_->GetUses(valId);
-      if (vuses == nullptr)
-        def_use_mgr_->KillDef(valId);
       modified = true;
     }
   }
@@ -504,14 +504,19 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
       }
     }
     // Go back and delete useless stores in block
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
-      if (ii->opcode() != SpvOpStore)
-        continue;
-      uint32_t varId;
-      uint32_t chainId;
-      if (isLiveStore(&*ii, varId, chainId))
-        continue;
-      DeleteStore(&*ii, varId, chainId);
+    bool deleted = true;
+    while (deleted) {
+      deleted = false;
+      for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+        if (ii->opcode() != SpvOpStore)
+          continue;
+        uint32_t varId;
+        uint32_t chainId;
+        if (isLiveStore(&*ii, varId, chainId))
+          continue;
+        DeleteStore(&*ii, varId, chainId);
+        deleted = true;
+      }
     }
   }
   return modified;
