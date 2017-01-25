@@ -23,6 +23,7 @@
 #include <map>
 #include <algorithm>
 #include <utility>
+#include <queue>
 
 #include "def_use_manager.h"
 #include "module.h"
@@ -129,14 +130,10 @@ class SSAMemPass : public Pass {
 
   // Return true if Store is not to function variable or if its
   // variable has a load
-  bool isLiveStore(ir::Instruction* storeInst,
-                   uint32_t& varId,
-                   uint32_t& chainId);
+  bool isLiveStore(ir::Instruction* storeInst);
 
-  // Delete store instruction and if needed, its ChainAccess inst
-  void DeleteStore(ir::Instruction* storeInst,
-    uint32_t varId,
-    uint32_t chainId);
+  // Delete inst and iterate DCE on all its operands 
+  void DCEInst(ir::Instruction* inst);
 
   // Remove all stores to useless SSA variables. Remove useless
   // access chains and variables as well. Assumes Analyze and
