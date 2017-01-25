@@ -396,7 +396,7 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
           continue;
         // Register the store
         if (ptrInst->opcode() == SpvOpVariable) {
-          // if deletable, look for WAW
+          // if not pinned, look for WAW
           if (sbPinnedVars.find(varId) == sbPinnedVars.end()) {
             auto si = sbVarStores.find(varId);
             if (si != sbVarStores.end()) {
@@ -410,16 +410,17 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
           assert(ptrInst->opcode() == SpvOpAccessChain);
           const uint32_t idxId =
               ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-          // if deletable, look for WAW
-          if (sbPinnedComps.find(std::make_pair(varId, idxId)) == sbPinnedComps.end()) {
-            auto si = sbCompStores.find(std::make_pair(varId, idxId));
-            if (si != sbCompStores.end()) {
-              uint32_t chainId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
-              DeleteStore(si->second, varId, chainId);
+          if (ptrInst->NumInOperands() == 2) {
+            // if not pinned, look for WAW
+            if (sbPinnedComps.find(std::make_pair(varId, idxId)) == sbPinnedComps.end()) {
+              auto si = sbCompStores.find(std::make_pair(varId, idxId));
+              if (si != sbCompStores.end()) {
+                uint32_t chainId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
+                DeleteStore(si->second, varId, chainId);
+              }
             }
-          }
-          if (ptrInst->NumInOperands() == 2)
             sbCompStores[std::make_pair(varId, idxId)] = &*ii;
+          }
           else
             sbCompStores.erase(std::make_pair(varId, idxId));
           sbPinnedComps.erase(std::make_pair(varId, idxId));
