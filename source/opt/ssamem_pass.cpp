@@ -513,17 +513,12 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
       }
     }
     // Go back and delete useless stores in block
-    bool deleted = true;
-    while (deleted) {
-      deleted = false;
-      for (auto ii = bi->begin(); ii != bi->end(); ii++) {
-        if (ii->opcode() != SpvOpStore)
-          continue;
-        if (isLiveStore(&*ii))
-          continue;
-        DCEInst(&*ii);
-        deleted = true;
-      }
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpStore)
+        continue;
+      if (isLiveStore(&*ii))
+        continue;
+      DCEInst(&*ii);
     }
   }
   return modified;
