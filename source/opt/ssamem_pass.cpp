@@ -121,8 +121,10 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
   ssaComps.clear();
   ssaCompVars.clear();
   nonSsaVars.clear();
+  storeIdx.clear();
+  uint32_t instIdx = 0;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
       if (ii->opcode() != SpvOpStore)
         continue;
 
@@ -156,6 +158,7 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
         }
         ssaCompVars.insert(varId);
         ssaComps[std::make_pair(varId, idxId)] = &*ii;
+        storeIdx[&*ii] = instIdx;
       }
       else {
         if (ssaCompVars.find(varId) != ssaCompVars.end()) {
@@ -163,6 +166,7 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
           continue;
         }
         ssaVars[varId] = &*ii;
+        storeIdx[&*ii] = instIdx;
       }
     }
   }
@@ -186,8 +190,9 @@ void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
 
 bool SSAMemPass::SSAMemProcess(ir::Function* func) {
   bool modified = false;
+  uint32_t instIdx = 0;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       const uint32_t ptrId = ii->GetInOperand(SPV_LOAD_PTR_ID).words[0];
@@ -202,6 +207,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
       if (nonSsaVars.find(varId) != nonSsaVars.end())
         continue;
       uint32_t replId;
+      uint32_t sIdx;
       if (ptrInst->opcode() == SpvOpAccessChain) {
         if (ptrInst->NumInOperands() != 2)
           continue;
@@ -209,8 +215,10 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
         const uint32_t idxId =
             ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
         const auto csi = ssaComps.find(std::make_pair(varId, idxId));
-        if (csi != ssaComps.end())
+        if (csi != ssaComps.end()) {
           replId = csi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
+          sIdx = storeIdx[csi->second];
+        }
         else {
           // See if the whole variable stored with a load of an SSA var.
           // If so, look for a component store into the load variable
@@ -232,6 +240,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
           if (lvcsi == ssaComps.end())
             continue;
           replId = lvcsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
+          sIdx = storeIdx[lvcsi->second];
         }
       }
       else {
@@ -242,7 +251,11 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
         if (vsi == ssaVars.end())
           continue;
         replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        sIdx = storeIdx[vsi->second];
       }
+      // store must dominate load
+      if (instIdx < sIdx)
+        continue;
       // replace all instances of the load's id with the SSA value's id
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
       modified = true;
@@ -489,10 +502,11 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
 }
 
 bool SSAMemPass::SSAMem(ir::Function* func) {
-    SSAMemAnalyze(func);
-    bool modified = SSAMemProcess(func);
-    modified |= SSAMemDCE();
+    bool modified = false;
     modified |= SSAMemSingleBlock(func);
+    SSAMemAnalyze(func);
+    modified |= SSAMemProcess(func);
+    modified |= SSAMemDCE();
     return modified;
 }
 
