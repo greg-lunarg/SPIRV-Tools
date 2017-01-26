@@ -131,8 +131,12 @@ class SSAMemPass : public Pass {
   // instructions are modified.
   bool SSAMemProcess(ir::Function* func);
 
+  // Return true if varId is not a function variable or if it has
+  // a load
+  bool isLiveVar(uint32_t varId);
+
   // Return true if Store is not to function variable or if its
-  // variable has a load
+  // base variable has a load
   bool isLiveStore(ir::Instruction* storeInst);
 
   // Delete inst and iterate DCE on all its operands 

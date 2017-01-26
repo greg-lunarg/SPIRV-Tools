@@ -264,15 +264,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
   return modified;
 }
 
-bool SSAMemPass::isLiveStore(ir::Instruction* storeInst) {
-  // get store's variable
-  const uint32_t ptrId =
-      storeInst->GetInOperand(SPV_STORE_PTR_ID).words[0];
-  const ir::Instruction* ptrInst =
-      def_use_mgr_->id_to_defs().find(ptrId)->second;
-  uint32_t varId = (ptrInst->opcode() == SpvOpAccessChain) ?
-      ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
-      ptrId;
+bool SSAMemPass::isLiveVar(uint32_t varId) {
   // non-function scope vars are live
   const ir::Instruction* varInst =
       def_use_mgr_->id_to_defs().find(varId)->second;
@@ -303,6 +295,13 @@ bool SSAMemPass::isLiveStore(ir::Instruction* storeInst) {
   return false;
 }
 
+bool SSAMemPass::isLiveStore(ir::Instruction* storeInst) {
+  // get store's variable
+  uint32_t varId;
+  (void) GetPtr(storeInst, varId);
+  return isLiveVar(varId);
+}
+
 void SSAMemPass::DCEInst(ir::Instruction* inst) {
   std::queue<ir::Instruction*> deadInsts;
   deadInsts.push(inst);
@@ -312,6 +311,9 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
     di->ForEachInId([&ids](uint32_t* iid) {
       ids.push(*iid);
     });
+    uint32_t varId = 0;
+    if (di->opcode() == SpvOpLoad)
+      (void) GetPtr(di, varId);
     def_use_mgr_->KillInst(di);
     while (!ids.empty()) {
       uint32_t id = ids.front();
@@ -320,6 +322,26 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
         deadInsts.push(def_use_mgr_->GetDef(id));
       ids.pop();
     }
+    // if a load was deleted and it was the variable's
+    // last load, add all its stores to dead queue
+    if (varId != 0 && !isLiveVar(varId)) {
+      analysis::UseList* uses = def_use_mgr_->GetUses(varId);
+      if (uses != nullptr) {
+        for (auto u : *uses) {
+          if (u.inst->opcode() == SpvOpAccessChain) {
+            uint32_t cid = u.inst->result_id();
+            analysis::UseList* cuses = def_use_mgr_->GetUses(cid);
+            if (cuses != nullptr) {
+              for (auto cu : *cuses)
+                if (cu.inst->opcode() == SpvOpStore)
+                  deadInsts.push(cu.inst);
+            }
+          }
+          else if (u.inst->opcode() == SpvOpStore)
+            deadInsts.push(u.inst);
+        }
+      }
+    }
     deadInsts.pop();
   }
 }
@@ -327,6 +349,9 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
 bool SSAMemPass::SSAMemDCE() {
   bool modified = false;
   for (auto v : ssaVars) {
+    // check that it hasn't already been DCE'd
+    if (v.second->opcode() != SpvOpStore)
+      continue;
     if (nonSsaVars.find(v.first) != nonSsaVars.end())
       continue;
     if (!isLiveStore(v.second)) {
@@ -335,6 +360,9 @@ bool SSAMemPass::SSAMemDCE() {
     }
   }
   for (auto c : ssaComps) {
+    // check that it hasn't already been DCE'd
+    if (c.second->opcode() != SpvOpStore)
+      continue;
     if (nonSsaVars.find(c.first.first) != nonSsaVars.end())
       continue;
     if (!isLiveStore(c.second)) {
