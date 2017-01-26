@@ -524,12 +524,42 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::SSAMemDCEFunc(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      switch (ii->opcode()) {
+      case SpvOpStore: {
+        uint32_t varId;
+        (void)GetPtr(&*ii, varId);
+        if (isLiveVar(varId))
+          break;
+        DCEInst(&*ii);
+        modified = true;
+      } break;
+      default: {
+        uint32_t rId = ii->result_id();
+        if (rId == 0)
+          break;
+        analysis::UseList* uses = def_use_mgr_->GetUses(rId);
+        if (uses != nullptr)
+          break;
+        DCEInst(&*ii);
+        modified = true;
+      } break;
+      }
+    }
+  }
+  return modified;
+}
+
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
     modified |= SSAMemSingleBlock(func);
     SSAMemAnalyze(func);
     modified |= SSAMemProcess(func);
     modified |= SSAMemDCE();
+    modified |= SSAMemDCEFunc(func);
     return modified;
 }
 

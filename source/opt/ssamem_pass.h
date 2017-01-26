@@ -156,6 +156,8 @@ class SSAMemPass : public Pass {
   // and variable.
   bool SSAMemSingleBlock(ir::Function* func);
 
+  bool SSAMemDCEFunc(ir::Function* func);
+
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
   // instructions are modified. 
