@@ -119,6 +119,9 @@ class SSAMemPass : public Pass {
   // matrix types and struct types containing only these types.
   void SSAMemAnalyze(ir::Function* func);
 
+  // Delete inst if it has no uses. Assumes inst has a resultId.
+  void DeleteIfUseless(ir::Instruction* inst);
+
   // Replace all instances of load's id with replId and delete load
   // and its access chain, if any
   void ReplaceAndDeleteLoad(ir::Instruction* loadInst,
@@ -161,6 +164,12 @@ class SSAMemPass : public Pass {
 
   // Return type id for pointer's pointee
   uint32_t GetPteTypeId(const ir::Instruction* ptrInst);
+
+  // Create a load/insert/store equivalent to a store of
+  // valId through ptrInst.
+  void GenACStoreRepl(const ir::Instruction* ptrInst,
+      uint32_t valId,
+      std::vector<std::unique_ptr<ir::Instruction>>& newInsts);
 
   // For the (constant index) access chain ptrInst, create an
   // equivalent load and extract
