@@ -168,6 +168,14 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
   }
 }
 
+void SSAMemPass::DeleteIfUseless(ir::Instruction* inst) {
+  const uint32_t resId = inst->result_id();
+  assert(resId != 0);
+  analysis::UseList* uses = def_use_mgr_->GetUses(resId);
+  if (uses == nullptr)
+    def_use_mgr_->KillInst(inst);
+}
+
 void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
                                       uint32_t replId,
                                       ir::Instruction* ptrInst) {
@@ -177,10 +185,7 @@ void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
   def_use_mgr_->KillInst(loadInst);
   // if access chain, see if it can be removed as well
   if (ptrInst->opcode() == SpvOpAccessChain) {
-    const uint32_t ptrId = ptrInst->result_id();
-    analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
-    if (uses == nullptr)
-      def_use_mgr_->KillInst(ptrInst);
+    DeleteIfUseless(ptrInst);
   }
 }
 
@@ -557,22 +562,22 @@ uint32_t SSAMemPass::GetPteTypeId(const ir::Instruction* ptrInst) {
 }
 
 void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
-    std::vector<std::unique_ptr<ir::Instruction>>& newInsts,
-    uint32_t& resultId) {
+  std::vector<std::unique_ptr<ir::Instruction>>& newInsts,
+  uint32_t& resultId) {
 
   // Build and append Load
   const uint32_t ldResultId = getNextId();
   const uint32_t varId =
-      ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0];
+    ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0];
   const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
   assert(varInst->opcode() == SpvOpVariable);
   const uint32_t varPteTypeId = GetPteTypeId(varInst);
   std::vector<ir::Operand> load_in_operands;
   load_in_operands.push_back(
-      ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+    ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
       std::initializer_list<uint32_t>{varId}));
   std::unique_ptr<ir::Instruction> newLoad(new ir::Instruction(SpvOpLoad,
-      varPteTypeId, ldResultId, load_in_operands));
+    varPteTypeId, ldResultId, load_in_operands));
   def_use_mgr_->AnalyzeInstDefUse(&*newLoad);
   newInsts.emplace_back(std::move(newLoad));
 
@@ -581,24 +586,83 @@ void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
   const uint32_t ptrPteTypeId = GetPteTypeId(ptrInst);
   std::vector<ir::Operand> ext_in_opnds;
   ext_in_opnds.push_back(
-      ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+    ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
       std::initializer_list<uint32_t>{ldResultId}));
   uint32_t iidIdx = 0;
-  ptrInst->ForEachInId([&iidIdx,&ext_in_opnds,this](const uint32_t *iid) {
+  ptrInst->ForEachInId([&iidIdx, &ext_in_opnds, this](const uint32_t *iid) {
     if (iidIdx > 0) {
       const ir::Instruction* cInst = def_use_mgr_->GetDef(*iid);
       uint32_t val = cInst->GetInOperand(SPV_CONSTANT_VALUE).words[0];
       ext_in_opnds.push_back(
-          ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
+        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
           std::initializer_list<uint32_t>{val}));
     }
     iidIdx++;
   });
   std::unique_ptr<ir::Instruction> newExt(new ir::Instruction(
-      SpvOpCompositeExtract, ptrPteTypeId, extResultId, ext_in_opnds));
+    SpvOpCompositeExtract, ptrPteTypeId, extResultId, ext_in_opnds));
   def_use_mgr_->AnalyzeInstDefUse(&*newExt);
   newInsts.emplace_back(std::move(newExt));
   resultId = extResultId;
+}
+
+void SSAMemPass::GenACStoreRepl(const ir::Instruction* ptrInst,
+  uint32_t valId,
+  std::vector<std::unique_ptr<ir::Instruction>>& newInsts) {
+
+  // Build and append Load
+  const uint32_t ldResultId = getNextId();
+  const uint32_t varId =
+    ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0];
+  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varPteTypeId = GetPteTypeId(varInst);
+  std::vector<ir::Operand> load_in_operands;
+  load_in_operands.push_back(
+    ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+      std::initializer_list<uint32_t>{varId}));
+  std::unique_ptr<ir::Instruction> newLoad(new ir::Instruction(SpvOpLoad,
+    varPteTypeId, ldResultId, load_in_operands));
+  def_use_mgr_->AnalyzeInstDefUse(&*newLoad);
+  newInsts.emplace_back(std::move(newLoad));
+
+  // Build and append Insert
+  const uint32_t insResultId = getNextId();
+  std::vector<ir::Operand> ins_in_opnds;
+  ins_in_opnds.push_back(
+      ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+      std::initializer_list<uint32_t>{valId}));
+  ins_in_opnds.push_back(
+      ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+      std::initializer_list<uint32_t>{ldResultId}));
+  uint32_t iidIdx = 0;
+  ptrInst->ForEachInId([&iidIdx, &ins_in_opnds, this](const uint32_t *iid) {
+    if (iidIdx > 0) {
+      const ir::Instruction* cInst = def_use_mgr_->GetDef(*iid);
+      uint32_t val = cInst->GetInOperand(SPV_CONSTANT_VALUE).words[0];
+      ins_in_opnds.push_back(
+        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
+          std::initializer_list<uint32_t>{val}));
+    }
+    iidIdx++;
+  });
+  std::unique_ptr<ir::Instruction> newIns(new ir::Instruction(
+    SpvOpCompositeInsert, varPteTypeId, insResultId, ins_in_opnds));
+  def_use_mgr_->AnalyzeInstDefUse(&*newIns);
+  newInsts.emplace_back(std::move(newIns));
+
+  // Build and append Store
+  std::vector<ir::Operand> store_in_operands;
+  store_in_operands.push_back(
+    ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+      std::initializer_list<uint32_t>{varId}));
+  store_in_operands.push_back(
+    ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+      std::initializer_list<uint32_t>{insResultId}));
+  std::unique_ptr<ir::Instruction> newStore(new ir::Instruction(SpvOpStore,
+      0, 0, store_in_operands));
+  def_use_mgr_->AnalyzeInstDefUse(&*newStore);
+  newInsts.emplace_back(std::move(newStore));
 }
 
 bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
@@ -646,13 +710,61 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
           break;
         if (!isTargetVar(varId))
           break;
-        uint32_t replId;
         std::vector<std::unique_ptr<ir::Instruction>> newInsts;
-        GenACLoadRepl(ptrInst, newInsts, replId);
-        ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
-        ii++;
-        ii = ii.MoveBefore(newInsts);
-        ii++;
+        if (ii->opcode() == SpvOpLoad) {
+          uint32_t replId;
+          GenACLoadRepl(ptrInst, newInsts, replId);
+          ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+          ii++;
+          ii = ii.MoveBefore(newInsts);
+          ii++;
+        }
+        else {
+          uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+          GenACStoreRepl(ptrInst, valId, newInsts);
+          def_use_mgr_->KillInst(&*ii);
+          DeleteIfUseless(ptrInst);
+          ii++;
+          ii = ii.MoveBefore(newInsts);
+          ii++;
+          ii++;
+        }
+        modified = true;
+      } break;
+      default:
+        break;
+      }
+    }
+  }
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      switch (ii->opcode()) {
+      case SpvOpStore: {
+        uint32_t varId;
+        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (ptrInst->opcode() != SpvOpAccessChain)
+          break;
+        if (!isTargetVar(varId))
+          break;
+        std::vector<std::unique_ptr<ir::Instruction>> newInsts;
+        if (ii->opcode() == SpvOpLoad) {
+          uint32_t replId;
+          GenACLoadRepl(ptrInst, newInsts, replId);
+          ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+          ii++;
+          ii = ii.MoveBefore(newInsts);
+          ii++;
+        }
+        else {
+          uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+          GenACStoreRepl(ptrInst, valId, newInsts);
+          def_use_mgr_->KillInst(&*ii);
+          DeleteIfUseless(ptrInst);
+          ii++;
+          ii = ii.MoveBefore(newInsts);
+          ii++;
+          ii++;
+        }
         modified = true;
       } break;
       default:
