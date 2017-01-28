@@ -71,10 +71,10 @@ class SSAMemPass : public Pass {
   std::unordered_set<uint32_t> nonSsaVars;
 
   // Set of verified target types
-  std::unordered_set<uint32_t> seenTargetTypes;
+  std::unordered_set<uint32_t> seenTargetVars;
 
-  // Set of verified target types
-  std::unordered_set<uint32_t> seenNonTargetTypes;
+  // Set of verified non-target types
+  std::unordered_set<uint32_t> seenNonTargetVars;
 
   // Map from variable to its live store in block
   std::unordered_map<uint32_t, ir::Instruction*> sbVarStores;
@@ -93,11 +93,11 @@ class SSAMemPass : public Pass {
 
   // Returns true if type is a scalar type
   // or a vector or matrix
-  bool isMathType(ir::Instruction* typeInst);
+  bool isMathType(const ir::Instruction* typeInst);
 
   // Returns true if type is a scalar, vector, matrix
   // or struct of only those types
-  bool isTargetType(ir::Instruction* typeInst);
+  bool isTargetType(const ir::Instruction* typeInst);
 
   // Next unused ID
   uint32_t nextId_;
@@ -109,7 +109,7 @@ class SSAMemPass : public Pass {
 
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
 
-  bool isTargetPtr(ir::Instruction* ptrInst, uint32_t varId);
+  bool isTargetVar(uint32_t varId);
 
   // Find all function scope variables that are stored to only once
   // and create two maps: one for full variable stores and one for
@@ -156,7 +156,21 @@ class SSAMemPass : public Pass {
   // and variable.
   bool SSAMemSingleBlock(ir::Function* func);
 
+  // Perform DCEInst on all instructions in function
   bool SSAMemDCEFunc(ir::Function* func);
+
+  // Return type id for pointer's pointee
+  uint32_t GetPteTypeId(const ir::Instruction* ptrInst);
+
+  // For the (constant index) access chain ptrInst, create an
+  // equivalent load and extract
+  void GenACLoadRepl(const ir::Instruction* ptrInst,
+      std::vector<std::unique_ptr<ir::Instruction>>& newInsts,
+      uint32_t& resultId);
+
+  // Convert all access chain loads and stores into extracts and
+  // inserts.
+  bool SSAMemAccessChainRemoval(ir::Function* func);
 
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
