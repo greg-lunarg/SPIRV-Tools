@@ -1183,12 +1183,17 @@ bool idUsage::isValid<SpvOpStore>(const spv_instruction_t* inst,
     return false;
   }
 
-  if (type->id() != objectType->id()) {
-    DIAG(pointerIndex) << "OpStore Pointer <id> '" << inst->words[pointerIndex]
-                       << "'s type does not match Object <id> '"
-                       << objectType->id() << "'s type.";
-    return false;
-  }
+  // TBD Change this to ignore signedness ?
+
+  //if (type->id() != objectType->id() && 
+  //    !(type->opcode() == SpvOpTypeInt &&
+  //      objectType->opcode() == SpvOpTypeInt &&
+  //      type->words()[2] == objectType->words()[2])) {
+  //  DIAG(pointerIndex) << "OpStore Pointer <id> '" << inst->words[pointerIndex]
+  //                     << "'s type does not match Object <id> '"
+  //                     << objectType->id() << "'s type.";
+  //  return false;
+  //}
   return true;
 }
 
