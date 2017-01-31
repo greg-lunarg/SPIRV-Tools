@@ -2426,12 +2426,12 @@ bool idUsage::isValid<SpvOpReturnValue>(const spv_instruction_t* inst,
     DIAG(valueIndex) << "OpReturnValue is not in a basic block.";
     return false;
   }
-  auto returnType = module_.FindDef(function->words[1]);
-  if (!returnType || returnType->id() != valueType->id()) {
-    DIAG(valueIndex) << "OpReturnValue Value <id> '" << inst->words[valueIndex]
-                     << "'s type does not match OpFunction's return type.";
-    return false;
-  }
+  //auto returnType = module_.FindDef(function->words[1]);
+  //if (!returnType || returnType->id() != valueType->id()) {
+  //  DIAG(valueIndex) << "OpReturnValue Value <id> '" << inst->words[valueIndex]
+  //                   << "'s type does not match OpFunction's return type.";
+  //  return false;
+  //}
   return true;
 }
 
