@@ -109,7 +109,7 @@ class SSAMemPass : public Pass {
 
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
 
-  bool isTargetPtr(ir::Instruction* ptrInst, uint32_t varId);
+  bool isTargetPtr(uint32_t varId);
 
   // Find all function scope variables that are stored to only once
   // and create two maps: one for full variable stores and one for

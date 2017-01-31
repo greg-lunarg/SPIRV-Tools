@@ -83,7 +83,7 @@ ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t& varId) {
   return ptrInst;
 }
 
-bool SSAMemPass::isTargetPtr(ir::Instruction* ptrInst, uint32_t varId) {
+bool SSAMemPass::isTargetPtr(uint32_t varId) {
   const ir::Instruction* varInst =
     def_use_mgr_->id_to_defs().find(varId)->second;
   assert(varInst->opcode() == SpvOpVariable);
@@ -106,11 +106,6 @@ bool SSAMemPass::isTargetPtr(ir::Instruction* ptrInst, uint32_t varId) {
       seenNonTargetTypes.insert(varTypeId);
       return false;
     }
-    //if (ptrInst->opcode() == SpvOpAccessChain &&
-    //  isMathType(varPteTypeInst)) {
-    //  seenNonTargetTypes.insert(varTypeId);
-    //  return false;
-    //}
     seenTargetTypes.insert(varTypeId);
   }
   return true;
@@ -131,7 +126,7 @@ void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
       // Verify store variable is target type
       uint32_t varId;
       ir::Instruction* ptrInst = GetPtr(&*ii, varId);
-      if (!isTargetPtr(ptrInst, varId)) {
+      if (!isTargetPtr(varId)) {
         nonSsaVars.insert(varId);
         continue;
       }
@@ -400,7 +395,7 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
         // Verify store variable is target type
         uint32_t varId;
         ir::Instruction* ptrInst = GetPtr(&*ii, varId);
-        if (!isTargetPtr(ptrInst, varId))
+        if (!isTargetPtr(varId))
           continue;
         // Register the store
         if (ptrInst->opcode() == SpvOpVariable) {
@@ -423,7 +418,6 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
             if (sbPinnedComps.find(std::make_pair(varId, idxId)) == sbPinnedComps.end()) {
               auto si = sbCompStores.find(std::make_pair(varId, idxId));
               if (si != sbCompStores.end()) {
-                uint32_t chainId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
                 DCEInst(si->second);
               }
             }
@@ -441,7 +435,7 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
         // Verify store variable is target type
         uint32_t varId;
         ir::Instruction* ptrInst = GetPtr(&*ii, varId);
-        if (!isTargetPtr(ptrInst, varId))
+        if (!isTargetPtr(varId))
           continue;
         // Look for previous store or load
         uint32_t replId = 0;
