@@ -778,11 +778,11 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
     modified |= SSAMemAccessChainRemoval(func);
-    //modified |= SSAMemSingleBlock(func);
-    //SSAMemAnalyze(func);
-    //modified |= SSAMemProcess(func);
-    //modified |= SSAMemDCE();
-    //modified |= SSAMemDCEFunc(func);
+    modified |= SSAMemSingleBlock(func);
+    SSAMemAnalyze(func);
+    modified |= SSAMemProcess(func);
+    modified |= SSAMemDCE();
+    modified |= SSAMemDCEFunc(func);
     return modified;
 }
 
