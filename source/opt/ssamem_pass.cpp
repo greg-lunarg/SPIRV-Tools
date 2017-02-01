@@ -731,14 +731,6 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
         }
         modified = true;
       } break;
-      default:
-        break;
-      }
-    }
-  }
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
-      switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
         ir::Instruction* ptrInst = GetPtr(&*ii, varId);
