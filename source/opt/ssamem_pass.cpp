@@ -37,6 +37,9 @@ static const int SPV_TYPE_PTR_STORAGE_CLASS = 0;
 static const int SPV_TYPE_PTR_TYPE_ID = 1;
 static const int SPV_LOAD_PTR_ID = 0;
 static const int SPV_CONSTANT_VALUE = 0;
+static const int SPV_EXTRACT_COMPOSITE_ID = 0;
+static const int SPV_INSERT_OBJECT_ID = 0;
+static const int SPV_INSERT_COMPOSITE_ID = 1;
 
 namespace spvtools {
 namespace opt {
@@ -767,6 +770,91 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::SSAMemExtInsMatch(ir::Instruction* extInst,
+    ir::Instruction* insInst) {
+  if (extInst->NumInOperands() != insInst->NumInOperands() - 1)
+    return false;
+  uint32_t numIdx = extInst->NumInOperands() - 1;
+  for (uint32_t i = 0; i < numIdx; i++)
+    if (extInst->GetInOperand(i + 1).words[0] !=
+        insInst->GetInOperand(i + 2).words[0])
+      return false;
+  return true;
+}
+
+bool SSAMemPass::SSAMemExtInsConflict(ir::Instruction* extInst,
+    ir::Instruction* insInst) {
+  if (extInst->NumInOperands() == insInst->NumInOperands() - 1)
+    return false;
+  uint32_t extNumIdx = extInst->NumInOperands() - 1;
+  uint32_t insNumIdx = insInst->NumInOperands() - 2;
+  uint32_t numIdx = extNumIdx < insNumIdx ? extNumIdx : insNumIdx;
+  for (uint32_t i = 0; i < numIdx; i++)
+    if (extInst->GetInOperand(i + 1).words[0] !=
+        insInst->GetInOperand(i + 2).words[0])
+      return false;
+  return true;
+}
+
+bool SSAMemPass::SSAMemEliminateExtracts(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      switch (ii->opcode()) {
+      case SpvOpCompositeExtract: {
+        uint32_t cid = ii->GetInOperand(SPV_EXTRACT_COMPOSITE_ID).words[0];
+        ir::Instruction* cinst = def_use_mgr_->GetDef(cid);
+        uint32_t replId = 0;
+        while (cinst->opcode() == SpvOpCompositeInsert) {
+          if (SSAMemExtInsConflict(&*ii, cinst))
+            break;
+          if (SSAMemExtInsMatch(&*ii, cinst)) {
+            replId = cinst->GetInOperand(SPV_INSERT_OBJECT_ID).words[0];
+            break;
+          }
+          cid = cinst->GetInOperand(SPV_INSERT_COMPOSITE_ID).words[0];
+          cinst = def_use_mgr_->GetDef(cid);
+        }
+        if (replId == 0)
+          break;
+        const uint32_t extId = ii->result_id();
+        (void)def_use_mgr_->ReplaceAllUsesWith(extId, replId);
+        def_use_mgr_->KillInst(&*ii);
+        modified = true;
+      } break;
+      default:
+        break;
+      }
+    }
+  }
+  return modified;
+}
+
+bool SSAMemPass::SSAMemBreakLSCycle(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      switch (ii->opcode()) {
+      case SpvOpStore: {
+        uint32_t varId;
+        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (!isTargetVar(varId))
+          break;
+        uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        ir::Instruction* vinst = def_use_mgr_->GetDef(valId);
+        if (vinst->opcode() != SpvOpCompositeInsert)
+          break;
+        uint32_t typeId = vinst->type_id();
+        modified = true;
+      } break;
+      default:
+        break;
+      }
+    }
+  }
+  return modified;
+}
+
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
     modified |= SSAMemAccessChainRemoval(func);
@@ -774,6 +862,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     SSAMemAnalyze(func);
     modified |= SSAMemProcess(func);
     modified |= SSAMemDCE();
+    modified |= SSAMemEliminateExtracts(func);
     modified |= SSAMemDCEFunc(func);
     return modified;
 }
