@@ -281,7 +281,7 @@ bool SSAMemPass::isLiveVar(uint32_t varId) {
     return true;
   // test if variable is loaded from
   analysis::UseList* uses = def_use_mgr_->GetUses(varId);
-  if (uses->size() <= 1)
+  if (uses == nullptr)
     return false;
   for (auto u : *uses) {
     if (u.inst->opcode() == SpvOpAccessChain) {
@@ -838,13 +838,33 @@ bool SSAMemPass::SSAMemBreakLSCycle(ir::Function* func) {
       case SpvOpStore: {
         uint32_t varId;
         ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (ptrInst->opcode() != SpvOpVariable)
+          break;
         if (!isTargetVar(varId))
+          break;
+        analysis::UseList* vuses = def_use_mgr_->GetUses(varId);
+        if (vuses->size() > 2)
           break;
         uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
         ir::Instruction* vinst = def_use_mgr_->GetDef(valId);
-        if (vinst->opcode() != SpvOpCompositeInsert)
+        while (vinst->opcode() == SpvOpCompositeInsert) {
+          const uint32_t resId = vinst->result_id();
+          analysis::UseList* uses = def_use_mgr_->GetUses(resId);
+          if (uses->size() > 1)
+            break;
+          valId = vinst->GetInOperand(SPV_INSERT_COMPOSITE_ID).words[0];
+          vinst = def_use_mgr_->GetDef(valId);
+        }
+        if (vinst->opcode() != SpvOpLoad)
           break;
-        uint32_t typeId = vinst->type_id();
+        uint32_t lvarId = vinst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
+        if (lvarId != varId)
+          break;
+        const uint32_t resId = vinst->result_id();
+        analysis::UseList* uses = def_use_mgr_->GetUses(resId);
+        if (uses->size() > 1)
+          break;
+        DCEInst(&*ii);
         modified = true;
       } break;
       default:
@@ -863,6 +883,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemProcess(func);
     modified |= SSAMemDCE();
     modified |= SSAMemEliminateExtracts(func);
+    modified |= SSAMemBreakLSCycle(func);
     modified |= SSAMemDCEFunc(func);
     return modified;
 }
