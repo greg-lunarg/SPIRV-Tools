@@ -181,6 +181,18 @@ class SSAMemPass : public Pass {
   // inserts.
   bool SSAMemAccessChainRemoval(ir::Function* func);
 
+  // Return true if indices of extract and insert match
+  bool SSAMemExtInsMatch(ir::Instruction* extInst, ir::Instruction* insInst);
+
+  // Return true if indices of extract and insert confict
+  bool SSAMemExtInsConflict(ir::Instruction* extInst, ir::Instruction* insInst);
+
+  // Looks for stores of inserts and tries to kill initial load
+  bool SSAMemEliminateExtracts(ir::Function* func);
+
+  // Looks for stores of inserts and tries to kill initial load
+  bool SSAMemBreakLSCycle(ir::Function* func);
+
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
   // instructions are modified. 
