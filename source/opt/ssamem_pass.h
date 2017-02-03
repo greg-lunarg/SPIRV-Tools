@@ -105,7 +105,10 @@ class SSAMemPass : public Pass {
   inline void finalizeNextId(ir::Module* module) {
     module->SetIdBound(nextId_);
   }
-  inline uint32_t getNextId() { return nextId_++; }
+
+  inline uint32_t getNextId() {
+    return nextId_++;
+  }
 
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
 

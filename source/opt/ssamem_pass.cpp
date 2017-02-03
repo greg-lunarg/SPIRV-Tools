@@ -847,13 +847,17 @@ bool SSAMemPass::SSAMemBreakLSCycle(ir::Function* func) {
           break;
         uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
         ir::Instruction* vinst = def_use_mgr_->GetDef(valId);
+        uint32_t intermediate = false;
         while (vinst->opcode() == SpvOpCompositeInsert) {
-          const uint32_t resId = vinst->result_id();
-          analysis::UseList* uses = def_use_mgr_->GetUses(resId);
-          if (uses->size() > 1)
-            break;
+          if (intermediate) {
+            const uint32_t resId = vinst->result_id();
+            analysis::UseList* uses = def_use_mgr_->GetUses(resId);
+            if (uses->size() > 1)
+              break;
+          }
           valId = vinst->GetInOperand(SPV_INSERT_COMPOSITE_ID).words[0];
           vinst = def_use_mgr_->GetDef(valId);
+          intermediate = true;
         }
         if (vinst->opcode() != SpvOpLoad)
           break;
@@ -869,6 +873,41 @@ bool SSAMemPass::SSAMemBreakLSCycle(ir::Function* func) {
       } break;
       default:
         break;
+      }
+    }
+  }
+  if (modified) {
+    // look for loads with no stores and replace with undef
+    for (auto bi = func->begin(); bi != func->end(); bi++) {
+      for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+        switch (ii->opcode()) {
+        case SpvOpLoad: {
+          uint32_t varId;
+          ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+          if (ptrInst->opcode() != SpvOpVariable)
+            break;
+          if (!isTargetVar(varId))
+            break;
+          analysis::UseList* vuses = def_use_mgr_->GetUses(varId);
+          if (vuses->size() == 1) {
+            uint32_t undefId = getNextId();
+            uint32_t typeId = ii->type_id();
+            std::vector<ir::Operand> in_operands;
+            in_operands.clear();
+            std::unique_ptr<ir::Instruction> undef_inst(
+              new ir::Instruction(SpvOpUndef, typeId, undefId, in_operands));
+            def_use_mgr_->AnalyzeInstDefUse(&*undef_inst);
+            ii = ii.InsertBefore(std::move(undef_inst));
+            ii++; // back to load
+            assert(ii->opcode() == SpvOpLoad);
+            uint32_t loadId = ii->result_id();
+            (void)def_use_mgr_->ReplaceAllUsesWith(loadId, undefId);
+            DCEInst(&*ii);
+          }
+        } break;
+        default:
+          break;
+        }
       }
     }
   }
