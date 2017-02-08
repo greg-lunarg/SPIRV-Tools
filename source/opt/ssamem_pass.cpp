@@ -1017,7 +1017,7 @@ bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
     }
     // process phi instructions in merge block
     // deadLabIds are now blocks which cannot precede merge block.
-    // if dead label is merge label, add current block to dead blocks.
+    // if eliminated branch is to merge label, add current block to dead blocks.
     if (deadLabId == mergeLabId)
       deadLabIds.insert(bi->GetLabelId());
     dbi->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
@@ -1034,6 +1034,40 @@ bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::SSAMemBlockMerge(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); ) {
+    // Find block with single successor which has
+    // no other predecessors
+    auto ii = bi->end();
+    ii--;
+    ir::Instruction* br = &*ii;
+    if (br->opcode() != SpvOpBranch) {
+      bi++;
+      continue;
+    }
+    uint32_t labId = br->GetInOperand(0).words[0];
+    analysis::UseList* uses = def_use_mgr_->GetUses(labId);
+    if (uses->size() > 1) {
+      bi++;
+      continue;
+    }
+    // Merge blocks
+    def_use_mgr_->KillInst(br);
+    auto sbi = bi;
+    for (; sbi != func->end(); sbi++)
+      if (sbi->GetLabelId() == labId)
+        break;
+    assert(sbi != func->end());
+    bi->AddInstructions(&*sbi);
+    def_use_mgr_->KillInst(sbi->GetLabelInst());
+    (void) sbi.Erase();
+    // reprocess block
+    modified = true;
+  }
+  return modified;
+}
+
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
     modified |= SSAMemAccessChainRemoval(func);
@@ -1045,6 +1079,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemBreakLSCycle(func);
     modified |= SSAMemDCEFunc(func);
     modified |= SSAMemDeadBranchEliminate(func);
+    modified |= SSAMemBlockMerge(func);
     return modified;
 }
 

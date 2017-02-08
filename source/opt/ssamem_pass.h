@@ -218,6 +218,12 @@ class SSAMemPass : public Pass {
   // Eliminate preceding OpSelectionMerge if it exists.
   bool SSAMemDeadBranchEliminate(ir::Function* func);
 
+  // If a block branches to another block and no other block branches
+  // to that block, the two blocks can be merged. This is primarily
+  // cleanup after dead branch elimination. Merging blocks can also
+  // create additional memory optimization opportunities.
+  bool SSAMemBlockMerge(ir::Function* func);
+
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
   // instructions are modified. 

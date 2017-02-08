@@ -42,11 +42,18 @@ class BasicBlock {
 
   // Sets the enclosing function for this basic block.
   void SetParent(Function* function) { function_ = function; }
+
   // Appends an instruction to this basic block.
   inline void AddInstruction(std::unique_ptr<Instruction> i);
 
+  // Appends all of block's instructions (except label) to this block
+  inline void AddInstructions(BasicBlock* bp);
+
   // Returns the id of the label at the top of this block
   inline uint32_t GetLabelId() { return label_->result_id(); }
+
+  // Returns the label instruction at the top of this block
+  inline Instruction* GetLabelInst() { return &*label_; }
 
   iterator begin() { return iterator(&insts_, insts_.begin()); }
   iterator end() { return iterator(&insts_, insts_.end()); }
@@ -88,6 +95,11 @@ inline BasicBlock::BasicBlock(std::unique_ptr<Instruction> label)
 
 inline void BasicBlock::AddInstruction(std::unique_ptr<Instruction> i) {
   insts_.emplace_back(std::move(i));
+}
+
+inline void BasicBlock::AddInstructions(BasicBlock* bp) {
+  auto bEnd = end();
+  (void) bEnd.MoveBefore(bp->insts_);
 }
 
 inline void BasicBlock::ForEachInst(const std::function<void(Instruction*)>& f,
