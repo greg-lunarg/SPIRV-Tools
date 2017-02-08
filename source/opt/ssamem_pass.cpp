@@ -436,7 +436,6 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
             if (sbPinnedComps.find(std::make_pair(varId, idxId)) == sbPinnedComps.end()) {
               auto si = sbCompStores.find(std::make_pair(varId, idxId));
               if (si != sbCompStores.end()) {
-                uint32_t chainId = si->second->GetInOperand(SPV_STORE_PTR_ID).words[0];
                 DCEInst(si->second);
               }
             }
