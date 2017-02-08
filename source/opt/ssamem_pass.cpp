@@ -1080,6 +1080,12 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemDCEFunc(func);
     modified |= SSAMemDeadBranchEliminate(func);
     modified |= SSAMemBlockMerge(func);
+
+    modified |= SSAMemSingleBlock(func);
+    SSAMemAnalyze(func);
+    modified |= SSAMemProcess(func);
+    modified |= SSAMemDCE();
+
     return modified;
 }
 
