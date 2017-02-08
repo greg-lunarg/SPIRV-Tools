@@ -40,6 +40,15 @@ static const int SPV_CONSTANT_VALUE = 0;
 static const int SPV_EXTRACT_COMPOSITE_ID = 0;
 static const int SPV_INSERT_OBJECT_ID = 0;
 static const int SPV_INSERT_COMPOSITE_ID = 1;
+static const int SPV_BRANCH_TARGET_LAB_ID = 0;
+static const int SPV_BRANCH_COND_CONDITIONAL_ID = 0;
+static const int SPV_BRANCH_COND_TRUE_LAB_ID = 1;
+static const int SPV_BRANCH_COND_FALSE_LAB_ID = 2;
+static const int SPV_SEL_MERGE_LAB_ID = 0;
+static const int SPV_PHI_VAL0_ID = 0;
+static const int SPV_PHI_LAB0_ID = 1;
+static const int SPV_PHI_VAL1_ID = 2;
+
 
 namespace spvtools {
 namespace opt {
@@ -914,6 +923,117 @@ bool SSAMemPass::SSAMemBreakLSCycle(ir::Function* func) {
   return modified;
 }
 
+void SSAMemPass::SSAMemGetConstCondition(
+    uint32_t condId, bool* condVal, bool* condIsConst) {
+  ir::Instruction* cInst = def_use_mgr_->GetDef(condId);
+  switch (cInst->opcode()) {
+  case SpvOpConstantFalse: {
+    *condVal = false;
+    *condIsConst = true;
+  } break;
+  case SpvOpConstantTrue: {
+    *condVal = true;
+    *condIsConst = true;
+  } break;
+  case SpvOpLogicalNot: {
+    (void)SSAMemGetConstCondition(cInst->GetInOperand(0).words[0],
+        condVal, condIsConst);
+    if (*condIsConst)
+      *condVal = !*condVal;
+  } break;
+  default: {
+    *condIsConst = false;
+  } break;
+  }
+}
+
+void SSAMemPass::AddBranch(uint32_t labelId, ir::BasicBlock* bp) {
+  std::vector<ir::Operand> branch_in_operands;
+  branch_in_operands.push_back(
+    ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+      std::initializer_list<uint32_t>{labelId}));
+  std::unique_ptr<ir::Instruction> newBranch(
+    new ir::Instruction(SpvOpBranch, 0, 0, branch_in_operands));
+  def_use_mgr_->AnalyzeInstDefUse(&*newBranch);
+  bp->AddInstruction(std::move(newBranch));
+}
+
+void SSAMemPass::SSAMemKillBlk(ir::BasicBlock* bp) {
+  bp->ForEachInst([this](ir::Instruction* ip) {
+    def_use_mgr_->KillInst(ip);
+  });
+}
+
+bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    auto ii = bi->end();
+    ii--;
+    ir::Instruction* br = &*ii;
+    if (br->opcode() != SpvOpBranchConditional)
+      continue;
+    ii--;
+    ir::Instruction* mergeInst = &*ii;
+    // GSF TBD Verify that both branches are also sequences of
+    // structured control flow
+    if (mergeInst->opcode() != SpvOpSelectionMerge)
+      continue;
+    bool condVal;
+    bool condIsConst;
+    (void) SSAMemGetConstCondition(
+        br->GetInOperand(SPV_BRANCH_COND_CONDITIONAL_ID).words[0],
+        &condVal,
+        &condIsConst);
+    if (!condIsConst)
+      continue;
+    // Replace conditional branch with unconditional branch
+    uint32_t trueLabId = br->GetInOperand(SPV_BRANCH_COND_TRUE_LAB_ID).words[0];
+    uint32_t falseLabId = br->GetInOperand(SPV_BRANCH_COND_FALSE_LAB_ID).words[0];
+    uint32_t mergeLabId = mergeInst->GetInOperand(SPV_SEL_MERGE_LAB_ID).words[0];
+    uint32_t liveLabId = condVal == true ? trueLabId : falseLabId;
+    uint32_t deadLabId = condVal == true ? falseLabId : trueLabId;
+    AddBranch(liveLabId, &*bi);
+    def_use_mgr_->KillInst(br);
+    def_use_mgr_->KillInst(mergeInst);
+    // iterate to merge block deleting dead blocks
+    std::unordered_set<uint32_t> deadLabIds;
+    deadLabIds.insert(deadLabId);
+    auto dbi = bi;
+    dbi++;
+    uint32_t dLabId = dbi->GetLabelId();
+    while (dLabId != mergeLabId) {
+      if (deadLabIds.find(dLabId) != deadLabIds.end()) {
+        // add successor blocks to dead block set
+        dbi->ForEachSucc([&deadLabIds](uint32_t succ) {
+          deadLabIds.insert(succ);
+        });
+        // Kill use/def for all instructions and delete block
+        SSAMemKillBlk(&*dbi);
+        dbi = dbi.Erase();
+      }
+      else
+        dbi++;
+      dLabId = dbi->GetLabelId();
+    }
+    // process phi instructions in merge block
+    // deadLabIds are now blocks which cannot precede merge block.
+    // if dead label is merge label, add current block to dead blocks.
+    if (deadLabId == mergeLabId)
+      deadLabIds.insert(bi->GetLabelId());
+    dbi->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
+      uint32_t phiLabId0 = phiInst->GetInOperand(SPV_PHI_LAB0_ID).words[0];
+      bool useFirst = deadLabIds.find(phiLabId0) == deadLabIds.end();
+      uint32_t phiValIdx = useFirst ? SPV_PHI_VAL0_ID : SPV_PHI_VAL1_ID;
+      uint32_t replId = phiInst->GetInOperand(phiValIdx).words[0];
+      uint32_t phiId = phiInst->result_id();
+      (void)def_use_mgr_->ReplaceAllUsesWith(phiId, replId);
+      def_use_mgr_->KillInst(phiInst);
+    });
+    modified = true;
+  }
+  return modified;
+}
+
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
     modified |= SSAMemAccessChainRemoval(func);
@@ -924,6 +1044,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemEliminateExtracts(func);
     modified |= SSAMemBreakLSCycle(func);
     modified |= SSAMemDCEFunc(func);
+    modified |= SSAMemDeadBranchEliminate(func);
     return modified;
 }
 
@@ -940,9 +1061,12 @@ void SSAMemPass::Initialize(ir::Module* module) {
   module_ = module;
 
   // Initialize function and block maps
-  id2function.clear();
+  id2function_.clear();
+  id2block_.clear();
   for (auto& fn : *module_) {
-    id2function[fn.GetResultId()] = &fn;
+    id2function_[fn.GetResultId()] = &fn;
+    for (auto& blk : fn)
+      id2block_[blk.GetLabelId()] = &blk;
   }
 
   // Initialize Target Type Caches
@@ -955,7 +1079,7 @@ Pass::Status SSAMemPass::ProcessImpl() {
   bool modified = false;
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
-        id2function[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];
+        id2function_[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];
     modified = modified || SSAMem(fn);
   }
 
