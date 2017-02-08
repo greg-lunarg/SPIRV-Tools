@@ -42,7 +42,10 @@ class SSAMemPass : public Pass {
 
  private:
   // Map from function's result id to function
-  std::unordered_map<uint32_t, ir::Function*> id2function;
+  std::unordered_map<uint32_t, ir::Function*> id2function_;
+
+  // Map from block's label id to block
+  std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
 
   // Map from SSA Variable to its single store
   std::unordered_map<uint32_t, ir::Instruction*> ssaVars;
@@ -193,8 +196,27 @@ class SSAMemPass : public Pass {
   // Looks for stores of inserts and tries to kill initial load
   bool SSAMemEliminateExtracts(ir::Function* func);
 
-  // Looks for stores of inserts and tries to kill initial load
+  // Look for cycles of load/inserts/store where there is only the single
+  // load and store of that (function scope) variable. If all inserts except
+  // the last have one use, delete the store and change the load to an undef.
+  // AccessChainRemoval creates these cycles and they must be specially
+  // detected and broken to allow DCE to happen.
   bool SSAMemBreakLSCycle(ir::Function* func);
+  
+  // If condId is boolean constant, return value and condIsConst as true,
+  // otherwise return condIsConst as false.
+  void SSAMemGetConstCondition(uint32_t condId, bool* condVal, bool* condIsConst);
+
+  // Add branch to end of block bp
+  void AddBranch(uint32_t labelId, ir::BasicBlock* bp);
+
+  // Kill all instructions in block bp
+  void SSAMemKillBlk(ir::BasicBlock* bp);
+
+  // Look for BranchConditionals with constant condition and convert
+  // to a branch. Fix phi functions in block whose branch is eliminated.
+  // Eliminate preceding OpSelectionMerge if it exists.
+  bool SSAMemDeadBranchEliminate(ir::Function* func);
 
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
