@@ -48,6 +48,7 @@ static const int SPV_SEL_MERGE_LAB_ID = 0;
 static const int SPV_PHI_VAL0_ID = 0;
 static const int SPV_PHI_LAB0_ID = 1;
 static const int SPV_PHI_VAL1_ID = 2;
+static const int SPV_MERGE_LOOP_BLK_ID = 0;
 
 
 namespace spvtools {
@@ -778,6 +779,208 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::IsStructured(ir::Function* func) {
+  // TODO(greg-lunarg)
+  return true;
+}
+
+bool SSAMemPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
+  auto inst = block_ptr->begin();
+  inst++;
+  return inst->opcode() == SpvOpLoopMerge;
+}
+
+void SSAMemPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
+  uint32_t label = block_ptr->GetLabelId();
+  uint32_t predLabel = label2preds_[label].front();
+  label2SSA_[label] = label2SSA_[predLabel];
+}
+
+bool SSAMemPass::HasStore(uint32_t var_id, uint32_t first_label,
+  uint32_t last_label) {
+  // TODO(greg-lunarg)
+  return true;
+}
+
+bool SSAMemPass::HasLoad(uint32_t var_id, uint32_t label) {
+  // TODO(greg-lunarg)
+  return true;
+}
+
+void SSAMemPass::SSABlockInitLoopHeader(ir::BasicBlock* block_ptr) {
+  uint32_t label = block_ptr->GetLabelId();
+  auto mergeInst = block_ptr->begin();
+  mergeInst++;
+  uint32_t mergeLabel = mergeInst->GetInOperand(SPV_MERGE_LOOP_BLK_ID).words[0];
+  uint32_t pred0Label = 0;
+  uint32_t backLabel = 0;
+  for (uint32_t predLabel : label2preds_[label])
+    if (visitedBlocks.find(predLabel) == visitedBlocks.end())
+      backLabel = predLabel;
+    else if (pred0Label == 0)
+      pred0Label = predLabel;
+  assert(pred0Label != 0);
+  assert(backLabel != 0);
+  for (auto var_val : label2SSA_[pred0Label]) {
+    uint32_t varId = var_val.first;
+    if (!HasLoad(varId, label))
+      continue;
+    uint32_t val0Id = var_val.second;
+    bool differs = false;
+    for (uint32_t predLabel : label2preds_[label]) {
+      if (predLabel == pred0Label)
+        continue;
+      // Skip back edge predecessor.
+      if (predLabel == backLabel)
+        continue;
+      const auto var_val_itr = label2SSA_[predLabel].find(varId);
+      // Missing values do not cause difference
+      if (var_val_itr == label2SSA_[predLabel].end())
+        continue;
+      if (var_val_itr->second != val0Id) {
+        differs = true;
+        break;
+      }
+    }
+    // If variable is stored in loop, back edge predecessor
+    // introduces difference.
+    if (!differs && HasStore(varId, label, mergeLabel))
+      differs = true;
+    // If val is the same for all predecessors, enter it in map
+    if (!differs) {
+      label2SSA_[label].insert(var_val);
+      continue;
+    }
+    // Val differs across predecessors. Add phi op to block and 
+    // add its result id to the map. For back edge predecessor,
+    // use the variable id. We will fix this after visiting back
+    // edge predecessor.
+    std::vector<ir::Operand> phi_in_operands;
+    for (uint32_t predLabel : label2preds_[label]) {
+      const auto var_val_itr = label2SSA_[predLabel].find(varId);
+      const uint32_t valId = (predLabel == backLabel) ? varId :
+          (var_val_itr != label2SSA_[predLabel].end() ? 
+            var_val_itr->second : val0Id);
+      phi_in_operands.push_back(
+        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+          std::initializer_list<uint32_t>{valId}));
+      phi_in_operands.push_back(
+        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+          std::initializer_list<uint32_t>{predLabel}));
+    }
+    uint32_t resultId = getNextId();
+    uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
+    std::unique_ptr<ir::Instruction> newPhi(
+      new ir::Instruction(SpvOpBranch, typeId, resultId, phi_in_operands));
+    block_ptr->begin().InsertBefore(std::move(newPhi));
+    label2SSA_[label].insert({ varId, resultId });
+  }
+}
+
+void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
+  uint32_t label = block_ptr->GetLabelId();
+  uint32_t pred0Label = label2preds_[label].front();
+  for (auto var_val : label2SSA_[pred0Label]) {
+    uint32_t varId = var_val.first;
+    if (!HasLoad(varId, label))
+      continue;
+    uint32_t val0Id = var_val.second;
+    bool differs = false;
+    for (uint32_t predLabel : label2preds_[label]) {
+      if (predLabel == pred0Label)
+        continue;
+      const auto var_val_itr = label2SSA_[predLabel].find(varId);
+      // Missing values do not cause a difference
+      if (var_val_itr == label2SSA_[predLabel].end())
+        continue;
+      if (var_val_itr->second != val0Id) {
+        differs = true;
+        break;
+      }
+    }
+    // If val is the same for all predecessors, enter it in map
+    if (!differs) {
+      label2SSA_[label].insert(var_val);
+      continue;
+    }
+    // Val differs across predecessors. Add phi op to block and 
+    // add its result id to the map
+    std::vector<ir::Operand> phi_in_operands;
+    for (uint32_t predLabel : label2preds_[label]) {
+      const auto var_val_itr = label2SSA_[predLabel].find(varId);
+      // TODO(greg-lunarg) It is possible although rare that a live
+      // phi function could not have a value defined from one (or more)
+      // predecessors. The proper way to handle this to insert an undef
+      // into the predecessor block in question and use that as the phi
+      // operand. In the meantime, we will just use one of the other valid
+      // values. If the phi lives, the validator will likely complain the
+      // the definition of the value does not dominate the predecessor.
+      uint32_t valId = (var_val_itr != label2SSA_[predLabel].end()) ?
+          var_val_itr->second : val0Id;
+      phi_in_operands.push_back(
+          ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+          std::initializer_list<uint32_t>{valId}));
+      phi_in_operands.push_back(
+        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+          std::initializer_list<uint32_t>{predLabel}));
+    }
+    uint32_t resultId = getNextId();
+    uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
+    std::unique_ptr<ir::Instruction> newPhi(
+      new ir::Instruction(SpvOpBranch, typeId, resultId, phi_in_operands));
+    block_ptr->begin().InsertBefore(std::move(newPhi));
+    label2SSA_[label].insert({varId, resultId});
+  }
+}
+
+void SSAMemPass::SSABlockInit(ir::BasicBlock* block_ptr) {
+  size_t numPreds = label2preds_[block_ptr->GetLabelId()].size();
+  if (numPreds == 0)
+    return;
+  if (numPreds == 1)
+    SSABlockInitSinglePred(block_ptr);
+  else if (IsLoopHeader(block_ptr))
+    SSABlockInitLoopHeader(block_ptr);
+  else
+    SSABlockInitSelectMerge(block_ptr);
+}
+
+bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
+  if (!IsStructured(func))
+    return false;
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    SSABlockInit(&*bi);
+    uint32_t label = bi->GetLabelId();
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      switch (ii->opcode()) {
+      case SpvOpStore: {
+        uint32_t varId;
+        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (!isTargetVar(varId))
+          break;
+        assert(ptrInst->opcode() != SpvOpAccessChain);
+        uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        label2SSA_[label][varId] = valId;
+      } break;
+      case SpvOpLoad: {
+        uint32_t varId;
+        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        if (!isTargetVar(varId))
+          break;
+        assert(ptrInst->opcode() != SpvOpAccessChain);
+        modified = true;
+      } break;
+      default: {
+      } break;
+      }
+    }
+    visitedBlocks.insert(label);
+  }
+  return modified;
+}
+
+
 bool SSAMemPass::SSAMemExtInsMatch(ir::Instruction* extInst,
     ir::Instruction* insInst) {
   if (extInst->NumInOperands() != insInst->NumInOperands() - 1)
@@ -1102,11 +1305,16 @@ void SSAMemPass::Initialize(ir::Module* module) {
 
   // Initialize function and block maps
   id2function_.clear();
-  id2block_.clear();
+  label2block_.clear();
   for (auto& fn : *module_) {
     id2function_[fn.GetResultId()] = &fn;
-    for (auto& blk : fn)
-      id2block_[blk.GetLabelId()] = &blk;
+    for (auto& blk : fn) {
+      uint32_t bid = blk.GetLabelId();
+      label2block_[bid] = &blk;
+      blk.ForEachSucc([&bid,this](uint32_t sbid) {
+        label2preds_[sbid].push_back(bid);
+      });
+    }
   }
 
   // Initialize Target Type Caches
