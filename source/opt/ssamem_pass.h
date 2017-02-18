@@ -45,7 +45,13 @@ class SSAMemPass : public Pass {
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
   // Map from block's label id to block
-  std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
+  std::unordered_map<uint32_t, ir::BasicBlock*> label2block_;
+
+  // Map from block's label id to its predecessor blocks ids
+  std::unordered_map<uint32_t, std::vector<uint32_t>> label2preds_;
+
+  // Map from block's label id to its SSA map
+  std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>> label2SSA_;
 
   // Map from SSA Variable to its single store
   std::unordered_map<uint32_t, ir::Instruction*> ssaVars;
@@ -78,6 +84,9 @@ class SSAMemPass : public Pass {
 
   // Set of verified non-target types
   std::unordered_set<uint32_t> seenNonTargetVars;
+
+  // Set of label ids of visited blocks
+  std::unordered_set<uint32_t> visitedBlocks;
 
   // Map from variable to its live store in block
   std::unordered_map<uint32_t, ir::Instruction*> sbVarStores;
@@ -186,6 +195,41 @@ class SSAMemPass : public Pass {
   // Convert all access chain loads and stores into extracts and
   // inserts.
   bool SSAMemAccessChainRemoval(ir::Function* func);
+
+  // Return true if function control flow is structured
+  bool IsStructured(ir::Function* func);
+
+  // Return true if loop header block
+  bool IsLoopHeader(ir::BasicBlock* block_ptr);
+
+  // Copy SSA map from predecessor. No phis generated.
+  void SSABlockInitSinglePred(ir::BasicBlock* block_ptr);
+
+  // Return true if variable is stored in the label range
+  bool HasStore(uint32_t var_id, uint32_t first_label, uint32_t last_label);
+
+  // Return true if variable is loaded after the label
+  bool HasLoad(uint32_t var_id, uint32_t label);
+
+  void SSABlockInitLoopHeader(ir::BasicBlock* block_ptr);
+
+  // Merge SSA Maps from all predecessors. If any variables are missing
+  // in any predecessors maps, remove that variable from the resulting map.
+  // If any value ids differ for any variable, create a phi function and
+  // use that value id for the variable in the resulting map. Assumes all
+  // predecessors have been visited by SSARewrite.
+  void SSABlockInitSelectMerge(ir::BasicBlock* block_ptr);
+
+  // Initialize the label2SSA map entry for a block. Insert phi instructions
+  // into block when necessary. All predecessor blocks must have been
+  // visited by SSARewrite except for backedges.
+  void SSABlockInit(ir::BasicBlock* block_ptr);
+
+  // Remove remaining loads and stores of targeted function scope variables
+  // in func. Insert Phi functions where necessary. Assumes that AccessChainRemoval
+  // and SingleBlock have already been run. Running SingleStore beforehand will
+  // make this more efficient.
+  bool SSAMemSSARewrite(ir::Function* func);
 
   // Return true if indices of extract and insert match
   bool SSAMemExtInsMatch(ir::Instruction* extInst, ir::Instruction* insInst);
