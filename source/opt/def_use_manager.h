@@ -60,6 +60,12 @@ class DefUseManager {
   DefUseManager& operator=(DefUseManager&&) = delete;
 
   // Analyzes the defs and uses in the given |inst|.
+  void AnalyzeInstDef(ir::Instruction* inst);
+
+  // Analyzes the defs and uses in the given |inst|.
+  void AnalyzeInstUse(ir::Instruction* inst);
+
+  // Analyzes the defs and uses in the given |inst|.
   void AnalyzeInstDefUse(ir::Instruction* inst);
 
   // Returns the def instruction for the given |id|. If there is no instruction
