@@ -807,60 +807,101 @@ bool SSAMemPass::HasLoad(uint32_t var_id, uint32_t label) {
   return true;
 }
 
-void SSAMemPass::SSABlockInitLoopHeader(ir::BasicBlock* block_ptr) {
-  uint32_t label = block_ptr->GetLabelId();
-  auto mergeInst = block_ptr->begin();
+void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> block_itr) {
+  uint32_t label = block_itr->GetLabelId();
+  auto mergeInst = block_itr->begin();
   mergeInst++;
   uint32_t mergeLabel = mergeInst->GetInOperand(SPV_MERGE_LOOP_BLK_ID).words[0];
-  uint32_t pred0Label = 0;
+  // Collect all live variables and a default value for each across all
+  // non-backedge predecesors.
+  std::unordered_map<uint32_t, uint32_t> liveVars;
+  for (uint32_t predLabel : label2preds_[label]) {
+    for (auto var_val : label2SSA_[predLabel]) {
+      uint32_t varId = var_val.first;
+      liveVars[varId] = var_val.second;
+    }
+  }
+  // Add all stored variables in loop. Set their default value id to zero.
+  for (auto bi = block_itr; bi->GetLabelId() != mergeLabel; bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpStore)
+        continue;
+      uint32_t varId;
+      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      if (!isTargetVar(varId))
+        break;
+      liveVars[varId] = 0;
+    }
+  }
   uint32_t backLabel = 0;
   for (uint32_t predLabel : label2preds_[label])
     if (visitedBlocks.find(predLabel) == visitedBlocks.end())
       backLabel = predLabel;
-    else if (pred0Label == 0)
-      pred0Label = predLabel;
-  assert(pred0Label != 0);
   assert(backLabel != 0);
-  for (auto var_val : label2SSA_[pred0Label]) {
+  // Find all live variables that require a phi. All values defined
+  // in loop (with value id zero) require a phi. Otherwise all variables
+  // with differing predecessor values requires a phi.
+  for (auto var_val : liveVars) {
     uint32_t varId = var_val.first;
     if (!HasLoad(varId, label))
       continue;
     uint32_t val0Id = var_val.second;
-    bool differs = false;
-    for (uint32_t predLabel : label2preds_[label]) {
-      if (predLabel == pred0Label)
-        continue;
-      // Skip back edge predecessor.
-      if (predLabel == backLabel)
-        continue;
-      const auto var_val_itr = label2SSA_[predLabel].find(varId);
-      // Missing values do not cause difference
-      if (var_val_itr == label2SSA_[predLabel].end())
-        continue;
-      if (var_val_itr->second != val0Id) {
-        differs = true;
-        break;
+    bool needsPhi = false;
+    if (val0Id != 0) {
+      for (uint32_t predLabel : label2preds_[label]) {
+        // Skip back edge predecessor.
+        if (predLabel == backLabel)
+          continue;
+        const auto var_val_itr = label2SSA_[predLabel].find(varId);
+        // Missing values do not cause difference
+        if (var_val_itr == label2SSA_[predLabel].end())
+          continue;
+        if (var_val_itr->second != val0Id) {
+          needsPhi = true;
+          break;
+        }
       }
     }
-    // If variable is stored in loop, back edge predecessor
-    // introduces difference.
-    if (!differs && HasStore(varId, label, mergeLabel))
-      differs = true;
+    else {
+      needsPhi = true;
+    }
     // If val is the same for all predecessors, enter it in map
-    if (!differs) {
+    if (!needsPhi) {
       label2SSA_[label].insert(var_val);
       continue;
     }
     // Val differs across predecessors. Add phi op to block and 
-    // add its result id to the map. For back edge predecessor,
-    // use the variable id. We will fix this after visiting back
+    // add its result id to the map. For live back edge predecessor,
+    // use the variable id. We will patch this after visiting back
     // edge predecessor.
+    // TODO(greg-lunarg): It is possible, but somewhat rare, for
+    // a non-backedge predecessor value to be missing. The best
+    // way to handle this is to insert an undef value which dominates
+    // the predecessor and use that as the phi operand. In the meantime,
+    // if the backedge value is live (zero), use the variable id and
+    // we will patch it along with the backedge predecessor later.
+    // Otherwise, use the default value.
     std::vector<ir::Operand> phi_in_operands;
     for (uint32_t predLabel : label2preds_[label]) {
-      const auto var_val_itr = label2SSA_[predLabel].find(varId);
-      const uint32_t valId = (predLabel == backLabel) ? varId :
-          (var_val_itr != label2SSA_[predLabel].end() ? 
-            var_val_itr->second : val0Id);
+      uint32_t valId;
+      if (predLabel == backLabel) {
+        if (val0Id == 0)
+          valId = varId;
+        else
+          valId = val0Id;
+      }
+      else {
+        const auto var_val_itr = label2SSA_[predLabel].find(varId);
+        if (var_val_itr == label2SSA_[predLabel].end()) {
+          if (val0Id == 0)
+            valId = varId;
+          else
+            valId = val0Id;
+        }
+        else {
+          valId = var_val_itr->second;
+        }
+      }
       phi_in_operands.push_back(
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
           std::initializer_list<uint32_t>{valId}));
@@ -872,23 +913,31 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::BasicBlock* block_ptr) {
     uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
     std::unique_ptr<ir::Instruction> newPhi(
       new ir::Instruction(SpvOpBranch, typeId, resultId, phi_in_operands));
-    block_ptr->begin().InsertBefore(std::move(newPhi));
+    block_itr->begin().InsertBefore(std::move(newPhi));
     label2SSA_[label].insert({ varId, resultId });
   }
 }
 
 void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
   uint32_t label = block_ptr->GetLabelId();
-  uint32_t pred0Label = label2preds_[label].front();
-  for (auto var_val : label2SSA_[pred0Label]) {
+  // Collect all live variables and a default value for each across all
+  // predecesors.
+  std::unordered_map<uint32_t, uint32_t> liveVars;
+  for (uint32_t predLabel : label2preds_[label]) {
+    for (auto var_val : label2SSA_[predLabel]) {
+      uint32_t varId = var_val.first;
+      liveVars[varId] = var_val.second;
+    }
+  }
+  // For each live variable, look for a difference in values across
+  // predecessors that would require a phi.
+  for (auto var_val : liveVars) {
     uint32_t varId = var_val.first;
     if (!HasLoad(varId, label))
       continue;
     uint32_t val0Id = var_val.second;
     bool differs = false;
     for (uint32_t predLabel : label2preds_[label]) {
-      if (predLabel == pred0Label)
-        continue;
       const auto var_val_itr = label2SSA_[predLabel].find(varId);
       // Missing values do not cause a difference
       if (var_val_itr == label2SSA_[predLabel].end())
@@ -898,7 +947,7 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
         break;
       }
     }
-    // If val is the same for all predecessors, enter it in map
+    // If val is the same for all predecessors, enter it in SSA map
     if (!differs) {
       label2SSA_[label].insert(var_val);
       continue;
@@ -911,10 +960,11 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
       // TODO(greg-lunarg) It is possible although rare that a live
       // phi function could not have a value defined from one (or more)
       // predecessors. The proper way to handle this to insert an undef
-      // into the predecessor block in question and use that as the phi
-      // operand. In the meantime, we will just use one of the other valid
-      // values. If the phi lives, the validator will likely complain the
-      // the definition of the value does not dominate the predecessor.
+      // such that it dominates the predecessor in question and use that
+      // as the phi operand. In the meantime, we will just use one of the
+      // other valid values. If the phi lives, the validator will likely
+      // complain the the definition of the value does not dominate the
+      // predecessor.
       uint32_t valId = (var_val_itr != label2SSA_[predLabel].end()) ?
           var_val_itr->second : val0Id;
       phi_in_operands.push_back(
@@ -928,29 +978,38 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
     std::unique_ptr<ir::Instruction> newPhi(
       new ir::Instruction(SpvOpBranch, typeId, resultId, phi_in_operands));
+    def_use_mgr_->AnalyzeInstDefUse(&*newPhi);
     block_ptr->begin().InsertBefore(std::move(newPhi));
     label2SSA_[label].insert({varId, resultId});
   }
 }
 
-void SSAMemPass::SSABlockInit(ir::BasicBlock* block_ptr) {
-  size_t numPreds = label2preds_[block_ptr->GetLabelId()].size();
+void SSAMemPass::SSABlockInit(ir::UptrVectorIterator<ir::BasicBlock> block_itr) {
+  size_t numPreds = label2preds_[block_itr->GetLabelId()].size();
   if (numPreds == 0)
     return;
   if (numPreds == 1)
-    SSABlockInitSinglePred(block_ptr);
-  else if (IsLoopHeader(block_ptr))
-    SSABlockInitLoopHeader(block_ptr);
+    SSABlockInitSinglePred(&*block_itr);
+  else if (IsLoopHeader(&*block_itr))
+    SSABlockInitLoopHeader(block_itr);
   else
-    SSABlockInitSelectMerge(block_ptr);
+    SSABlockInitSelectMerge(&*block_itr);
 }
 
 bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
   if (!IsStructured(func))
     return false;
+  // Collect all function scope variables
+  funcVars.clear();
+  auto bi = func->begin();
+  for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    if (ii->opcode() != SpvOpVariable)
+      break;
+    funcVars.insert(ii->result_id());
+  }
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
-    SSABlockInit(&*bi);
+    SSABlockInit(bi);
     uint32_t label = bi->GetLabelId();
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       switch (ii->opcode()) {

@@ -85,6 +85,9 @@ class SSAMemPass : public Pass {
   // Set of verified non-target types
   std::unordered_set<uint32_t> seenNonTargetVars;
 
+  // Set of function scope variables for current function
+  std::unordered_set<uint32_t> funcVars;
+
   // Set of label ids of visited blocks
   std::unordered_set<uint32_t> visitedBlocks;
 
@@ -211,7 +214,7 @@ class SSAMemPass : public Pass {
   // Return true if variable is loaded after the label
   bool HasLoad(uint32_t var_id, uint32_t label);
 
-  void SSABlockInitLoopHeader(ir::BasicBlock* block_ptr);
+  void SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> block_itr);
 
   // Merge SSA Maps from all predecessors. If any variables are missing
   // in any predecessors maps, remove that variable from the resulting map.
@@ -223,7 +226,7 @@ class SSAMemPass : public Pass {
   // Initialize the label2SSA map entry for a block. Insert phi instructions
   // into block when necessary. All predecessor blocks must have been
   // visited by SSARewrite except for backedges.
-  void SSABlockInit(ir::BasicBlock* block_ptr);
+  void SSABlockInit(ir::UptrVectorIterator<ir::BasicBlock> block_itr);
 
   // Remove remaining loads and stores of targeted function scope variables
   // in func. Insert Phi functions where necessary. Assumes that AccessChainRemoval
