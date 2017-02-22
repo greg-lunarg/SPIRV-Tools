@@ -85,8 +85,8 @@ class SSAMemPass : public Pass {
   // Set of verified non-target types
   std::unordered_set<uint32_t> seenNonTargetVars;
 
-  // Set of function scope variables for current function
-  std::unordered_set<uint32_t> funcVars;
+  // Map from type to undef for current functioni
+  std::unordered_map<uint32_t, uint32_t> type2Undefs;
 
   // Set of label ids of visited blocks
   std::unordered_set<uint32_t> visitedBlocks;
@@ -208,9 +208,6 @@ class SSAMemPass : public Pass {
   // Copy SSA map from predecessor. No phis generated.
   void SSABlockInitSinglePred(ir::BasicBlock* block_ptr);
 
-  // Return true if variable is stored in the label range
-  bool HasStore(uint32_t var_id, uint32_t first_label, uint32_t last_label);
-
   // Return true if variable is loaded after the label
   bool HasLoad(uint32_t var_id, uint32_t label);
 
@@ -227,6 +224,18 @@ class SSAMemPass : public Pass {
   // into block when necessary. All predecessor blocks must have been
   // visited by SSARewrite except for backedges.
   void SSABlockInit(ir::UptrVectorIterator<ir::BasicBlock> block_itr);
+
+  // Return undef in function for type. Create and insert an undef after the
+  // first non-variable in the function if it doesn't already exist. Add
+  // undef to function undef map.
+  uint32_t type2Undef(uint32_t type_id);
+
+  // Patch phis in loop header block now that the map is complete for the
+  // backedge predecessor. Specifically, for each phi, find the value
+  // corresponding to the backedge predecessor. That contains the variable id
+  // that this phi corresponds to. Change this phi operand to the the value
+  // which corresponds to that variable in the predecessor map.
+  void PatchPhis(uint32_t header_id, uint32_t back_id);
 
   // Remove remaining loads and stores of targeted function scope variables
   // in func. Insert Phi functions where necessary. Assumes that AccessChainRemoval
