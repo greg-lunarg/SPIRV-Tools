@@ -1460,7 +1460,6 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemDCE();
     modified |= SSAMemEliminateExtracts(func);
     modified |= SSAMemBreakLSCycle(func);
-    modified |= SSAMemDCEFunc(func);
     modified |= SSAMemDeadBranchEliminate(func);
     modified |= SSAMemBlockMerge(func);
 
@@ -1470,7 +1469,6 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemDCE();
 
     modified |= SSAMemSSARewrite(func);
-    modified |= SSAMemDCEFunc(func);
     modified |= SSAMemEliminateExtracts(func);
     modified |= SSAMemDCEFunc(func);
 
