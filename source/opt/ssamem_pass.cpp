@@ -1471,6 +1471,8 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
 
     modified |= SSAMemSSARewrite(func);
     modified |= SSAMemDCEFunc(func);
+    modified |= SSAMemEliminateExtracts(func);
+    modified |= SSAMemDCEFunc(func);
 
     return modified;
 }
