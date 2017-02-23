@@ -85,7 +85,7 @@ class SSAMemPass : public Pass {
   // Set of verified non-target types
   std::unordered_set<uint32_t> seenNonTargetVars;
 
-  // Map from type to undef for current functioni
+  // Map from type to undef for current function
   std::unordered_map<uint32_t, uint32_t> type2Undefs;
 
   // Set of label ids of visited blocks
@@ -105,6 +105,21 @@ class SSAMemPass : public Pass {
 
   // Map from component (var, index pair) to its live store in block
   std::unordered_set<CompKey, pairhash> sbPinnedComps;
+
+  // Map from block id to loop. 0 indicates no loop.
+  std::unordered_map<uint32_t, uint32_t> block2loop_;
+
+  // Map from loop to last block.
+  std::unordered_map<uint32_t, uint32_t> loop2lastBlock_;
+
+  // Map from block to ordinal
+  std::unordered_map<uint32_t, uint32_t> block2ord_;
+
+  // Map from variable to last load block
+  std::unordered_map<uint32_t, uint32_t> var2lastLoadBlock_;
+
+  // Map from variable to last live block
+  std::unordered_map<uint32_t, uint32_t> var2lastLiveBlock_;
 
   // Returns true if type is a scalar type
   // or a vector or matrix
@@ -151,6 +166,10 @@ class SSAMemPass : public Pass {
   // has just been run for func. Return true if the any
   // instructions are modified.
   bool SSAMemProcess(ir::Function* func);
+
+  // Return true if varId is not a function variable or if it has
+  // a load
+  bool hasLoads(uint32_t varId);
 
   // Return true if varId is not a function variable or if it has
   // a load
@@ -208,8 +227,11 @@ class SSAMemPass : public Pass {
   // Copy SSA map from predecessor. No phis generated.
   void SSABlockInitSinglePred(ir::BasicBlock* block_ptr);
 
+  // Initialize data structures used by IsLoaded
+  void InitSSARewrite(ir::Function& func);
+
   // Return true if variable is loaded after the label
-  bool HasLoad(uint32_t var_id, uint32_t label);
+  bool IsLiveAfter(uint32_t var_id, uint32_t label);
 
   void SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> block_itr);
 
