@@ -855,10 +855,11 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
 }
 
 bool SSAMemPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
-  auto isLiveItr = var2lastLiveBlock_.find(var_id);
-  if (isLiveItr == var2lastLiveBlock_.end())
-    return false;
-  return block2ord_[label] <= block2ord_[isLiveItr->second];
+  //auto isLiveItr = var2lastLiveBlock_.find(var_id);
+  //if (isLiveItr == var2lastLiveBlock_.end())
+  //  return false;
+  //return block2ord_[label] <= block2ord_[isLiveItr->second];
+  return true;
 }
 
 uint32_t SSAMemPass::type2Undef(uint32_t type_id) {
@@ -1469,6 +1470,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemDCE();
 
     modified |= SSAMemSSARewrite(func);
+    modified |= SSAMemDCEFunc(func);
 
     return modified;
 }
