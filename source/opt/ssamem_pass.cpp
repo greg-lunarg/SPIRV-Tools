@@ -278,18 +278,7 @@ bool SSAMemPass::SSAMemProcess(ir::Function* func) {
   return modified;
 }
 
-bool SSAMemPass::isLiveVar(uint32_t varId) {
-  // non-function scope vars are live
-  const ir::Instruction* varInst =
-      def_use_mgr_->id_to_defs().find(varId)->second;
-  assert(varInst->opcode() == SpvOpVariable);
-  const uint32_t varTypeId = varInst->type_id();
-  const ir::Instruction* varTypeInst =
-      def_use_mgr_->id_to_defs().find(varTypeId)->second;
-  if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
-      SpvStorageClassFunction)
-    return true;
-  // test if variable is loaded from
+bool SSAMemPass::hasLoads(uint32_t varId) {
   analysis::UseList* uses = def_use_mgr_->GetUses(varId);
   if (uses == nullptr)
     return false;
@@ -307,6 +296,21 @@ bool SSAMemPass::isLiveVar(uint32_t varId) {
       return true;
   }
   return false;
+}
+
+bool SSAMemPass::isLiveVar(uint32_t varId) {
+  // non-function scope vars are live
+  const ir::Instruction* varInst =
+      def_use_mgr_->id_to_defs().find(varId)->second;
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varTypeId = varInst->type_id();
+  const ir::Instruction* varTypeInst =
+      def_use_mgr_->id_to_defs().find(varTypeId)->second;
+  if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
+      SpvStorageClassFunction)
+    return true;
+  // test if variable is loaded from
+  return hasLoads(varId);
 }
 
 bool SSAMemPass::isLiveStore(ir::Instruction* storeInst) {
@@ -791,12 +795,70 @@ bool SSAMemPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
 void SSAMemPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
   uint32_t label = block_ptr->GetLabelId();
   uint32_t predLabel = label2preds_[label].front();
+  assert(visitedBlocks.find(predLabel) != visitedBlocks.end());
   label2SSA_[label] = label2SSA_[predLabel];
 }
 
-bool SSAMemPass::HasLoad(uint32_t var_id, uint32_t label) {
-  // TODO(greg-lunarg)
-  return true;
+void SSAMemPass::InitSSARewrite(ir::Function& func) {
+  // Init predecessors
+  label2preds_.clear();
+  for (auto& blk : func) {
+    uint32_t blkId = blk.GetLabelId();
+    blk.ForEachSucc([&blkId, this](uint32_t sbid) {
+      label2preds_[sbid].push_back(blkId);
+    });
+  }
+  // Init IsLiveAfter
+  block2loop_.clear();
+  loop2lastBlock_.clear();
+  block2ord_.clear();
+  var2lastLoadBlock_.clear();
+  uint32_t blockOrd = 0;
+  uint32_t outerLoopCount = 0;
+  uint32_t outerLoopOrd = 0;
+  uint32_t nextMergeBlockId = 0;
+  uint32_t lastBlkId = 0;
+  for (auto& blk : func) {
+    uint32_t blkId = blk.GetLabelId();
+    block2ord_[blkId] = blockOrd;
+    if (blk.GetLabelId() == nextMergeBlockId) {
+      loop2lastBlock_[outerLoopOrd] = lastBlkId;
+      outerLoopOrd = 0;
+    }
+    if (outerLoopOrd == 0 && IsLoopHeader(&blk)) {
+      outerLoopCount++;
+      outerLoopOrd = outerLoopCount;
+      nextMergeBlockId =
+          blk.begin()->GetSingleWordInOperand(SPV_MERGE_LOOP_BLK_ID);
+    }
+    block2loop_[blkId] = outerLoopOrd;
+    for (auto& inst : blk) {
+      if (inst.opcode() != SpvOpLoad)
+        continue;
+      uint32_t varId;
+      ir::Instruction* ptrInst = GetPtr(&inst, varId);
+      if (!isTargetVar(varId))
+        break;
+      var2lastLoadBlock_[varId] = blkId;
+    }
+    lastBlkId = blkId;
+    blockOrd++;
+  }
+  // Compute the last live block for each variable
+  for (auto& var_blk : var2lastLoadBlock_) {
+    uint32_t lastLiveBlkId = var_blk.second;
+    uint32_t loopOrd = block2loop_[lastLiveBlkId];
+    if (loopOrd != 0)
+       lastLiveBlkId = loop2lastBlock_[loopOrd];
+    var2lastLiveBlock_[var_blk.first] = lastLiveBlkId;
+  }
+}
+
+bool SSAMemPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
+  auto isLiveItr = var2lastLiveBlock_.find(var_id);
+  if (isLiveItr == var2lastLiveBlock_.end())
+    return false;
+  return block2ord_[label] <= block2ord_[isLiveItr->second];
 }
 
 uint32_t SSAMemPass::type2Undef(uint32_t type_id) {
@@ -851,10 +913,9 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
   // defined in loop require a phi. Otherwise all variables
   // with differing predecessor values require a phi.
   auto insertItr = block_itr->begin();
-  insertItr++; // skip OpMergeLoop
   for (auto var_val : liveVars) {
     uint32_t varId = var_val.first;
-    if (!HasLoad(varId, label))
+    if (!IsLiveAfter(varId, label))
       continue;
     uint32_t val0Id = var_val.second;
     bool needsPhi = false;
@@ -912,11 +973,12 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
     }
     uint32_t phiId = getNextId();
     std::unique_ptr<ir::Instruction> newPhi(
-      new ir::Instruction(SpvOpBranch, typeId, phiId, phi_in_operands));
+      new ir::Instruction(SpvOpPhi, typeId, phiId, phi_in_operands));
     // Only analyze the phi define now; analyze the phi uses after the
     // phi backedge predecessor value is patched.
     def_use_mgr_->AnalyzeInstDef(&*newPhi);
-    insertItr.InsertBefore(std::move(newPhi));
+    insertItr = insertItr.InsertBefore(std::move(newPhi));
+    insertItr++;
     label2SSA_[label].insert({ varId, phiId });
   }
 }
@@ -934,10 +996,11 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     }
   }
   // For each live variable, look for a difference in values across
-  // predecessors that would require a phi.
+  // predecessors that would require a phi and insert one.
+  auto insertItr = block_ptr->begin();
   for (auto var_val : liveVars) {
     uint32_t varId = var_val.first;
-    if (!HasLoad(varId, label))
+    if (!IsLiveAfter(varId, label))
       continue;
     uint32_t val0Id = var_val.second;
     bool differs = false;
@@ -972,12 +1035,13 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
           std::initializer_list<uint32_t>{predLabel}));
     }
-    uint32_t resultId = getNextId();
+    uint32_t phiId = getNextId();
     std::unique_ptr<ir::Instruction> newPhi(
-      new ir::Instruction(SpvOpBranch, typeId, resultId, phi_in_operands));
+      new ir::Instruction(SpvOpPhi, typeId, phiId, phi_in_operands));
     def_use_mgr_->AnalyzeInstDefUse(&*newPhi);
-    block_ptr->begin().InsertBefore(std::move(newPhi));
-    label2SSA_[label].insert({varId, resultId});
+    insertItr = insertItr.InsertBefore(std::move(newPhi));
+    insertItr++;
+    label2SSA_[label].insert({varId, phiId});
   }
 }
 
@@ -996,7 +1060,7 @@ void SSAMemPass::SSABlockInit(ir::UptrVectorIterator<ir::BasicBlock> block_itr) 
 void SSAMemPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
   ir::BasicBlock* header = label2block_[header_id];
   auto phiItr = header->begin();
-  for (phiItr++; phiItr->opcode() == SpvOpPhi; phiItr++) {
+  for (; phiItr->opcode() == SpvOpPhi; phiItr++) {
     uint32_t cnt = 0;
     uint32_t idx;
     phiItr->ForEachInId([&cnt,&back_id,&idx](uint32_t* iid) {
@@ -1017,8 +1081,10 @@ void SSAMemPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
 bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
   if (!IsStructured(func))
     return false;
+  InitSSARewrite(*func);
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
+    // Initialize this block's SSA map using predecessor's maps.
     SSABlockInit(bi);
     uint32_t label = bi->GetLabelId();
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
@@ -1030,6 +1096,7 @@ bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
         uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        // Register new stored value for the variable
         label2SSA_[label][varId] = valId;
       } break;
       case SpvOpLoad: {
@@ -1050,6 +1117,8 @@ bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
           uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
           replId = type2Undef(typeId);
         }
+        // Replace load's id with the last stored value id
+        // and delete load.
         const uint32_t loadId = ii->result_id();
         (void)def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
         def_use_mgr_->KillInst(&*ii);
@@ -1060,6 +1129,8 @@ bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
       }
     }
     visitedBlocks.insert(label);
+    // Look for successor backedge and patch phis in loop header
+    // if found.
     uint32_t header = 0;
     bi->ForEachSucc([&header,this](uint32_t succ) {
       if (visitedBlocks.find(succ) == visitedBlocks.end()) return;
@@ -1068,6 +1139,20 @@ bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
     });
     if (header != 0)
       PatchPhis(header, label);
+  }
+  // Remove all target variable stores.
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpStore)
+        continue;
+      uint32_t varId;
+      (void) GetPtr(&*ii, varId);
+      if (!isTargetVar(varId))
+        break;
+      assert(!hasLoads(varId));
+      DCEInst(&*ii);
+      modified = true;
+    }
   }
   return modified;
 }
@@ -1329,6 +1414,11 @@ bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
 bool SSAMemPass::SSAMemBlockMerge(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ) {
+    // Do not merge loop header blocks, at least for now.
+    if (IsLoopHeader(&*bi)) {
+      bi++;
+      continue;
+    }
     // Find block with single successor which has
     // no other predecessors
     auto ii = bi->end();
@@ -1378,6 +1468,8 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemProcess(func);
     modified |= SSAMemDCE();
 
+    modified |= SSAMemSSARewrite(func);
+
     return modified;
 }
 
@@ -1401,9 +1493,6 @@ void SSAMemPass::Initialize(ir::Module* module) {
     for (auto& blk : fn) {
       uint32_t bid = blk.GetLabelId();
       label2block_[bid] = &blk;
-      blk.ForEachSucc([&bid,this](uint32_t sbid) {
-        label2preds_[sbid].push_back(bid);
-      });
     }
   }
 

@@ -2370,7 +2370,7 @@ function<bool(unsigned)> getCanBeForwardDeclaredFunction(SpvOp opcode) {
       break;
 
     case SpvOpPhi:
-      out = [](unsigned index) { return index > 1 && index % 2 == 1; };
+      out = [](unsigned index) { return index > 1; };
       break;
 
     case SpvOpEnqueueKernel:
