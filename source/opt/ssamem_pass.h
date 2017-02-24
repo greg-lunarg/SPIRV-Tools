@@ -121,6 +121,9 @@ class SSAMemPass : public Pass {
   // Map from variable to last live block
   std::unordered_map<uint32_t, uint32_t> var2lastLiveBlock_;
 
+  // Map from uniform to load id
+  std::unordered_map<uint32_t, uint32_t> uniform2loadId_;
+
   // Returns true if type is a scalar type
   // or a vector or matrix
   bool isMathType(const ir::Instruction* typeInst);
@@ -142,6 +145,11 @@ class SSAMemPass : public Pass {
 
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
 
+  // Return true if variable is uniform
+  bool IsUniformVar(uint32_t varId);
+
+  // Return true if variable is math type, or vector or matrix
+  // of target type, or struct or array of target type
   bool isTargetVar(uint32_t varId);
 
   // Find all function scope variables that are stored to only once
@@ -214,12 +222,24 @@ class SSAMemPass : public Pass {
       std::vector<std::unique_ptr<ir::Instruction>>& newInsts,
       uint32_t& resultId);
 
+  // Return true if all indices are constant
+  bool IsConstantIndexAccessChain(ir::Instruction* acp);
+
   // Convert all access chain loads and stores into extracts and
   // inserts.
   bool SSAMemAccessChainRemoval(ir::Function* func);
 
+  // Convert all uniform access chain loads into load/extract.
+  bool UniformAccessChainRemoval(ir::Function* func);
+
+  // Eliminate common uniform loads.
+  bool CommonUniformLoadElimination(ir::Function* func);
+
   // Return true if function control flow is structured
   bool IsStructured(ir::Function* func);
+
+  // Return true if loop header block
+  uint32_t GetMergeBlkId(ir::BasicBlock* block_ptr);
 
   // Return true if loop header block
   bool IsLoopHeader(ir::BasicBlock* block_ptr);
