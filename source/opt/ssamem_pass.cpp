@@ -767,7 +767,12 @@ bool SSAMemPass::IsStructured(ir::Function* func) {
 }
 
 bool SSAMemPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
-  return block_ptr->begin()->opcode() == SpvOpLoopMerge;
+  auto iItr = block_ptr->end();
+  iItr--;
+  if (iItr == block_ptr->begin())
+    return false;
+  iItr--;
+  return iItr->opcode() == SpvOpLoopMerge;
 }
 
 void SSAMemPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
