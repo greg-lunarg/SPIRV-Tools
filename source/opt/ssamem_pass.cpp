@@ -727,24 +727,12 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
         if (!isTargetVar(varId))
           break;
         std::vector<std::unique_ptr<ir::Instruction>> newInsts;
-        if (ii->opcode() == SpvOpLoad) {
-          uint32_t replId;
-          GenACLoadRepl(ptrInst, newInsts, replId);
-          ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
-          ii++;
-          ii = ii.MoveBefore(newInsts);
-          ii++;
-        }
-        else {
-          uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
-          GenACStoreRepl(ptrInst, valId, newInsts);
-          def_use_mgr_->KillInst(&*ii);
-          DeleteIfUseless(ptrInst);
-          ii++;
-          ii = ii.MoveBefore(newInsts);
-          ii++;
-          ii++;
-        }
+        uint32_t replId;
+        GenACLoadRepl(ptrInst, newInsts, replId);
+        ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+        ii++;
+        ii = ii.MoveBefore(newInsts);
+        ii++;
         modified = true;
       } break;
       case SpvOpStore: {
@@ -755,24 +743,14 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
         if (!isTargetVar(varId))
           break;
         std::vector<std::unique_ptr<ir::Instruction>> newInsts;
-        if (ii->opcode() == SpvOpLoad) {
-          uint32_t replId;
-          GenACLoadRepl(ptrInst, newInsts, replId);
-          ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
-          ii++;
-          ii = ii.MoveBefore(newInsts);
-          ii++;
-        }
-        else {
-          uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
-          GenACStoreRepl(ptrInst, valId, newInsts);
-          def_use_mgr_->KillInst(&*ii);
-          DeleteIfUseless(ptrInst);
-          ii++;
-          ii = ii.MoveBefore(newInsts);
-          ii++;
-          ii++;
-        }
+        uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        GenACStoreRepl(ptrInst, valId, newInsts);
+        def_use_mgr_->KillInst(&*ii);
+        DeleteIfUseless(ptrInst);
+        ii++;
+        ii = ii.MoveBefore(newInsts);
+        ii++;
+        ii++;
         modified = true;
       } break;
       default:
@@ -846,11 +824,12 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
   }
   // Compute the last live block for each variable
   for (auto& var_blk : var2lastLoadBlock_) {
+    uint32_t varId = var_blk.first;
     uint32_t lastLiveBlkId = var_blk.second;
     uint32_t loopOrd = block2loop_[lastLiveBlkId];
     if (loopOrd != 0)
        lastLiveBlkId = loop2lastBlock_[loopOrd];
-    var2lastLiveBlock_[var_blk.first] = lastLiveBlkId;
+    var2lastLiveBlock_[varId] = lastLiveBlkId;
   }
 }
 
