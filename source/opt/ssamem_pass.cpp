@@ -48,7 +48,8 @@ static const int SPV_SEL_MERGE_LAB_ID = 0;
 static const int SPV_PHI_VAL0_ID = 0;
 static const int SPV_PHI_LAB0_ID = 1;
 static const int SPV_PHI_VAL1_ID = 2;
-static const int SPV_MERGE_LOOP_BLK_ID = 0;
+static const int SPV_LOOP_MERGE_BLK_ID = 0;
+static const int SPV_SELECT_MERGE_BLK_ID = 0;
 
 
 namespace spvtools {
@@ -95,6 +96,17 @@ ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t& varId) {
     ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
     ptrId;
   return ptrInst;
+}
+
+bool SSAMemPass::IsUniformVar(uint32_t varId) {
+  const ir::Instruction* varInst =
+    def_use_mgr_->id_to_defs().find(varId)->second;
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varTypeId = varInst->type_id();
+  const ir::Instruction* varTypeInst =
+    def_use_mgr_->id_to_defs().find(varTypeId)->second;
+  return varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] ==
+    SpvStorageClassUniform;
 }
 
 bool SSAMemPass::isTargetVar(uint32_t varId) {
@@ -681,6 +693,19 @@ void SSAMemPass::GenACStoreRepl(const ir::Instruction* ptrInst,
   newInsts.emplace_back(std::move(newStore));
 }
 
+bool SSAMemPass::IsConstantIndexAccessChain(ir::Instruction* acp) {
+  uint32_t inIdx = 0;
+  uint32_t nonConstCnt = 0;
+  acp->ForEachInId([&inIdx, &nonConstCnt, this](uint32_t* tid) {
+    if (inIdx > 0) {
+      ir::Instruction* opInst = def_use_mgr_->GetDef(*tid);
+      if (opInst->opcode() != SpvOpConstant) nonConstCnt++;
+    }
+    inIdx++;
+  });
+  return nonConstCnt == 0;
+}
+
 bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
   // rule out variables accessed with non-constant indices
   for (auto bi = func->begin(); bi != func->end(); bi++) {
@@ -694,16 +719,7 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
           break;
         if (!isTargetVar(varId))
           break;
-        uint32_t inIdx = 0;
-        uint32_t nonConstCnt = 0;
-        ptrInst->ForEachInId([&inIdx,&nonConstCnt,this](uint32_t* tid) {
-          if (inIdx > 0) {
-            ir::Instruction* opInst = def_use_mgr_->GetDef(*tid);
-            if (opInst->opcode() != SpvOpConstant) nonConstCnt++;
-          }
-          inIdx++;
-        });
-        if (nonConstCnt > 0) {
+        if (!IsConstantIndexAccessChain(ptrInst)) {
           seenNonTargetVars.insert(varId);
           seenTargetVars.erase(varId);
           break;
@@ -761,9 +777,84 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::UniformAccessChainRemoval(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpLoad)
+        continue;
+      uint32_t varId;
+      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      if (ptrInst->opcode() != SpvOpAccessChain)
+        continue;
+      if (!IsUniformVar(varId))
+        continue;
+      std::vector<std::unique_ptr<ir::Instruction>> newInsts;
+      uint32_t replId;
+      GenACLoadRepl(ptrInst, newInsts, replId);
+      ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+      ii++;
+      ii = ii.MoveBefore(newInsts);
+      ii++;
+      modified = true;
+    }
+  }
+  return modified;
+}
+
+bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
+  bool modified = false;
+  uint32_t mergeBlockId = 0;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    // Check if we are exiting control flow
+    if (mergeBlockId == bi->GetLabelId())
+      mergeBlockId = 0;
+    // Check if we are enterinig loop
+    if (mergeBlockId == 0 && IsLoopHeader(&*bi))
+      mergeBlockId = GetMergeBlkId(&*bi);
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpLoad)
+        continue;
+      uint32_t varId;
+      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      if (ptrInst->opcode() == SpvOpAccessChain)
+        continue;
+      if (!IsUniformVar(varId))
+        continue;
+      const auto uItr = uniform2loadId_.find(varId);
+      if (uItr != uniform2loadId_.end()) {
+        ReplaceAndDeleteLoad(&*ii, uItr->second, ptrInst);
+        modified = true;
+        continue;
+      }
+      if (mergeBlockId != 0)
+        continue;
+      uniform2loadId_[varId] = ii->result_id();
+    }
+    // Check if we are entering select
+    if (mergeBlockId == 0)
+      mergeBlockId = GetMergeBlkId(&*bi);
+  }
+  return modified;
+}
+
 bool SSAMemPass::IsStructured(ir::Function* func) {
   // TODO(greg-lunarg)
   return true;
+}
+
+uint32_t SSAMemPass::GetMergeBlkId(ir::BasicBlock* block_ptr) {
+  auto iItr = block_ptr->end();
+  iItr--;
+  if (iItr == block_ptr->begin())
+    return 0;
+  iItr--;
+  if (iItr->opcode() == SpvOpLoopMerge)
+    return iItr->GetSingleWordInOperand(SPV_LOOP_MERGE_BLK_ID);
+  else if (iItr->opcode() == SpvOpSelectionMerge)
+    return iItr->GetSingleWordInOperand(SPV_SELECT_MERGE_BLK_ID);
+  else
+    return 0;
 }
 
 bool SSAMemPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
@@ -812,7 +903,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       outerLoopCount++;
       outerLoopOrd = outerLoopCount;
       nextMergeBlockId =
-          blk.begin()->GetSingleWordInOperand(SPV_MERGE_LOOP_BLK_ID);
+          blk.begin()->GetSingleWordInOperand(SPV_LOOP_MERGE_BLK_ID);
     }
     block2loop_[blkId] = outerLoopOrd;
     for (auto& inst : blk) {
@@ -872,7 +963,7 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
   assert(backLabel != 0);
   // Determine merge block.
   auto mergeInst = block_itr->begin();
-  uint32_t mergeLabel = mergeInst->GetSingleWordInOperand(SPV_MERGE_LOOP_BLK_ID);
+  uint32_t mergeLabel = mergeInst->GetSingleWordInOperand(SPV_LOOP_MERGE_BLK_ID);
   // Collect all live variables and a default value for each across all
   // non-backedge predecesors.
   std::unordered_map<uint32_t, uint32_t> liveVars;
@@ -1455,6 +1546,9 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= SSAMemSSARewrite(func);
     modified |= SSAMemEliminateExtracts(func);
     modified |= SSAMemDCEFunc(func);
+
+    modified |= UniformAccessChainRemoval(func);
+    modified |= CommonUniformLoadElimination(func);
 
     return modified;
 }
