@@ -106,7 +106,9 @@ bool SSAMemPass::IsUniformVar(uint32_t varId) {
   const ir::Instruction* varTypeInst =
     def_use_mgr_->id_to_defs().find(varTypeId)->second;
   return varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] ==
-    SpvStorageClassUniform;
+    SpvStorageClassUniform ||
+    varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] ==
+    SpvStorageClassUniformConstant;
 }
 
 bool SSAMemPass::isTargetVar(uint32_t varId) {
@@ -804,6 +806,11 @@ bool SSAMemPass::UniformAccessChainRemoval(ir::Function* func) {
 
 bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
   bool modified = false;
+  // Find insertion point in first block to copy all non-dominating
+  // loads.
+  auto insertItr = func->begin()->begin();
+  while (insertItr->opcode() == SpvOpVariable)
+    insertItr++;
   uint32_t mergeBlockId = 0;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     // Check if we are exiting control flow
@@ -821,15 +828,30 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
         continue;
       if (!IsUniformVar(varId))
         continue;
+      uint32_t replId;
       const auto uItr = uniform2loadId_.find(varId);
       if (uItr != uniform2loadId_.end()) {
-        ReplaceAndDeleteLoad(&*ii, uItr->second, ptrInst);
-        modified = true;
-        continue;
+        replId = uItr->second;
       }
-      if (mergeBlockId != 0)
-        continue;
-      uniform2loadId_[varId] = ii->result_id();
+      else {
+        if (mergeBlockId == 0) {
+          // Load is in dominating block; just remember it
+          uniform2loadId_[varId] = ii->result_id();
+          continue;
+        }
+        else {
+          // Copy load into first block and remember it
+          replId = getNextId();
+          std::unique_ptr<ir::Instruction> newLoad(new ir::Instruction(SpvOpLoad,
+            ii->type_id(), replId, {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {varId}}}));
+          def_use_mgr_->AnalyzeInstDefUse(&*newLoad);
+          insertItr = insertItr.InsertBefore(std::move(newLoad));
+          insertItr++;
+          uniform2loadId_[varId] = replId;
+        }
+      }
+      ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+      modified = true;
     }
     // Check if we are entering select
     if (mergeBlockId == 0)
@@ -840,6 +862,8 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
 
 bool SSAMemPass::IsStructured(ir::Function* func) {
   // TODO(greg-lunarg)
+  // All control flow is structured
+  // All non-nested headers have non-backedge predecessor
   return true;
 }
 
