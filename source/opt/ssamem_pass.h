@@ -124,6 +124,10 @@ class SSAMemPass : public Pass {
   // Map from uniform to load id
   std::unordered_map<uint32_t, uint32_t> uniform2loadId_;
 
+  // Map of extract composite ids to map of indices to insts
+  std::unordered_map<uint32_t, std::unordered_map<uint32_t,
+      std::list<ir::Instruction*>>> comp2idx2inst_;
+
   // Returns true if type is a scalar type
   // or a vector or matrix
   bool isMathType(const ir::Instruction* typeInst);
@@ -234,6 +238,9 @@ class SSAMemPass : public Pass {
 
   // Eliminate common uniform loads.
   bool CommonUniformLoadElimination(ir::Function* func);
+
+  // Eliminate common uniform loads.
+  bool CommonExtractElimination(ir::Function* func);
 
   // Return true if function control flow is structured
   bool IsStructured(ir::Function* func);

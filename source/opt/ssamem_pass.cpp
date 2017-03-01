@@ -38,6 +38,7 @@ static const int SPV_TYPE_PTR_TYPE_ID = 1;
 static const int SPV_LOAD_PTR_ID = 0;
 static const int SPV_CONSTANT_VALUE = 0;
 static const int SPV_EXTRACT_COMPOSITE_ID = 0;
+static const int SPV_EXTRACT_IDX0 = 1;
 static const int SPV_INSERT_OBJECT_ID = 0;
 static const int SPV_INSERT_COMPOSITE_ID = 1;
 static const int SPV_BRANCH_TARGET_LAB_ID = 0;
@@ -860,6 +861,47 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::CommonExtractElimination(ir::Function* func) {
+  // Find all composite ids with duplicate extracts.
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpCompositeExtract)
+        continue;
+      if (ii->NumInOperands() > 2)
+        continue;
+      uint32_t compId = ii->GetSingleWordInOperand(SPV_EXTRACT_COMPOSITE_ID);
+      uint32_t idx = ii->GetSingleWordInOperand(SPV_EXTRACT_IDX0);
+      comp2idx2inst_[compId][idx].push_back(&*ii);
+    }
+  }
+  // For all defs of ids with duplicate extracts, insert new extracts
+  // after def, and replace and delete old extracts
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      const auto cItr = comp2idx2inst_.find(ii->result_id());
+      if (cItr == comp2idx2inst_.end())
+        continue;
+      for (auto idxItr : cItr->second) {
+        if (idxItr.second.size() < 2)
+          continue;
+        uint32_t replId = getNextId();
+        std::unique_ptr<ir::Instruction> newExtract(new ir::Instruction(*idxItr.second.front()));
+        newExtract->SetResultId(replId);
+        def_use_mgr_->AnalyzeInstDefUse(&*newExtract);
+        ii++;
+        ii = ii.InsertBefore(std::move(newExtract));
+        for (auto instItr : idxItr.second) {
+          (void)def_use_mgr_->ReplaceAllUsesWith(instItr->result_id(), replId);
+          def_use_mgr_->KillInst(instItr);
+        }
+        modified = true;
+      }
+    }
+  }
+  return modified;
+}
+
 bool SSAMemPass::IsStructured(ir::Function* func) {
   // TODO(greg-lunarg)
   // All control flow is structured
@@ -1573,6 +1615,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
 
     modified |= UniformAccessChainRemoval(func);
     modified |= CommonUniformLoadElimination(func);
+    modified |= CommonExtractElimination(func);
 
     return modified;
 }
