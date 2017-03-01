@@ -906,6 +906,7 @@ bool SSAMemPass::IsStructured(ir::Function* func) {
   // TODO(greg-lunarg)
   // All control flow is structured
   // All non-nested headers have non-backedge predecessor
+  (void)func;
   return true;
 }
 
@@ -976,7 +977,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       if (inst.opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
-      ir::Instruction* ptrInst = GetPtr(&inst, varId);
+      (void) GetPtr(&inst, varId);
       if (!isTargetVar(varId))
         break;
       var2lastLoadBlock_[varId] = blkId;
@@ -1000,6 +1001,8 @@ bool SSAMemPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
   //if (isLiveItr == var2lastLiveBlock_.end())
   //  return false;
   //return block2ord_[label] <= block2ord_[isLiveItr->second];
+  (void)var_id;
+  (void)label;
   return true;
 }
 
@@ -1045,7 +1048,7 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
       if (ii->opcode() != SpvOpStore)
         continue;
       uint32_t varId;
-      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      (void) GetPtr(&*ii, varId);
       if (!isTargetVar(varId))
         break;
       liveVars[varId] = 0;
