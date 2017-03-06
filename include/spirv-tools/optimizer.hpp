@@ -171,6 +171,15 @@ Optimizer::PassToken CreateEliminateDeadConstantPass();
 // An inline pass exhaustively inlines all function calls.
 Optimizer::PassToken CreateInlinePass();
 
+// Creates a memory optimization pass. 
+// This memory optimizations pass attempts to eliminate function scope
+// variables and all instructions used to do loads and stores from them. It
+// also consolidates references to uniforms and uniform constants. It also
+// performs dead code and dead control flow elimination based on opportunities
+// created by the memory optimizations. This will eventually be broken into
+// individual passes.
+Optimizer::PassToken CreateMemoryOptPass();
+
 }  // namespace spvtools
 
 #endif  // SPIRV_TOOLS_OPTIMIZER_HPP_
