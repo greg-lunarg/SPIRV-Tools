@@ -122,7 +122,7 @@ Optimizer::PassToken CreateInlinePass() {
   return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::InlinePass>());
 }
 
-Optimizer::PassToken CreateSSAMemPass() {
+Optimizer::PassToken CreateMemoryOptPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::SSAMemPass>());
 }
 
