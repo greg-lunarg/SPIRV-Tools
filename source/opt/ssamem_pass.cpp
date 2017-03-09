@@ -1151,9 +1151,11 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     bool differs = false;
     for (uint32_t predLabel : label2preds_[label]) {
       const auto var_val_itr = label2SSA_[predLabel].find(varId);
-      // Missing values do not cause a difference
-      if (var_val_itr == label2SSA_[predLabel].end())
-        continue;
+      // Missing values cause a difference
+      if (var_val_itr == label2SSA_[predLabel].end()) {
+        differs = true;
+        break;
+      }
       if (var_val_itr->second != val0Id) {
         differs = true;
         break;
