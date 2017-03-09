@@ -810,7 +810,7 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
   // Find insertion point in first block to copy all non-dominating
   // loads.
   auto insertItr = func->begin()->begin();
-  while (insertItr->opcode() == SpvOpVariable)
+  while (insertItr->opcode() == SpvOpVariable || insertItr->opcode() == SpvOpNop)
     insertItr++;
   uint32_t mergeBlockId = 0;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
