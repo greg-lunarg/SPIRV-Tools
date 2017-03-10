@@ -340,6 +340,11 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
   deadInsts.push(inst);
   while (!deadInsts.empty()) {
     ir::Instruction* di = deadInsts.front();
+    // Don't delete labels
+    if (di->opcode() == SpvOpLabel) {
+      deadInsts.pop();
+      continue;
+    }
     std::queue<uint32_t> ids;
     di->ForEachInId([&ids](uint32_t* iid) {
       ids.push(*iid);
