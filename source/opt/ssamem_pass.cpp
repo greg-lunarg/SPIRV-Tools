@@ -797,6 +797,8 @@ bool SSAMemPass::UniformAccessChainRemoval(ir::Function* func) {
         continue;
       if (!IsUniformVar(varId))
         continue;
+      if (!IsConstantIndexAccessChain(ptrInst))
+        continue;
       std::vector<std::unique_ptr<ir::Instruction>> newInsts;
       uint32_t replId;
       GenACLoadRepl(ptrInst, newInsts, replId);
