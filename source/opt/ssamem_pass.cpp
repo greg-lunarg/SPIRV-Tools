@@ -1538,6 +1538,11 @@ bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
         dbi->ForEachSucc([&deadLabIds](uint32_t succ) {
           deadLabIds.insert(succ);
         });
+        // Add merge block to dead block set in case it has
+        // no predecessors.
+        uint32_t dMergeLabId = GetMergeBlkId(&*dbi);
+        if (dMergeLabId != 0)
+          deadLabIds.insert(dMergeLabId);
         // Kill use/def for all instructions and delete block
         SSAMemKillBlk(&*dbi);
         dbi = dbi.Erase();
