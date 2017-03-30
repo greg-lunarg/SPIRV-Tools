@@ -162,7 +162,7 @@ class SSAMemPass : public Pass {
   // to the store value Id. Also cache all variables that
   // are not SSA. Only analyze variables of scalar, vector, 
   // matrix types and struct types containing only these types.
-  void SSAMemAnalyze(ir::Function* func);
+  void SingleStoreAnalyze(ir::Function* func);
 
   // Delete inst if it has no uses. Assumes inst has a resultId.
   void DeleteIfUseless(ir::Instruction* inst);
@@ -177,7 +177,7 @@ class SSAMemPass : public Pass {
   // with the value stored, if possible. Assumes that SSAMemAnalyze
   // has just been run for func. Return true if the any
   // instructions are modified.
-  bool SSAMemProcess(ir::Function* func);
+  bool SingleStoreProcess(ir::Function* func);
 
   // Return true if varId is not a function variable or if it has
   // a load
@@ -195,21 +195,27 @@ class SSAMemPass : public Pass {
   void DCEInst(ir::Instruction* inst);
 
   // Remove all stores to useless SSA variables. Remove useless
-  // access chains and variables as well. Assumes Analyze and
-  // Process has been run.
-  bool SSAMemDCE();
+  // access chains and variables as well. Assumes SingleStoreAnalyze
+  // and SingleStoreProcess has been run.
+  bool SingleStoreDCE();
+
+  // Do "single-store" optimization of function variables referenced
+  // only with non-access-chain loads and stores. If a variable has
+  // just one store, replace all its loads with the value that is stored.
+  bool LocalSingleStoreElim(ir::Function* func);
 
   void SBEraseComps(uint32_t varId);
 
-  // Do single block memory optimization of function variables.
-  // For loads, if previous load or store to same component,
-  // replace load id with previous id and delete load. Finally,
-  // check if remaining stores are useless, and delete store
-  // and variable.
-  bool SSAMemSingleBlock(ir::Function* func);
+  // Do single block memory optimization of function variables
+  // referenced only with non-access-chain loads and stores. For
+  // loads, if previous load or store to same component, replace
+  // load id with previous id and delete load. Finally, check if
+  // remaining stores are useless, and delete store and variable.
+  bool LocalSingleBlockElim(ir::Function* func);
 
-  // Perform DCEInst on all instructions in function
-  bool SSAMemDCEFunc(ir::Function* func);
+  // Exhaustively remove all instructions whose result ids are not used and all
+  // stores of function scope variables that are not loaded.
+  bool FuncDCE(ir::Function* func);
 
   // Return type id for pointer's pointee
   uint32_t GetPteTypeId(const ir::Instruction* ptrInst);
@@ -229,17 +235,25 @@ class SSAMemPass : public Pass {
   // Return true if all indices are constant
   bool IsConstantIndexAccessChain(ir::Instruction* acp);
 
-  // Convert all access chain loads and stores into extracts and
-  // inserts.
-  bool SSAMemAccessChainRemoval(ir::Function* func);
+  // Identify all function scope variables which are accessed only
+  // with loads, stores and access chains with constant indices.
+  // Convert all loads and stores of such variables into equivalent
+  // loads, stores, extracts and inserts. This unifies access to these
+  // variables to a single mode and simplifies analysis and optimization.
+  bool LocalAccessChainConvert(ir::Function* func);
 
   // Convert all uniform access chain loads into load/extract.
-  bool UniformAccessChainRemoval(ir::Function* func);
+  bool UniformAccessChainConvert(ir::Function* func);
 
-  // Eliminate common uniform loads.
+  // Eliminate loads of uniform variables which have previously been loaded.
+  // If first load is in control flow, move it to first block of function.
+  // Most effective if preceded by UniformAccessChainRemoval().
   bool CommonUniformLoadElimination(ir::Function* func);
 
-  // Eliminate common uniform loads.
+  // Eliminate duplicated extracts of same id. Extract may be moved to same
+  // block as the id definition. This is primarily intended for extracts
+  // from uniform loads. Most effective if preceded by
+  // CommonUniformLoadElimination().
   bool CommonExtractElimination(ir::Function* func);
 
   // Return true if function control flow is structured
@@ -286,11 +300,12 @@ class SSAMemPass : public Pass {
   // which corresponds to that variable in the predecessor map.
   void PatchPhis(uint32_t header_id, uint32_t back_id);
 
-  // Remove remaining loads and stores of targeted function scope variables
-  // in func. Insert Phi functions where necessary. Assumes that AccessChainRemoval
-  // and SingleBlock have already been run. Running SingleStore beforehand will
-  // make this more efficient.
-  bool SSAMemSSARewrite(ir::Function* func);
+  // Remove remaining loads and stores of function scope variables only
+  // referenced with non-access-chain loads and stores. Insert Phi functions
+  // where necessary. Assumes that LocalAccessChainRemoval and
+  // SingleBlockLocalElim have already been run. Running SingleStoreLocalElim
+  // beforehand will make this more efficient.
+  bool LocalSSARewrite(ir::Function* func);
 
   // Return true if indices of extract and insert match
   bool SSAMemExtInsMatch(ir::Instruction* extInst, ir::Instruction* insInst);
@@ -298,15 +313,16 @@ class SSAMemPass : public Pass {
   // Return true if indices of extract and insert confict
   bool SSAMemExtInsConflict(ir::Instruction* extInst, ir::Instruction* insInst);
 
-  // Looks for stores of inserts and tries to kill initial load
-  bool SSAMemEliminateExtracts(ir::Function* func);
+  // Look for OpExtract on sequence of OpInserts. If there is an insert
+  // with identical indices, replace the extract with the value that is inserted.
+  bool InsertExtractElim(ir::Function* func);
 
   // Look for cycles of load/inserts/store where there is only the single
   // load and store of that (function scope) variable. If all inserts except
   // the last have one use, delete the store and change the load to an undef.
-  // AccessChainRemoval creates these cycles and they must be specially
-  // detected and broken to allow DCE to happen.
-  bool SSAMemBreakLSCycle(ir::Function* func);
+  // AccessChainRemoval creates these cycles and breaking them allows
+  // DCE to happen on them.
+  bool InsertCycleBreak(ir::Function* func);
   
   // If condId is boolean constant, return value and condIsConst as true,
   // otherwise return condIsConst as false.
@@ -321,13 +337,13 @@ class SSAMemPass : public Pass {
   // Look for BranchConditionals with constant condition and convert
   // to a branch. Fix phi functions in block whose branch is eliminated.
   // Eliminate preceding OpSelectionMerge if it exists.
-  bool SSAMemDeadBranchEliminate(ir::Function* func);
+  bool DeadBranchEliminate(ir::Function* func);
 
   // If a block branches to another block and no other block branches
   // to that block, the two blocks can be merged. This is primarily
   // cleanup after dead branch elimination. Merging blocks can also
   // create additional memory optimization opportunities.
-  bool SSAMemBlockMerge(ir::Function* func);
+  bool BlockMerge(ir::Function* func);
 
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any

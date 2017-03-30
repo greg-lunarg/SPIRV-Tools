@@ -140,7 +140,7 @@ bool SSAMemPass::isTargetVar(uint32_t varId) {
   return true;
 }
 
-void SSAMemPass::SSAMemAnalyze(ir::Function* func) {
+void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
   ssaVars.clear();
   ssaComps.clear();
   ssaCompVars.clear();
@@ -217,7 +217,7 @@ void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
   }
 }
 
-bool SSAMemPass::SSAMemProcess(ir::Function* func) {
+bool SSAMemPass::SingleStoreProcess(ir::Function* func) {
   bool modified = false;
   uint32_t instIdx = 0;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
@@ -384,7 +384,7 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
   }
 }
 
-bool SSAMemPass::SSAMemDCE() {
+bool SSAMemPass::SingleStoreDCE() {
   bool modified = false;
   for (auto v : ssaVars) {
     // check that it hasn't already been DCE'd
@@ -411,6 +411,14 @@ bool SSAMemPass::SSAMemDCE() {
   return modified;
 }
 
+bool SSAMemPass::LocalSingleStoreElim(ir::Function* func) {
+  bool modified = false;
+  SingleStoreAnalyze(func);
+  modified |= SingleStoreProcess(func);
+  modified |= SingleStoreDCE();
+  return modified;
+}
+
 void SSAMemPass::SBEraseComps(uint32_t varId) {
   for (auto ci = sbCompStores.begin(); ci != sbCompStores.end();)
     if (ci->first.first == varId)
@@ -424,7 +432,7 @@ void SSAMemPass::SBEraseComps(uint32_t varId) {
       ci++;
 }
 
-bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
+bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     sbVarStores.clear();
@@ -561,7 +569,7 @@ bool SSAMemPass::SSAMemSingleBlock(ir::Function* func) {
   return modified;
 }
 
-bool SSAMemPass::SSAMemDCEFunc(ir::Function* func) {
+bool SSAMemPass::FuncDCE(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
@@ -714,7 +722,7 @@ bool SSAMemPass::IsConstantIndexAccessChain(ir::Instruction* acp) {
   return nonConstCnt == 0;
 }
 
-bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
+bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
   // rule out variables accessed with non-constant indices
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
@@ -785,7 +793,7 @@ bool SSAMemPass::SSAMemAccessChainRemoval(ir::Function* func) {
   return modified;
 }
 
-bool SSAMemPass::UniformAccessChainRemoval(ir::Function* func) {
+bool SSAMemPass::UniformAccessChainConvert(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
@@ -1232,7 +1240,7 @@ void SSAMemPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
   }
 }
 
-bool SSAMemPass::SSAMemSSARewrite(ir::Function* func) {
+bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
   if (!IsStructured(func))
     return false;
   InitSSARewrite(*func);
@@ -1338,7 +1346,7 @@ bool SSAMemPass::SSAMemExtInsConflict(ir::Instruction* extInst,
   return true;
 }
 
-bool SSAMemPass::SSAMemEliminateExtracts(ir::Function* func) {
+bool SSAMemPass::InsertExtractElim(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
@@ -1372,7 +1380,7 @@ bool SSAMemPass::SSAMemEliminateExtracts(ir::Function* func) {
   return modified;
 }
 
-bool SSAMemPass::SSAMemBreakLSCycle(ir::Function* func) {
+bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
@@ -1495,7 +1503,7 @@ void SSAMemPass::SSAMemKillBlk(ir::BasicBlock* bp) {
   });
 }
 
-bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
+bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     auto ii = bi->end();
@@ -1570,7 +1578,7 @@ bool SSAMemPass::SSAMemDeadBranchEliminate(ir::Function* func) {
   return modified;
 }
 
-bool SSAMemPass::SSAMemBlockMerge(ir::Function* func) {
+bool SSAMemPass::BlockMerge(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ) {
     // Do not merge loop header blocks, at least for now.
@@ -1611,26 +1619,22 @@ bool SSAMemPass::SSAMemBlockMerge(ir::Function* func) {
 
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
-    modified |= SSAMemAccessChainRemoval(func);
-    modified |= SSAMemSingleBlock(func);
-    SSAMemAnalyze(func);
-    modified |= SSAMemProcess(func);
-    modified |= SSAMemDCE();
-    modified |= SSAMemEliminateExtracts(func);
-    modified |= SSAMemBreakLSCycle(func);
-    modified |= SSAMemDeadBranchEliminate(func);
-    modified |= SSAMemBlockMerge(func);
+    modified |= LocalAccessChainConvert(func);
+    modified |= LocalSingleBlockElim(func);
+    modified |= LocalSingleStoreElim(func);
+    modified |= InsertExtractElim(func);
+    modified |= InsertCycleBreak(func);
+    modified |= DeadBranchEliminate(func);
+    modified |= BlockMerge(func);
 
-    modified |= SSAMemSingleBlock(func);
-    SSAMemAnalyze(func);
-    modified |= SSAMemProcess(func);
-    modified |= SSAMemDCE();
+    modified |= LocalSingleBlockElim(func);
+    modified |= LocalSingleStoreElim(func);
 
-    modified |= SSAMemSSARewrite(func);
-    modified |= SSAMemEliminateExtracts(func);
-    modified |= SSAMemDCEFunc(func);
+    modified |= LocalSSARewrite(func);
+    modified |= InsertExtractElim(func);
+    modified |= FuncDCE(func);
 
-    modified |= UniformAccessChainRemoval(func);
+    modified |= UniformAccessChainConvert(func);
     modified |= CommonUniformLoadElimination(func);
     modified |= CommonExtractElimination(func);
 
