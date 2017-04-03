@@ -142,8 +142,6 @@ bool SSAMemPass::isTargetVar(uint32_t varId) {
 
 void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
   ssaVars.clear();
-  ssaComps.clear();
-  ssaCompVars.clear();
   nonSsaVars.clear();
   storeIdx.clear();
   uint32_t instIdx = 0;
@@ -155,43 +153,23 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
       // Verify store variable is target type
       uint32_t varId;
       ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      if (nonSsaVars.find(varId) != nonSsaVars.end())
+        continue;
+      if (ptrInst->opcode() == SpvOpAccessChain) {
+        nonSsaVars.insert(varId);
+        continue;
+      }
       if (!isTargetVar(varId)) {
         nonSsaVars.insert(varId);
         continue;
       }
-
-      // Verify store variable/component is not yet assigned.
-      // If whole variable is stored, there should not be any
-      // component stores and vice-versa.
-      if (nonSsaVars.find(varId) != nonSsaVars.end())
-        continue;
+      // If already stored, disqualify it
       if (ssaVars.find(varId) != ssaVars.end()) {
         nonSsaVars.insert(varId);
         continue;
       }
-      if (ptrInst->opcode() == SpvOpAccessChain) {
-        if (ptrInst->NumInOperands() != 2) {
-          nonSsaVars.insert(varId);
-          continue;
-        }
-        const uint32_t idxId =
-            ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-        if (ssaComps.find(std::make_pair(varId, idxId)) != ssaComps.end()) {
-          nonSsaVars.insert(varId);
-          continue;
-        }
-        ssaCompVars.insert(varId);
-        ssaComps[std::make_pair(varId, idxId)] = &*ii;
-        storeIdx[&*ii] = instIdx;
-      }
-      else {
-        if (ssaCompVars.find(varId) != ssaCompVars.end()) {
-          nonSsaVars.insert(varId);
-          continue;
-        }
-        ssaVars[varId] = &*ii;
-        storeIdx[&*ii] = instIdx;
-      }
+      ssaVars[varId] = &*ii;
+      storeIdx[&*ii] = instIdx;
     }
   }
 }
@@ -224,66 +202,21 @@ bool SSAMemPass::SingleStoreProcess(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
       if (ii->opcode() != SpvOpLoad)
         continue;
-      const uint32_t ptrId = ii->GetInOperand(SPV_LOAD_PTR_ID).words[0];
-      ir::Instruction* ptrInst =
-          def_use_mgr_->id_to_defs().find(ptrId)->second;
-      const uint32_t varId = ptrInst->opcode() == SpvOpAccessChain ?
-          ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
-          ptrId;
-      const ir::Instruction* varInst =
-          def_use_mgr_->id_to_defs().find(varId)->second;
-      assert(varInst->opcode() == SpvOpVariable);
+      uint32_t varId;
+      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      // Skip access chain loads
+      if (ptrInst->opcode() == SpvOpAccessChain)
+        continue;
+      assert(ptrInst->opcode() == SpvOpVariable);
+      const auto vsi = ssaVars.find(varId);
+      if (vsi == ssaVars.end())
+        continue;
       if (nonSsaVars.find(varId) != nonSsaVars.end())
         continue;
-      uint32_t replId;
-      uint32_t sIdx;
-      if (ptrInst->opcode() == SpvOpAccessChain) {
-        if (ptrInst->NumInOperands() != 2)
-          continue;
-        // process component load
-        const uint32_t idxId =
-            ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-        const auto csi = ssaComps.find(std::make_pair(varId, idxId));
-        if (csi != ssaComps.end()) {
-          replId = csi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-          sIdx = storeIdx[csi->second];
-        }
-        else {
-          // See if the whole variable stored with a load of an SSA var.
-          // If so, look for a component store into the load variable
-          // and use the value Id that was stored.
-          const auto vsi = ssaVars.find(varId);
-          if (vsi == ssaVars.end())
-            continue;
-          const uint32_t valId =
-              vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-          const ir::Instruction* valInst =
-              def_use_mgr_->id_to_defs().find(valId)->second;
-          if (valInst->opcode() != SpvOpLoad)
-            continue;
-          const uint32_t loadVarId =
-              valInst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
-          if (nonSsaVars.find(loadVarId) != nonSsaVars.end())
-            continue;
-          const auto lvcsi = ssaComps.find(std::make_pair(loadVarId, idxId));
-          if (lvcsi == ssaComps.end())
-            continue;
-          replId = lvcsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-          sIdx = storeIdx[lvcsi->second];
-        }
-      }
-      else {
-        // process whole variable load
-        const auto vsi = ssaVars.find(varId);
-        // if variable is not defined with whole variable store,
-        // skip this load
-        if (vsi == ssaVars.end())
-          continue;
-        replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-        sIdx = storeIdx[vsi->second];
-      }
+      // Use store value as replacement id
+      uint32_t replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
       // store must dominate load
-      if (instIdx < sIdx)
+      if (instIdx < storeIdx[vsi->second])
         continue;
       // replace all instances of the load's id with the SSA value's id
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
@@ -394,17 +327,6 @@ bool SSAMemPass::SingleStoreDCE() {
       continue;
     if (!isLiveStore(v.second)) {
       DCEInst(v.second);
-      modified = true;
-    }
-  }
-  for (auto c : ssaComps) {
-    // check that it hasn't already been DCE'd
-    if (c.second->opcode() != SpvOpStore)
-      continue;
-    if (nonSsaVars.find(c.first.first) != nonSsaVars.end())
-      continue;
-    if (!isLiveStore(c.second)) {
-      DCEInst(c.second);
       modified = true;
     }
   }

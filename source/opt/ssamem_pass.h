@@ -66,15 +66,10 @@ class SSAMemPass : public Pass {
       }
   };
 
-  // Map from SSA Component (Var, Index pair) to its single store
   typedef std::pair<uint32_t, uint32_t> CompKey;
-  std::unordered_map<CompKey, ir::Instruction*, pairhash> ssaComps;
 
   // Map from store to its instruction index
   std::unordered_map<ir::Instruction*, uint32_t> storeIdx;
-
-  // Set of SSA Component Variables
-  std::unordered_set<uint32_t> ssaCompVars;
 
   // Set of non-SSA Variables
   std::unordered_set<uint32_t> nonSsaVars;
