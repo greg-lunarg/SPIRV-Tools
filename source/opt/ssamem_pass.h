@@ -68,7 +68,7 @@ class SSAMemPass : public Pass {
 
   typedef std::pair<uint32_t, uint32_t> CompKey;
 
-  // Map from store to its instruction index
+  // Map from store to its ordinal position in the function.
   std::unordered_map<ir::Instruction*, uint32_t> storeIdx;
 
   // Set of non-SSA Variables
@@ -194,9 +194,9 @@ class SSAMemPass : public Pass {
   // and SingleStoreProcess has been run.
   bool SingleStoreDCE();
 
-  // Do "single-store" optimization of function variables referenced
-  // only with non-access-chain loads and stores. If a variable has
-  // just one store, replace all its loads with the value that is stored.
+  // Do "single-store" optimization of function variables defined only
+  // with a single non-access-chain store. Replace all its non-access-
+  // chain loads that the store dominates with the value that is stored.
   bool LocalSingleStoreElim(ir::Function* func);
 
   void SBEraseComps(uint32_t varId);

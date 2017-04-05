@@ -149,7 +149,6 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
       if (ii->opcode() != SpvOpStore)
         continue;
-
       // Verify store variable is target type
       uint32_t varId;
       ir::Instruction* ptrInst = GetPtr(&*ii, varId);
@@ -157,8 +156,10 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
         continue;
       if (ptrInst->opcode() == SpvOpAccessChain) {
         nonSsaVars.insert(varId);
+        ssaVars.erase(varId);
         continue;
       }
+      // Verify target type and function storage class
       if (!isTargetVar(varId)) {
         nonSsaVars.insert(varId);
         continue;
@@ -166,8 +167,11 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
       // If already stored, disqualify it
       if (ssaVars.find(varId) != ssaVars.end()) {
         nonSsaVars.insert(varId);
+        ssaVars.erase(varId);
         continue;
       }
+      // Remember iterator of variable's store and it's
+      // ordinal position in function
       ssaVars[varId] = &*ii;
       storeIdx[&*ii] = instIdx;
     }
