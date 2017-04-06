@@ -29,6 +29,10 @@
 */
 
 static const int SPV_ENTRY_POINT_FUNCTION_ID = 1;
+static const int SPV_FUNCTION_CALL_FUNCTION_ID = 0;
+static const int SPV_DECORATION_TARGET_ID = 0;
+static const int SPV_DECORATION_DECORATION = 1;
+static const int SPV_DECORATION_LINKAGE_TYPE = 3;
 static const int SPV_STORE_PTR_ID = 0;
 static const int SPV_STORE_VAL_ID = 1;
 static const int SPV_ACCESS_CHAIN_PTR_ID = 0;
@@ -1543,6 +1547,61 @@ bool SSAMemPass::BlockMerge(ir::Function* func) {
   return modified;
 }
 
+void SSAMemPass::FindCalledFuncs(uint32_t funcId) {
+  ir::Function* func = id2function_[funcId];
+  for (auto bi = func->begin(); bi != func->end(); bi++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+      if (ii->opcode() != SpvOpFunctionCall)
+        continue;
+      uint32_t calledFuncId =
+        ii->GetSingleWordInOperand(SPV_FUNCTION_CALL_FUNCTION_ID);
+      if (liveFuncIds.find(calledFuncId) != liveFuncIds.end())
+        continue;
+      calledFuncIds.push(calledFuncId);
+    }
+  }
+}
+
+bool SSAMemPass::DeadFunctionElim() {
+  bool modified = false;
+  liveFuncIds.clear();
+  for (auto& e : module_->entry_points())
+    calledFuncIds.push(e.GetSingleWordOperand(SPV_ENTRY_POINT_FUNCTION_ID));
+  for (auto& a : module_->annotations()) {
+    if (a.opcode() != SpvOpDecorate)
+      continue;
+    if (a.GetSingleWordInOperand(SPV_DECORATION_DECORATION) != SpvDecorationLinkageAttributes)
+      continue;
+    if (a.GetSingleWordInOperand(SPV_DECORATION_LINKAGE_TYPE) != SpvLinkageTypeExport)
+      continue;
+    uint32_t funcId = a.GetSingleWordInOperand(SPV_DECORATION_TARGET_ID);
+    // Verify that target id maps to a function
+    const auto fii = id2function_.find(funcId);
+    if (fii == id2function_.end())
+      continue;
+    calledFuncIds.push(funcId);
+  }
+  while (!calledFuncIds.empty()) {
+    uint32_t funcId = calledFuncIds.front();
+    calledFuncIds.pop();
+    if (liveFuncIds.find(funcId) != liveFuncIds.end())
+      continue;
+    liveFuncIds.insert(funcId);
+    FindCalledFuncs(funcId);
+  }
+  auto fni = module_->begin();
+  while (fni != module_->end()) {
+    if (liveFuncIds.find(fni->GetResultId()) == liveFuncIds.end()) {
+      fni = fni.Erase();
+      modified = true;
+    }
+    else {
+      fni++;
+    }
+  }
+  return modified;
+}
+
 bool SSAMemPass::SSAMem(ir::Function* func) {
     bool modified = false;
     modified |= LocalAccessChainConvert(func);
@@ -1568,14 +1627,6 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
 }
 
 void SSAMemPass::Initialize(ir::Module* module) {
-  def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
-
-  // Initialize next unused Id
-  nextId_ = 0;
-  for (const auto& id_def : def_use_mgr_->id_to_defs()) {
-    nextId_ = std::max(nextId_, id_def.first);
-  }
-  nextId_++;
 
   module_ = module;
 
@@ -1596,8 +1647,20 @@ void SSAMemPass::Initialize(ir::Module* module) {
 };
 
 Pass::Status SSAMemPass::ProcessImpl() {
-  // do exhaustive inlining on each entry point function in module
   bool modified = false;
+
+  modified |= DeadFunctionElim();
+
+  def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
+
+  // Initialize next unused Id
+  nextId_ = 0;
+  for (const auto& id_def : def_use_mgr_->id_to_defs()) {
+    nextId_ = std::max(nextId_, id_def.first);
+  }
+  nextId_++;
+
+  // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
         id2function_[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];

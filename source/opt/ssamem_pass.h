@@ -123,6 +123,12 @@ class SSAMemPass : public Pass {
   std::unordered_map<uint32_t, std::unordered_map<uint32_t,
       std::list<ir::Instruction*>>> comp2idx2inst_;
 
+  // Set of live function ids
+  std::set<uint32_t> liveFuncIds;
+
+  // Stack of called function ids
+  std::queue<uint32_t> calledFuncIds;
+
   // Returns true if type is a scalar type
   // or a vector or matrix
   bool isMathType(const ir::Instruction* typeInst);
@@ -339,6 +345,13 @@ class SSAMemPass : public Pass {
   // cleanup after dead branch elimination. Merging blocks can also
   // create additional memory optimization opportunities.
   bool BlockMerge(ir::Function* func);
+
+  // Mark called functions as live
+  void FindCalledFuncs(uint32_t funcId);
+
+  // Remove all dead functions from module. Only retain entry point
+  // and exported functions and the functions they call.
+  bool DeadFunctionElim();
 
   // For each load of SSA variable, replace all uses of the load
   // with the value stored, if possible. Return true if the any
