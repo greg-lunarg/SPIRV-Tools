@@ -1649,7 +1649,7 @@ void SSAMemPass::Initialize(ir::Module* module) {
 Pass::Status SSAMemPass::ProcessImpl() {
   bool modified = false;
 
-  modified |= DeadFunctionElim();
+  // modified |= DeadFunctionElim();
 
   def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
 
