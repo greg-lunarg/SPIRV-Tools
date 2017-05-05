@@ -66,6 +66,16 @@ void InlinePass::AddBranch(uint32_t label_id,
   (*block_ptr)->AddInstruction(std::move(newBranch));
 }
 
+void InlinePass::AddBranchCond(uint32_t cond_id, uint32_t true_id,
+  uint32_t false_id, std::unique_ptr<ir::BasicBlock>* block_ptr) {
+  std::unique_ptr<ir::Instruction> newBranch(new ir::Instruction(
+    SpvOpBranchConditional, 0, 0,
+    {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {cond_id}},
+     {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {true_id}},
+     {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {false_id}}}));
+  (*block_ptr)->AddInstruction(std::move(newBranch));
+}
+
 void InlinePass::AddLoopMerge(uint32_t merge_id, uint32_t continue_id,
                            std::unique_ptr<ir::BasicBlock>* block_ptr) {
   std::unique_ptr<ir::Instruction> newLoopMerge(new ir::Instruction(
@@ -96,6 +106,22 @@ std::unique_ptr<ir::Instruction> InlinePass::NewLabel(uint32_t label_id) {
   std::unique_ptr<ir::Instruction> newLabel(
       new ir::Instruction(SpvOpLabel, 0, label_id, {}));
   return newLabel;
+}
+
+uint32_t InlinePass::GetFalseId() {
+  if (falseId != 0)
+    return falseId;
+  falseId = module_->GetGlobalValue(SpvOpConstantFalse);
+  if (falseId != 0)
+    return falseId;
+  uint32_t boolId = module_->GetGlobalValue(SpvOpTypeBool);
+  if (boolId == 0) {
+    boolId = TakeNextId();
+    module_->AddGlobalValue(SpvOpTypeBool, boolId, 0);
+  }
+  falseId = TakeNextId();
+  module_->AddGlobalValue(SpvOpConstantFalse, falseId, boolId);
+  return falseId;
 }
 
 void InlinePass::MapParams(
@@ -279,7 +305,8 @@ void InlinePass::GenInlineCode(
             new_blk_ptr->AddInstruction(std::move(cp_inst));
           }
           // If callee is early return function, insert header block for
-          // one-trip loop that will encompass callee code.
+          // one-trip loop that will encompass callee code. Start postheader
+          // block.
           if (earlyReturn) {
             headerId = this->TakeNextId();
             AddBranch(headerId, &new_blk_ptr);
@@ -291,7 +318,7 @@ void InlinePass::GenInlineCode(
             uint32_t postHeaderId = this->TakeNextId();
             AddBranch(postHeaderId, &new_blk_ptr);
             new_blocks->push_back(std::move(new_blk_ptr));
-            new_blk_ptr.reset(new ir::BasicBlock(NewLabel(headerId)));
+            new_blk_ptr.reset(new ir::BasicBlock(NewLabel(postHeaderId)));
             multiBlocks = true;
           }
         } else {
@@ -318,11 +345,14 @@ void InlinePass::GenInlineCode(
         prevInstWasReturn = true;
       } break;
       case SpvOpFunctionEnd: {
-        // If there was an early return, create return label/block.
+        // If there was an early return, insert continue and return blocks.
         // If previous instruction was return, insert branch instruction
         // to return block.
         if (returnLabelId != 0) {
           if (prevInstWasReturn) AddBranch(returnLabelId, &new_blk_ptr);
+          new_blocks->push_back(std::move(new_blk_ptr));
+          new_blk_ptr.reset(new ir::BasicBlock(NewLabel(continueId)));
+          AddBranchCond(GetFalseId(), headerId, returnLabelId, &new_blk_ptr);
           new_blocks->push_back(std::move(new_blk_ptr));
           new_blk_ptr.reset(new ir::BasicBlock(NewLabel(returnLabelId)));
           multiBlocks = true;
@@ -461,12 +491,14 @@ void InlinePass::ComputeStructuredSuccessors(ir::Function* func) {
   for (auto& blk : *func) {
     auto mii = blk.end();
     mii--;
-    mii--;
     uint32_t mbid = 0;
-    if (mii->opcode() == SpvOpLoopMerge)
-      uint32_t mbid = mii->GetSingleWordOperand(kSpvLoopMergeMergeBlockId);
-    else if (mii->opcode() == SpvOpSelectionMerge)
-      uint32_t mbid = mii->GetSingleWordOperand(kSpvSelectionMergeMergeBlockId);
+    if (mii != blk.begin()) {
+      mii--;
+      if (mii->opcode() == SpvOpLoopMerge)
+        uint32_t mbid = mii->GetSingleWordOperand(kSpvLoopMergeMergeBlockId);
+      else if (mii->opcode() == SpvOpSelectionMerge)
+        uint32_t mbid = mii->GetSingleWordOperand(kSpvSelectionMergeMergeBlockId);
+    }
     if (mbid != 0)
       block2succs_[&blk].push_back(id2block_[mbid]);
     // add true successors
@@ -513,7 +545,7 @@ bool InlinePass::hasNoReturnInLoop(ir::Function* func) {
         break;
       }
     }
-    else {
+    else if (lii != blk->cbegin()) {
       auto mii = lii;
       mii--;
       // Entering outermost loop
@@ -558,6 +590,8 @@ void InlinePass::Initialize(ir::Module* module) {
 
   // Save module.
   module_ = module;
+
+  falseId = 0;
 
   id2function_.clear();
   id2block_.clear();

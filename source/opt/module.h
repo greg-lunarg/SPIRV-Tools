@@ -86,6 +86,12 @@ class Module {
   std::vector<Instruction*> GetConstants();
   std::vector<const Instruction*> GetConstants() const;
 
+  // Return result id of global value with |opcode|, 0 if not present.
+  uint32_t GetGlobalValue(SpvOp opcode) const;
+
+  // Add global value with |opcode|, |result_id| and |type_id|
+  void AddGlobalValue(SpvOp opcode, uint32_t result_id, uint32_t type_id);
+
   inline uint32_t id_bound() const { return header_.bound; }
 
   // Iterators for debug instructions (excluding OpLine & OpNoLine) contained in

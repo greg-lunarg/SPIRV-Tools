@@ -65,6 +65,10 @@ class InlinePass : public Pass {
   // Add unconditional branch to labelId to end of block block_ptr.
   void AddBranch(uint32_t labelId, std::unique_ptr<ir::BasicBlock>* block_ptr);
 
+  // Add conditional branch to end of block |block_ptr|.
+  void AddBranchCond(uint32_t cond_id, uint32_t true_id,
+    uint32_t false_id, std::unique_ptr<ir::BasicBlock>* block_ptr);
+
   // Add unconditional branch to labelId to end of block block_ptr.
   void AddLoopMerge(uint32_t merge_id, uint32_t continue_id,
                     std::unique_ptr<ir::BasicBlock>* block_ptr);
@@ -79,6 +83,8 @@ class InlinePass : public Pass {
 
   // Return new label.
   std::unique_ptr<ir::Instruction> NewLabel(uint32_t label_id);
+
+  uint32_t GetFalseId();
 
   // Map callee params to caller args
   void MapParams(ir::Function* calleeFn,
@@ -183,6 +189,9 @@ class InlinePass : public Pass {
 
   // Map from block to its predecessor blocks
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>> block2succs_;
+
+  // result id for OpConstantFalse
+  uint32_t falseId;
 
   // Next unused ID
   uint32_t next_id_;
