@@ -99,6 +99,10 @@ class Module {
   inline IteratorRange<inst_iterator> entry_points();
   inline IteratorRange<const_inst_iterator> entry_points() const;
 
+  // Iterators for capability instructions contained in this module
+  inline IteratorRange<inst_iterator> capabilities();
+  inline IteratorRange<const_inst_iterator> capabilities() const;
+
   // Clears all debug instructions (excluding OpLine & OpNoLine).
   void debug_clear() { debugs_.clear(); }
 
@@ -131,6 +135,9 @@ class Module {
 
   // Returns 1 more than the maximum Id value mentioned in the module.
   uint32_t ComputeIdBound() const;
+
+  // Returns true if module has capability |cap|
+  bool hasCapability(uint32_t cap);
 
  private:
   ModuleHeader header_;  // Module header
@@ -216,6 +223,14 @@ inline IteratorRange<Module::inst_iterator> Module::entry_points() {
 
 inline IteratorRange<Module::const_inst_iterator> Module::entry_points() const {
   return make_const_range(entry_points_);
+}
+
+inline IteratorRange<Module::inst_iterator> Module::capabilities() {
+  return make_range(capabilities_);
+}
+
+inline IteratorRange<Module::const_inst_iterator> Module::capabilities() const {
+  return make_const_range(capabilities_);
 }
 
 inline IteratorRange<Module::inst_iterator> Module::annotations() {
