@@ -92,14 +92,8 @@ class SSAMemPass : public Pass {
   // Map from variable to its live load in block
   std::unordered_map<uint32_t, ir::Instruction*> sbVarLoads;
 
-  // Map from component (var, index pair) to its live store in block
-  std::unordered_map<CompKey, ir::Instruction*, pairhash> sbCompStores;
-
   // Set of undeletable variables
   std::unordered_set<uint32_t> sbPinnedVars;
-
-  // Map from component (var, index pair) to its live store in block
-  std::unordered_set<CompKey, pairhash> sbPinnedComps;
 
   // Map from block id to loop. 0 indicates no loop.
   std::unordered_map<uint32_t, uint32_t> block2loop_;

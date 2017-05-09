@@ -349,27 +349,12 @@ bool SSAMemPass::LocalSingleStoreElim(ir::Function* func) {
   return modified;
 }
 
-void SSAMemPass::SBEraseComps(uint32_t varId) {
-  for (auto ci = sbCompStores.begin(); ci != sbCompStores.end();)
-    if (ci->first.first == varId)
-      ci = sbCompStores.erase(ci);
-    else
-      ci++;
-  for (auto ci = sbPinnedComps.begin(); ci != sbPinnedComps.end();)
-    if (ci->first == varId)
-      ci = sbPinnedComps.erase(ci);
-    else
-      ci++;
-}
-
 bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     sbVarStores.clear();
     sbVarLoads.clear();
-    sbCompStores.clear();
     sbPinnedVars.clear();
-    sbPinnedComps.clear();
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       switch (ii->opcode()) {
       case SpvOpStore: {
@@ -388,25 +373,9 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
             }
           }
           sbVarStores[varId] = &*ii;
-          SBEraseComps(varId);
         }
         else {
           assert(ptrInst->opcode() == SpvOpAccessChain);
-          const uint32_t idxId =
-              ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-          if (ptrInst->NumInOperands() == 2) {
-            // if not pinned, look for WAW
-            if (sbPinnedComps.find(std::make_pair(varId, idxId)) == sbPinnedComps.end()) {
-              auto si = sbCompStores.find(std::make_pair(varId, idxId));
-              if (si != sbCompStores.end()) {
-                DCEInst(si->second);
-              }
-            }
-            sbCompStores[std::make_pair(varId, idxId)] = &*ii;
-          }
-          else
-            sbCompStores.erase(std::make_pair(varId, idxId));
-          sbPinnedComps.erase(std::make_pair(varId, idxId));
           sbVarStores.erase(varId);
         }
         sbPinnedVars.erase(varId);
@@ -432,55 +401,15 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
             }
           }
         }
-        else if (ptrInst->NumInOperands() == 2) {
-          assert(ptrInst->opcode() == SpvOpAccessChain);
-          const uint32_t idxId =
-            ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-          auto ci = sbCompStores.find(std::make_pair(varId, idxId));
-          if (ci != sbCompStores.end()) {
-            replId = ci->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-          }
-          else {
-            // if live store to whole variable of load, look for component
-            // store to the loaded variable
-            auto si = sbVarStores.find(varId);
-            if (si != sbVarStores.end()) {
-              const uint32_t valId =
-                si->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-              ir::Instruction* valInst =
-                def_use_mgr_->id_to_defs().find(valId)->second;
-              if (valInst->opcode() == SpvOpLoad) {
-                uint32_t loadVarId =
-                  valInst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
-                auto lvi = sbCompStores.find(std::make_pair(loadVarId, idxId));
-                if (lvi != sbCompStores.end()) {
-                  replId = lvi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
-                }
-              }
-            }
-          }
-        }
         if (replId != 0) {
           // replace load's result id and delete load
           ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
           modified = true;
         }
         else {
-          if (ptrInst->opcode() == SpvOpVariable) {
+          if (ptrInst->opcode() == SpvOpVariable)
             sbVarLoads[varId] = &*ii;  // register load
-            sbPinnedVars.insert(varId);
-            for (auto ci = sbCompStores.begin(); ci != sbCompStores.end(); ci++)
-              if (ci->first.first == varId)
-                sbPinnedComps.insert(std::make_pair(varId, ci->first.second));
-          }
-          else {
-            const uint32_t idxId =
-              ptrInst->GetInOperand(SPV_ACCESS_CHAIN_IDX0_ID).words[0];
-            if (sbCompStores.find(std::make_pair(varId, idxId)) != sbCompStores.end())
-              sbPinnedComps.insert(std::make_pair(varId, idxId));
-            else
-              sbPinnedVars.insert(varId);
-          }
+          sbPinnedVars.insert(varId);
         }
       } break;
       default:
