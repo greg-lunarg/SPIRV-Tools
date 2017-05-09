@@ -56,18 +56,6 @@ class SSAMemPass : public Pass {
   // Map from SSA Variable to its single store
   std::unordered_map<uint32_t, ir::Instruction*> ssaVars;
 
-  // Hash for CompKey
-  struct pairhash {
-    public:
-      template <typename T, typename U>
-      std::size_t operator()(const std::pair<T, U> &x) const
-      {
-          return (std::hash<T>()(x.first) << 8) ^ std::hash<U>()(x.second);
-      }
-  };
-
-  typedef std::pair<uint32_t, uint32_t> CompKey;
-
   // Map from store to its ordinal position in the function.
   std::unordered_map<ir::Instruction*, uint32_t> storeIdx;
 
