@@ -192,7 +192,10 @@ class SSAMemPass : public Pass {
 
   // Do "single-store" optimization of function variables defined only
   // with a single non-access-chain store. Replace all its non-access-
-  // chain loads that the store dominates with the value that is stored.
+  // chain loads with the value that is stored.
+  // TODO(): Add requirement that store dominates load. Until then,
+  // the generated code is not incorrect, but we can lose the fact
+  // that the load is ultimately undefined.
   bool LocalSingleStoreElim(ir::Function* func);
 
   // Do single block memory optimization of function variables

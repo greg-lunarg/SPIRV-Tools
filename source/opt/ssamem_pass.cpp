@@ -871,6 +871,12 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
 }
 
 bool SSAMemPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
+  // TODO(): This code currently causes bad images. It seems to
+  // be missing some cases. Retry when inlining of early returns
+  // is fixed. Until then this routine will cause correct, but
+  // possibly usused code to be generated. A subsequent DCE pass
+  // would likely eliminate this code, so it is a question of
+  // compile-time efficiency.
   //auto isLiveItr = var2last_live_block_.find(var_id);
   //if (isLiveItr == var2last_live_block_.end())
   //  return false;
