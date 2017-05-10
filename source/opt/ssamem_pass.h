@@ -41,6 +41,12 @@ class SSAMemPass : public Pass {
   Status Process(ir::Module*) override;
 
  private:
+   // Module this pass is processing
+   ir::Module* module_;
+
+   // Def-Uses for the module we are processing
+   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
+
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
@@ -113,21 +119,21 @@ class SSAMemPass : public Pass {
 
   // Returns true if type is a scalar type
   // or a vector or matrix
-  bool isMathType(const ir::Instruction* typeInst);
+  bool IsMathType(const ir::Instruction* typeInst);
 
   // Returns true if type is a scalar, vector, matrix
   // or struct of only those types
-  bool isTargetType(const ir::Instruction* typeInst);
+  bool IsTargetType(const ir::Instruction* typeInst);
 
   // Next unused ID
-  uint32_t nextId_;
+  uint32_t next_id_;
 
-  inline void finalizeNextId(ir::Module* module) {
-    module->SetIdBound(nextId_);
+  inline void FinalizeNextId(ir::Module* module) {
+    module->SetIdBound(next_id_);
   }
 
-  inline uint32_t getNextId() {
-    return nextId_++;
+  inline uint32_t TakeNextId() {
+    return next_id_++;
   }
 
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
@@ -137,7 +143,7 @@ class SSAMemPass : public Pass {
 
   // Return true if variable is math type, or vector or matrix
   // of target type, or struct or array of target type
-  bool isTargetVar(uint32_t varId);
+  bool IsTargetVar(uint32_t varId);
 
   // Find all function scope variables that are stored to only once
   // and create two maps: one for full variable stores and one for
@@ -162,17 +168,16 @@ class SSAMemPass : public Pass {
   // instructions are modified.
   bool SingleStoreProcess(ir::Function* func);
 
-  // Return true if varId is not a function variable or if it has
-  // a load
-  bool hasLoads(uint32_t varId);
+  // Return true if |varId| has a load
+  bool HasLoads(uint32_t varId);
 
-  // Return true if varId is not a function variable or if it has
+  // Return true if |varId| is not a function variable or if it has
   // a load
-  bool isLiveVar(uint32_t varId);
+  bool IsLiveVar(uint32_t varId);
 
   // Return true if Store is not to function variable or if its
   // base variable has a load
-  bool isLiveStore(ir::Instruction* storeInst);
+  bool IsLiveStore(ir::Instruction* storeInst);
 
   // Delete inst and iterate DCE on all its operands 
   void DCEInst(ir::Instruction* inst);
@@ -186,8 +191,6 @@ class SSAMemPass : public Pass {
   // with a single non-access-chain store. Replace all its non-access-
   // chain loads that the store dominates with the value that is stored.
   bool LocalSingleStoreElim(ir::Function* func);
-
-  void SBEraseComps(uint32_t varId);
 
   // Do single block memory optimization of function variables
   // referenced only with non-access-chain loads and stores. For
@@ -342,9 +345,6 @@ class SSAMemPass : public Pass {
 
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
-
-  ir::Module* module_;
-  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 };
 
 }  // namespace opt
