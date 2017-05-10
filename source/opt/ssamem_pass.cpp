@@ -117,9 +117,9 @@ bool SSAMemPass::IsUniformVar(uint32_t varId) {
 }
 
 bool SSAMemPass::IsTargetVar(uint32_t varId) {
-  if (seenNonTargetVars.find(varId) != seenNonTargetVars.end())
+  if (seen_non_target_vars_.find(varId) != seen_non_target_vars_.end())
     return false;
-  if (seenTargetVars.find(varId) != seenTargetVars.end())
+  if (seen_target_vars_.find(varId) != seen_target_vars_.end())
     return true;
   const ir::Instruction* varInst =
     def_use_mgr_->id_to_defs().find(varId)->second;
@@ -129,7 +129,7 @@ bool SSAMemPass::IsTargetVar(uint32_t varId) {
     def_use_mgr_->id_to_defs().find(varTypeId)->second;
   if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
     SpvStorageClassFunction) {
-    seenNonTargetVars.insert(varId);
+    seen_non_target_vars_.insert(varId);
     return false;
   }
   const uint32_t varPteTypeId =
@@ -137,17 +137,17 @@ bool SSAMemPass::IsTargetVar(uint32_t varId) {
   ir::Instruction* varPteTypeInst =
     def_use_mgr_->id_to_defs().find(varPteTypeId)->second;
   if (!IsTargetType(varPteTypeInst)) {
-    seenNonTargetVars.insert(varId);
+    seen_non_target_vars_.insert(varId);
     return false;
   }
-  seenTargetVars.insert(varId);
+  seen_target_vars_.insert(varId);
   return true;
 }
 
 void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
-  ssaVars.clear();
-  nonSsaVars.clear();
-  storeIdx.clear();
+  ssa_var2store_.clear();
+  non_ssa_vars_.clear();
+  store2idx_.clear();
   uint32_t instIdx = 0;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
@@ -156,28 +156,28 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
       // Verify store variable is target type
       uint32_t varId;
       ir::Instruction* ptrInst = GetPtr(&*ii, varId);
-      if (nonSsaVars.find(varId) != nonSsaVars.end())
+      if (non_ssa_vars_.find(varId) != non_ssa_vars_.end())
         continue;
       if (ptrInst->opcode() == SpvOpAccessChain) {
-        nonSsaVars.insert(varId);
-        ssaVars.erase(varId);
+        non_ssa_vars_.insert(varId);
+        ssa_var2store_.erase(varId);
         continue;
       }
       // Verify target type and function storage class
       if (!IsTargetVar(varId)) {
-        nonSsaVars.insert(varId);
+        non_ssa_vars_.insert(varId);
         continue;
       }
       // If already stored, disqualify it
-      if (ssaVars.find(varId) != ssaVars.end()) {
-        nonSsaVars.insert(varId);
-        ssaVars.erase(varId);
+      if (ssa_var2store_.find(varId) != ssa_var2store_.end()) {
+        non_ssa_vars_.insert(varId);
+        ssa_var2store_.erase(varId);
         continue;
       }
       // Remember iterator of variable's store and it's
       // ordinal position in function
-      ssaVars[varId] = &*ii;
-      storeIdx[&*ii] = instIdx;
+      ssa_var2store_[varId] = &*ii;
+      store2idx_[&*ii] = instIdx;
     }
   }
 }
@@ -216,15 +216,15 @@ bool SSAMemPass::SingleStoreProcess(ir::Function* func) {
       if (ptrInst->opcode() == SpvOpAccessChain)
         continue;
       assert(ptrInst->opcode() == SpvOpVariable);
-      const auto vsi = ssaVars.find(varId);
-      if (vsi == ssaVars.end())
+      const auto vsi = ssa_var2store_.find(varId);
+      if (vsi == ssa_var2store_.end())
         continue;
-      if (nonSsaVars.find(varId) != nonSsaVars.end())
+      if (non_ssa_vars_.find(varId) != non_ssa_vars_.end())
         continue;
       // Use store value as replacement id
       uint32_t replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
       // store must dominate load
-      if (instIdx < storeIdx[vsi->second])
+      if (instIdx < store2idx_[vsi->second])
         continue;
       // replace all instances of the load's id with the SSA value's id
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
@@ -327,11 +327,11 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
 
 bool SSAMemPass::SingleStoreDCE() {
   bool modified = false;
-  for (auto v : ssaVars) {
+  for (auto v : ssa_var2store_) {
     // check that it hasn't already been DCE'd
     if (v.second->opcode() != SpvOpStore)
       continue;
-    if (nonSsaVars.find(v.first) != nonSsaVars.end())
+    if (non_ssa_vars_.find(v.first) != non_ssa_vars_.end())
       continue;
     if (!IsLiveStore(v.second)) {
       DCEInst(v.second);
@@ -352,9 +352,9 @@ bool SSAMemPass::LocalSingleStoreElim(ir::Function* func) {
 bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); bi++) {
-    sbVarStores.clear();
-    sbVarLoads.clear();
-    sbPinnedVars.clear();
+    var2store_.clear();
+    var2load_.clear();
+    pinned_vars_.clear();
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       switch (ii->opcode()) {
       case SpvOpStore: {
@@ -366,20 +366,20 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
         // Register the store
         if (ptrInst->opcode() == SpvOpVariable) {
           // if not pinned, look for WAW
-          if (sbPinnedVars.find(varId) == sbPinnedVars.end()) {
-            auto si = sbVarStores.find(varId);
-            if (si != sbVarStores.end()) {
+          if (pinned_vars_.find(varId) == pinned_vars_.end()) {
+            auto si = var2store_.find(varId);
+            if (si != var2store_.end()) {
               def_use_mgr_->KillInst(si->second);
             }
           }
-          sbVarStores[varId] = &*ii;
+          var2store_[varId] = &*ii;
         }
         else {
           assert(ptrInst->opcode() == SpvOpAccessChain);
-          sbVarStores.erase(varId);
+          var2store_.erase(varId);
         }
-        sbPinnedVars.erase(varId);
-        sbVarLoads.erase(varId);
+        pinned_vars_.erase(varId);
+        var2load_.erase(varId);
       } break;
       case SpvOpLoad: {
         // Verify store variable is target type
@@ -390,13 +390,13 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
         // Look for previous store or load
         uint32_t replId = 0;
         if (ptrInst->opcode() == SpvOpVariable) {
-          auto si = sbVarStores.find(varId);
-          if (si != sbVarStores.end()) {
+          auto si = var2store_.find(varId);
+          if (si != var2store_.end()) {
             replId = si->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
           }
           else {
-            auto li = sbVarLoads.find(varId);
-            if (li != sbVarLoads.end()) {
+            auto li = var2load_.find(varId);
+            if (li != var2load_.end()) {
               replId = li->second->result_id();
             }
           }
@@ -408,8 +408,8 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
         }
         else {
           if (ptrInst->opcode() == SpvOpVariable)
-            sbVarLoads[varId] = &*ii;  // register load
-          sbPinnedVars.insert(varId);
+            var2load_[varId] = &*ii;  // register load
+          pinned_vars_.insert(varId);
         }
       } break;
       default:
@@ -595,8 +595,8 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
         if (!IsTargetVar(varId))
           break;
         if (!IsConstantIndexAccessChain(ptrInst)) {
-          seenNonTargetVars.insert(varId);
-          seenTargetVars.erase(varId);
+          seen_non_target_vars_.insert(varId);
+          seen_target_vars_.erase(varId);
           break;
         }
       } break;
@@ -704,14 +704,14 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
       if (!IsUniformVar(varId))
         continue;
       uint32_t replId;
-      const auto uItr = uniform2loadId_.find(varId);
-      if (uItr != uniform2loadId_.end()) {
+      const auto uItr = uniform2load_id_.find(varId);
+      if (uItr != uniform2load_id_.end()) {
         replId = uItr->second;
       }
       else {
         if (mergeBlockId == 0) {
           // Load is in dominating block; just remember it
-          uniform2loadId_[varId] = ii->result_id();
+          uniform2load_id_[varId] = ii->result_id();
           continue;
         }
         else {
@@ -722,7 +722,7 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
           def_use_mgr_->AnalyzeInstDefUse(&*newLoad);
           insertItr = insertItr.InsertBefore(std::move(newLoad));
           insertItr++;
-          uniform2loadId_[varId] = replId;
+          uniform2load_id_[varId] = replId;
         }
       }
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
@@ -811,7 +811,7 @@ void SSAMemPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
   uint32_t label = block_ptr->GetLabelId();
   uint32_t predLabel = label2preds_[label].front();
   assert(visitedBlocks.find(predLabel) != visitedBlocks.end());
-  label2SSA_[label] = label2SSA_[predLabel];
+  label2ssa_map_[label] = label2ssa_map_[predLabel];
 }
 
 void SSAMemPass::InitSSARewrite(ir::Function& func) {
@@ -825,9 +825,9 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
   }
   // Init IsLiveAfter
   block2loop_.clear();
-  loop2lastBlock_.clear();
+  loop2last_block_.clear();
   block2ord_.clear();
-  var2lastLoadBlock_.clear();
+  var2last_load_block_.clear();
   uint32_t blockOrd = 0;
   uint32_t outerLoopCount = 0;
   uint32_t outerLoopOrd = 0;
@@ -837,7 +837,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
     uint32_t blkId = blk.GetLabelId();
     block2ord_[blkId] = blockOrd;
     if (blk.GetLabelId() == nextMergeBlockId) {
-      loop2lastBlock_[outerLoopOrd] = lastBlkId;
+      loop2last_block_[outerLoopOrd] = lastBlkId;
       outerLoopOrd = 0;
     }
     if (outerLoopOrd == 0 && IsLoopHeader(&blk)) {
@@ -854,25 +854,25 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       (void) GetPtr(&inst, varId);
       if (!IsTargetVar(varId))
         break;
-      var2lastLoadBlock_[varId] = blkId;
+      var2last_load_block_[varId] = blkId;
     }
     lastBlkId = blkId;
     blockOrd++;
   }
   // Compute the last live block for each variable
-  for (auto& var_blk : var2lastLoadBlock_) {
+  for (auto& var_blk : var2last_load_block_) {
     uint32_t varId = var_blk.first;
     uint32_t lastLiveBlkId = var_blk.second;
     uint32_t loopOrd = block2loop_[lastLiveBlkId];
     if (loopOrd != 0)
-       lastLiveBlkId = loop2lastBlock_[loopOrd];
-    var2lastLiveBlock_[varId] = lastLiveBlkId;
+       lastLiveBlkId = loop2last_block_[loopOrd];
+    var2last_live_block_[varId] = lastLiveBlkId;
   }
 }
 
 bool SSAMemPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
-  //auto isLiveItr = var2lastLiveBlock_.find(var_id);
-  //if (isLiveItr == var2lastLiveBlock_.end())
+  //auto isLiveItr = var2last_live_block_.find(var_id);
+  //if (isLiveItr == var2last_live_block_.end())
   //  return false;
   //return block2ord_[label] <= block2ord_[isLiveItr->second];
   (void)var_id;
@@ -880,16 +880,16 @@ bool SSAMemPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
   return true;
 }
 
-uint32_t SSAMemPass::type2Undef(uint32_t type_id) {
-  const auto uitr = type2Undefs.find(type_id);
-  if (uitr != type2Undefs.end())
+uint32_t SSAMemPass::Type2Undef(uint32_t type_id) {
+  const auto uitr = type2undefs_.find(type_id);
+  if (uitr != type2undefs_.end())
     return uitr->second;
   uint32_t undefId = TakeNextId();
   std::unique_ptr<ir::Instruction> undef_inst(
     new ir::Instruction(SpvOpUndef, type_id, undefId, {}));
   def_use_mgr_->AnalyzeInstDefUse(&*undef_inst);
   module_->AddGlobalValue(std::move(undef_inst));
-  type2Undefs[type_id] = undefId;
+  type2undefs_[type_id] = undefId;
   return undefId;
 }
 
@@ -911,7 +911,7 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
   // non-backedge predecesors.
   std::unordered_map<uint32_t, uint32_t> liveVars;
   for (uint32_t predLabel : label2preds_[label]) {
-    for (auto var_val : label2SSA_[predLabel]) {
+    for (auto var_val : label2ssa_map_[predLabel]) {
       uint32_t varId = var_val.first;
       liveVars[varId] = var_val.second;
     }
@@ -943,9 +943,9 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
         // Skip back edge predecessor.
         if (predLabel == backLabel)
           continue;
-        const auto var_val_itr = label2SSA_[predLabel].find(varId);
+        const auto var_val_itr = label2ssa_map_[predLabel].find(varId);
         // Missing values do not cause difference
-        if (var_val_itr == label2SSA_[predLabel].end())
+        if (var_val_itr == label2ssa_map_[predLabel].end())
           continue;
         if (var_val_itr->second != val0Id) {
           needsPhi = true;
@@ -958,7 +958,7 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
     }
     // If val is the same for all predecessors, enter it in map
     if (!needsPhi) {
-      label2SSA_[label].insert(var_val);
+      label2ssa_map_[label].insert(var_val);
       continue;
     }
     // Val differs across predecessors. Add phi op to block and 
@@ -974,12 +974,12 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
         if (val0Id == 0)
           valId = varId;
         else
-          valId = type2Undef(typeId);
+          valId = Type2Undef(typeId);
       }
       else {
-        const auto var_val_itr = label2SSA_[predLabel].find(varId);
-        if (var_val_itr == label2SSA_[predLabel].end())
-          valId = type2Undef(typeId);
+        const auto var_val_itr = label2ssa_map_[predLabel].find(varId);
+        if (var_val_itr == label2ssa_map_[predLabel].end())
+          valId = Type2Undef(typeId);
         else
           valId = var_val_itr->second;
       }
@@ -998,7 +998,7 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
     def_use_mgr_->AnalyzeInstDef(&*newPhi);
     insertItr = insertItr.InsertBefore(std::move(newPhi));
     insertItr++;
-    label2SSA_[label].insert({ varId, phiId });
+    label2ssa_map_[label].insert({ varId, phiId });
   }
 }
 
@@ -1009,7 +1009,7 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
   std::unordered_map<uint32_t, uint32_t> liveVars;
   for (uint32_t predLabel : label2preds_[label]) {
     assert(visitedBlocks.find(predLabel) != visitedBlocks.end());
-    for (auto var_val : label2SSA_[predLabel]) {
+    for (auto var_val : label2ssa_map_[predLabel]) {
       uint32_t varId = var_val.first;
       liveVars[varId] = var_val.second;
     }
@@ -1024,9 +1024,9 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     uint32_t val0Id = var_val.second;
     bool differs = false;
     for (uint32_t predLabel : label2preds_[label]) {
-      const auto var_val_itr = label2SSA_[predLabel].find(varId);
+      const auto var_val_itr = label2ssa_map_[predLabel].find(varId);
       // Missing values cause a difference
-      if (var_val_itr == label2SSA_[predLabel].end()) {
+      if (var_val_itr == label2ssa_map_[predLabel].end()) {
         differs = true;
         break;
       }
@@ -1037,7 +1037,7 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     }
     // If val is the same for all predecessors, enter it in SSA map
     if (!differs) {
-      label2SSA_[label].insert(var_val);
+      label2ssa_map_[label].insert(var_val);
       continue;
     }
     // Val differs across predecessors. Add phi op to block and 
@@ -1045,10 +1045,10 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     std::vector<ir::Operand> phi_in_operands;
     uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
     for (uint32_t predLabel : label2preds_[label]) {
-      const auto var_val_itr = label2SSA_[predLabel].find(varId);
+      const auto var_val_itr = label2ssa_map_[predLabel].find(varId);
       // If variable not defined on this path, use undef
-      uint32_t valId = (var_val_itr != label2SSA_[predLabel].end()) ?
-          var_val_itr->second : type2Undef(typeId);
+      uint32_t valId = (var_val_itr != label2ssa_map_[predLabel].end()) ?
+          var_val_itr->second : Type2Undef(typeId);
       phi_in_operands.push_back(
           ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
           std::initializer_list<uint32_t>{valId}));
@@ -1062,7 +1062,7 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     def_use_mgr_->AnalyzeInstDefUse(&*newPhi);
     insertItr = insertItr.InsertBefore(std::move(newPhi));
     insertItr++;
-    label2SSA_[label].insert({varId, phiId});
+    label2ssa_map_[label].insert({varId, phiId});
   }
 }
 
@@ -1090,8 +1090,8 @@ void SSAMemPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
     });
     // Only patch operands that are in the backedge predecessor map
     uint32_t varId = phiItr->GetSingleWordInOperand(idx);
-    const auto valItr = label2SSA_[back_id].find(varId);
-    if (valItr != label2SSA_[back_id].end()) {
+    const auto valItr = label2ssa_map_[back_id].find(varId);
+    if (valItr != label2ssa_map_[back_id].end()) {
       phiItr->SetInOperand(idx, { valItr->second });
       // Analyze uses now that they are complete
       def_use_mgr_->AnalyzeInstUse(&*phiItr);
@@ -1118,7 +1118,7 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
         assert(ptrInst->opcode() != SpvOpAccessChain);
         uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
         // Register new stored value for the variable
-        label2SSA_[label][varId] = valId;
+        label2ssa_map_[label][varId] = valId;
       } break;
       case SpvOpLoad: {
         uint32_t varId;
@@ -1128,15 +1128,15 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
         assert(ptrInst->opcode() != SpvOpAccessChain);
         // If variable is not defined, use undef
         uint32_t replId = 0;
-        const auto ssaItr = label2SSA_.find(label);
-        if (ssaItr != label2SSA_.end()) {
+        const auto ssaItr = label2ssa_map_.find(label);
+        if (ssaItr != label2ssa_map_.end()) {
           const auto valItr = ssaItr->second.find(varId);
           if (valItr != ssaItr->second.end())
             replId = valItr->second;
         }
         if (replId == 0) {
           uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
-          replId = type2Undef(typeId);
+          replId = Type2Undef(typeId);
         }
         // Replace load's id with the last stored value id
         // and delete load.
@@ -1484,18 +1484,18 @@ void SSAMemPass::FindCalledFuncs(uint32_t funcId) {
         continue;
       uint32_t calledFuncId =
         ii->GetSingleWordInOperand(SPV_FUNCTION_CALL_FUNCTION_ID);
-      if (liveFuncIds.find(calledFuncId) != liveFuncIds.end())
+      if (live_func_ids_.find(calledFuncId) != live_func_ids_.end())
         continue;
-      calledFuncIds.push(calledFuncId);
+      called_func_ids_.push(calledFuncId);
     }
   }
 }
 
 bool SSAMemPass::DeadFunctionElim() {
   bool modified = false;
-  liveFuncIds.clear();
+  live_func_ids_.clear();
   for (auto& e : module_->entry_points())
-    calledFuncIds.push(e.GetSingleWordOperand(SPV_ENTRY_POINT_FUNCTION_ID));
+    called_func_ids_.push(e.GetSingleWordOperand(SPV_ENTRY_POINT_FUNCTION_ID));
   for (auto& a : module_->annotations()) {
     if (a.opcode() != SpvOpDecorate)
       continue;
@@ -1508,19 +1508,19 @@ bool SSAMemPass::DeadFunctionElim() {
     const auto fii = id2function_.find(funcId);
     if (fii == id2function_.end())
       continue;
-    calledFuncIds.push(funcId);
+    called_func_ids_.push(funcId);
   }
-  while (!calledFuncIds.empty()) {
-    uint32_t funcId = calledFuncIds.front();
-    calledFuncIds.pop();
-    if (liveFuncIds.find(funcId) != liveFuncIds.end())
+  while (!called_func_ids_.empty()) {
+    uint32_t funcId = called_func_ids_.front();
+    called_func_ids_.pop();
+    if (live_func_ids_.find(funcId) != live_func_ids_.end())
       continue;
-    liveFuncIds.insert(funcId);
+    live_func_ids_.insert(funcId);
     FindCalledFuncs(funcId);
   }
   auto fni = module_->begin();
   while (fni != module_->end()) {
-    if (liveFuncIds.find(fni->GetResultId()) == liveFuncIds.end()) {
+    if (live_func_ids_.find(fni->GetResultId()) == live_func_ids_.end()) {
       fni = fni.Erase();
       modified = true;
     }
@@ -1571,8 +1571,8 @@ void SSAMemPass::Initialize(ir::Module* module) {
   }
 
   // Initialize Target Type Caches
-  seenTargetVars.clear();
-  seenNonTargetVars.clear();
+  seen_target_vars_.clear();
+  seen_non_target_vars_.clear();
 };
 
 Pass::Status SSAMemPass::ProcessImpl() {

@@ -57,73 +57,66 @@ class SSAMemPass : public Pass {
   std::unordered_map<uint32_t, std::vector<uint32_t>> label2preds_;
 
   // Map from block's label id to its SSA map
-  std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>> label2SSA_;
+  std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>>
+      label2ssa_map_;
 
   // Map from SSA Variable to its single store
-  std::unordered_map<uint32_t, ir::Instruction*> ssaVars;
+  std::unordered_map<uint32_t, ir::Instruction*> ssa_var2store_;
 
   // Map from store to its ordinal position in the function.
-  std::unordered_map<ir::Instruction*, uint32_t> storeIdx;
+  std::unordered_map<ir::Instruction*, uint32_t> store2idx_;
 
   // Set of non-SSA Variables
-  std::unordered_set<uint32_t> nonSsaVars;
+  std::unordered_set<uint32_t> non_ssa_vars_;
 
   // Set of verified target types
-  std::unordered_set<uint32_t> seenTargetVars;
+  std::unordered_set<uint32_t> seen_target_vars_;
 
   // Set of verified non-target types
-  std::unordered_set<uint32_t> seenNonTargetVars;
+  std::unordered_set<uint32_t> seen_non_target_vars_;
 
   // Map from type to undef for current function
-  std::unordered_map<uint32_t, uint32_t> type2Undefs;
+  std::unordered_map<uint32_t, uint32_t> type2undefs_;
 
   // Set of label ids of visited blocks
   std::unordered_set<uint32_t> visitedBlocks;
 
   // Map from variable to its live store in block
-  std::unordered_map<uint32_t, ir::Instruction*> sbVarStores;
+  std::unordered_map<uint32_t, ir::Instruction*> var2store_;
 
   // Map from variable to its live load in block
-  std::unordered_map<uint32_t, ir::Instruction*> sbVarLoads;
+  std::unordered_map<uint32_t, ir::Instruction*> var2load_;
 
   // Set of undeletable variables
-  std::unordered_set<uint32_t> sbPinnedVars;
+  std::unordered_set<uint32_t> pinned_vars_;
 
   // Map from block id to loop. 0 indicates no loop.
   std::unordered_map<uint32_t, uint32_t> block2loop_;
 
   // Map from loop to last block.
-  std::unordered_map<uint32_t, uint32_t> loop2lastBlock_;
+  std::unordered_map<uint32_t, uint32_t> loop2last_block_;
 
   // Map from block to ordinal
   std::unordered_map<uint32_t, uint32_t> block2ord_;
 
   // Map from variable to last load block
-  std::unordered_map<uint32_t, uint32_t> var2lastLoadBlock_;
+  std::unordered_map<uint32_t, uint32_t> var2last_load_block_;
 
   // Map from variable to last live block
-  std::unordered_map<uint32_t, uint32_t> var2lastLiveBlock_;
+  std::unordered_map<uint32_t, uint32_t> var2last_live_block_;
 
   // Map from uniform to load id
-  std::unordered_map<uint32_t, uint32_t> uniform2loadId_;
+  std::unordered_map<uint32_t, uint32_t> uniform2load_id_;
 
   // Map of extract composite ids to map of indices to insts
   std::unordered_map<uint32_t, std::unordered_map<uint32_t,
       std::list<ir::Instruction*>>> comp2idx2inst_;
 
   // Set of live function ids
-  std::set<uint32_t> liveFuncIds;
+  std::set<uint32_t> live_func_ids_;
 
   // Stack of called function ids
-  std::queue<uint32_t> calledFuncIds;
-
-  // Returns true if type is a scalar type
-  // or a vector or matrix
-  bool IsMathType(const ir::Instruction* typeInst);
-
-  // Returns true if type is a scalar, vector, matrix
-  // or struct of only those types
-  bool IsTargetType(const ir::Instruction* typeInst);
+  std::queue<uint32_t> called_func_ids_;
 
   // Next unused ID
   uint32_t next_id_;
@@ -136,6 +129,16 @@ class SSAMemPass : public Pass {
     return next_id_++;
   }
 
+  // Returns true if type is a scalar type
+  // or a vector or matrix
+  bool IsMathType(const ir::Instruction* typeInst);
+
+  // Returns true if type is a scalar, vector, matrix
+  // or struct of only those types
+  bool IsTargetType(const ir::Instruction* typeInst);
+
+  // Given a load or store pointed at by |ip|, return the pointer
+  // instruction. Also return the variable's id in |varId|.
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
 
   // Return true if variable is uniform
@@ -277,7 +280,7 @@ class SSAMemPass : public Pass {
   // Return undef in function for type. Create and insert an undef after the
   // first non-variable in the function if it doesn't already exist. Add
   // undef to function undef map.
-  uint32_t type2Undef(uint32_t type_id);
+  uint32_t Type2Undef(uint32_t type_id);
 
   // Patch phis in loop header block now that the map is complete for the
   // backedge predecessor. Specifically, for each phi, find the value
