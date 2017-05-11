@@ -139,7 +139,7 @@ class SSAMemPass : public Pass {
 
   // Given a load or store pointed at by |ip|, return the pointer
   // instruction. Also return the variable's id in |varId|.
-  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t& varId);
+  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t* varId);
 
   // Return true if variable is uniform
   bool IsUniformVar(uint32_t varId);

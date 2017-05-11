@@ -87,13 +87,13 @@ bool SSAMemPass::IsTargetType(const ir::Instruction* typeInst) {
   return nonMathComp == 0;
 }
 
-ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t& varId) {
+ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t* varId) {
   const uint32_t ptrId = ip->opcode() == SpvOpStore ?
       ip->GetInOperand(kSpvStorePtrId).words[0] :
       ip->GetInOperand(kSpvLoadPtrId).words[0];
   ir::Instruction* ptrInst =
     def_use_mgr_->id_to_defs().find(ptrId)->second;
-  varId = ptrInst->opcode() == SpvOpAccessChain ?
+  *varId = ptrInst->opcode() == SpvOpAccessChain ?
     ptrInst->GetInOperand(kSpvAccessChainPtrId).words[0] :
     ptrId;
   return ptrInst;
@@ -151,7 +151,7 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
         continue;
       // Verify store variable is target type
       uint32_t varId;
-      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
       if (non_ssa_vars_.find(varId) != non_ssa_vars_.end())
         continue;
       if (ptrInst->opcode() == SpvOpAccessChain) {
@@ -207,7 +207,7 @@ bool SSAMemPass::SingleStoreProcess(ir::Function* func) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
-      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
       // Skip access chain loads
       if (ptrInst->opcode() == SpvOpAccessChain)
         continue;
@@ -268,7 +268,7 @@ bool SSAMemPass::IsLiveVar(uint32_t varId) {
 bool SSAMemPass::IsLiveStore(ir::Instruction* storeInst) {
   // get store's variable
   uint32_t varId;
-  (void) GetPtr(storeInst, varId);
+  (void) GetPtr(storeInst, &varId);
   return IsLiveVar(varId);
 }
 
@@ -288,7 +288,7 @@ void SSAMemPass::DCEInst(ir::Instruction* inst) {
     });
     uint32_t varId = 0;
     if (di->opcode() == SpvOpLoad)
-      (void) GetPtr(di, varId);
+      (void) GetPtr(di, &varId);
     def_use_mgr_->KillInst(di);
     while (!ids.empty()) {
       uint32_t id = ids.front();
@@ -356,7 +356,7 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
       case SpvOpStore: {
         // Verify store variable is target type
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (!IsTargetVar(varId))
           continue;
         // Register the store
@@ -380,7 +380,7 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
       case SpvOpLoad: {
         // Verify store variable is target type
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (!IsTargetVar(varId))
           continue;
         // Look for previous store or load
@@ -431,7 +431,7 @@ bool SSAMemPass::FuncDCE(ir::Function* func) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
-        (void)GetPtr(&*ii, varId);
+        (void)GetPtr(&*ii, &varId);
         if (IsLiveVar(varId))
           break;
         DCEInst(&*ii);
@@ -585,7 +585,7 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
       case SpvOpStore:
       case SpvOpLoad: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (ptrInst->opcode() != SpvOpAccessChain)
           break;
         if (!IsTargetVar(varId))
@@ -608,7 +608,7 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
       switch (ii->opcode()) {
       case SpvOpLoad: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (ptrInst->opcode() != SpvOpAccessChain)
           break;
         if (!IsTargetVar(varId))
@@ -624,7 +624,7 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
       } break;
       case SpvOpStore: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (ptrInst->opcode() != SpvOpAccessChain)
           break;
         if (!IsTargetVar(varId))
@@ -655,7 +655,7 @@ bool SSAMemPass::UniformAccessChainConvert(ir::Function* func) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
-      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
       if (ptrInst->opcode() != SpvOpAccessChain)
         continue;
       if (!IsUniformVar(varId))
@@ -694,7 +694,7 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
-      ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+      ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
       if (ptrInst->opcode() == SpvOpAccessChain)
         continue;
       if (!IsUniformVar(varId))
@@ -847,7 +847,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       if (inst.opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
-      (void) GetPtr(&inst, varId);
+      (void) GetPtr(&inst, &varId);
       if (!IsTargetVar(varId))
         break;
       var2last_load_block_[varId] = blkId;
@@ -926,7 +926,7 @@ void SSAMemPass::SSABlockInitLoopHeader(
       if (ii->opcode() != SpvOpStore)
         continue;
       uint32_t varId;
-      (void) GetPtr(&*ii, varId);
+      (void) GetPtr(&*ii, &varId);
       if (!IsTargetVar(varId))
         break;
       liveVars[varId] = 0;
@@ -1116,7 +1116,7 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (!IsTargetVar(varId))
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
@@ -1126,7 +1126,7 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
       } break;
       case SpvOpLoad: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (!IsTargetVar(varId))
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
@@ -1171,7 +1171,7 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
       if (ii->opcode() != SpvOpStore)
         continue;
       uint32_t varId;
-      (void) GetPtr(&*ii, varId);
+      (void) GetPtr(&*ii, &varId);
       if (!IsTargetVar(varId))
         break;
       assert(!HasLoads(varId));
@@ -1250,7 +1250,7 @@ bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (ptrInst->opcode() != SpvOpVariable)
           break;
         if (!IsTargetVar(varId))
@@ -1296,7 +1296,7 @@ bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
         switch (ii->opcode()) {
         case SpvOpLoad: {
           uint32_t varId;
-          ir::Instruction* ptrInst = GetPtr(&*ii, varId);
+          ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
           if (ptrInst->opcode() != SpvOpVariable)
             break;
           if (!IsTargetVar(varId))
