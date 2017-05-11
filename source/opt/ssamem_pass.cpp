@@ -28,34 +28,30 @@
 #define SPV_TYPE_POINTER_TYPE_ID 2
 */
 
-static const int SPV_ENTRY_POINT_FUNCTION_ID = 1;
-static const int SPV_FUNCTION_CALL_FUNCTION_ID = 0;
-static const int SPV_DECORATION_TARGET_ID = 0;
-static const int SPV_DECORATION_DECORATION = 1;
-static const int SPV_DECORATION_LINKAGE_TYPE = 3;
-static const int SPV_STORE_PTR_ID = 0;
-static const int SPV_STORE_VAL_ID = 1;
-static const int SPV_ACCESS_CHAIN_PTR_ID = 0;
-static const int SPV_ACCESS_CHAIN_IDX0_ID = 1;
-static const int SPV_TYPE_PTR_STORAGE_CLASS = 0;
-static const int SPV_TYPE_PTR_TYPE_ID = 1;
-static const int SPV_LOAD_PTR_ID = 0;
-static const int SPV_CONSTANT_VALUE = 0;
-static const int SPV_EXTRACT_COMPOSITE_ID = 0;
-static const int SPV_EXTRACT_IDX0 = 1;
-static const int SPV_INSERT_OBJECT_ID = 0;
-static const int SPV_INSERT_COMPOSITE_ID = 1;
-static const int SPV_BRANCH_TARGET_LAB_ID = 0;
-static const int SPV_BRANCH_COND_CONDITIONAL_ID = 0;
-static const int SPV_BRANCH_COND_TRUE_LAB_ID = 1;
-static const int SPV_BRANCH_COND_FALSE_LAB_ID = 2;
-static const int SPV_SEL_MERGE_LAB_ID = 0;
-static const int SPV_PHI_VAL0_ID = 0;
-static const int SPV_PHI_LAB0_ID = 1;
-static const int SPV_PHI_VAL1_ID = 2;
-static const int SPV_LOOP_MERGE_BLK_ID = 0;
-static const int SPV_SELECT_MERGE_BLK_ID = 0;
-
+static const int kSpvEntryPointFunctionId = 1;
+static const int kSpvFunctionCallFunctionId = 0;
+static const int kSpvDecorationTargetId = 0;
+static const int kSpvDecorationDecoration = 1;
+static const int kSpvDecorationLinkageType = 3;
+static const int kSpvStorePtrId = 0;
+static const int kSpvStoreValId = 1;
+static const int kSpvLoadPtrId = 0;
+static const int kSpvAccessChainPtrId = 0;
+static const int kSpvTypePointerStorageClass = 0;
+static const int kSpvTypePointerTypeId = 1;
+static const int kSpvConstantValue = 0;
+static const int kSpvExtractCompositeId = 0;
+static const int kSpvExtractIdx0 = 1;
+static const int kSpvInsertObjectId = 0;
+static const int kSpvInsertCompositeId = 1;
+static const int kSpvBranchCondConditionalId = 0;
+static const int kSpvBranchCondTrueLabId = 1;
+static const int kSpvBranchCondFalseLabId = 2;
+static const int kSpvSelectionMergeMergeBlockId = 0;
+static const int kSpvPhiVal0Id = 0;
+static const int kSpvPhiLab0Id = 1;
+static const int kSpvPhiVal1Id = 2;
+static const int kSpvLoopMergeMergeBlockId = 0;
 
 namespace spvtools {
 namespace opt {
@@ -93,12 +89,12 @@ bool SSAMemPass::IsTargetType(const ir::Instruction* typeInst) {
 
 ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t& varId) {
   const uint32_t ptrId = ip->opcode() == SpvOpStore ?
-      ip->GetInOperand(SPV_STORE_PTR_ID).words[0] :
-      ip->GetInOperand(SPV_LOAD_PTR_ID).words[0];
+      ip->GetInOperand(kSpvStorePtrId).words[0] :
+      ip->GetInOperand(kSpvLoadPtrId).words[0];
   ir::Instruction* ptrInst =
     def_use_mgr_->id_to_defs().find(ptrId)->second;
   varId = ptrInst->opcode() == SpvOpAccessChain ?
-    ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0] :
+    ptrInst->GetInOperand(kSpvAccessChainPtrId).words[0] :
     ptrId;
   return ptrInst;
 }
@@ -110,9 +106,9 @@ bool SSAMemPass::IsUniformVar(uint32_t varId) {
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst =
     def_use_mgr_->id_to_defs().find(varTypeId)->second;
-  return varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] ==
+  return varTypeInst->GetInOperand(kSpvTypePointerStorageClass).words[0] ==
     SpvStorageClassUniform ||
-    varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] ==
+    varTypeInst->GetInOperand(kSpvTypePointerStorageClass).words[0] ==
     SpvStorageClassUniformConstant;
 }
 
@@ -127,13 +123,13 @@ bool SSAMemPass::IsTargetVar(uint32_t varId) {
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst =
     def_use_mgr_->id_to_defs().find(varTypeId)->second;
-  if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
+  if (varTypeInst->GetInOperand(kSpvTypePointerStorageClass).words[0] !=
     SpvStorageClassFunction) {
     seen_non_target_vars_.insert(varId);
     return false;
   }
   const uint32_t varPteTypeId =
-    varTypeInst->GetInOperand(SPV_TYPE_PTR_TYPE_ID).words[0];
+    varTypeInst->GetInOperand(kSpvTypePointerTypeId).words[0];
   ir::Instruction* varPteTypeInst =
     def_use_mgr_->id_to_defs().find(varPteTypeId)->second;
   if (!IsTargetType(varPteTypeInst)) {
@@ -222,7 +218,7 @@ bool SSAMemPass::SingleStoreProcess(ir::Function* func) {
       if (non_ssa_vars_.find(varId) != non_ssa_vars_.end())
         continue;
       // Use store value as replacement id
-      uint32_t replId = vsi->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
+      uint32_t replId = vsi->second->GetInOperand(kSpvStoreValId).words[0];
       // store must dominate load
       if (instIdx < store2idx_[vsi->second])
         continue;
@@ -262,7 +258,7 @@ bool SSAMemPass::IsLiveVar(uint32_t varId) {
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst =
       def_use_mgr_->id_to_defs().find(varTypeId)->second;
-  if (varTypeInst->GetInOperand(SPV_TYPE_PTR_STORAGE_CLASS).words[0] !=
+  if (varTypeInst->GetInOperand(kSpvTypePointerStorageClass).words[0] !=
       SpvStorageClassFunction)
     return true;
   // test if variable is loaded from
@@ -392,7 +388,7 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
         if (ptrInst->opcode() == SpvOpVariable) {
           auto si = var2store_.find(varId);
           if (si != var2store_.end()) {
-            replId = si->second->GetInOperand(SPV_STORE_VAL_ID).words[0];
+            replId = si->second->GetInOperand(kSpvStoreValId).words[0];
           }
           else {
             auto li = var2load_.find(varId);
@@ -461,7 +457,7 @@ uint32_t SSAMemPass::GetPteTypeId(const ir::Instruction* ptrInst) {
   const uint32_t ptrTypeId = ptrInst->type_id();
   const ir::Instruction* ptrTypeInst =
       def_use_mgr_->id_to_defs().find(ptrTypeId)->second;
-  return ptrTypeInst->GetInOperand(SPV_TYPE_PTR_TYPE_ID).words[0];
+  return ptrTypeInst->GetInOperand(kSpvTypePointerTypeId).words[0];
 }
 
 void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
@@ -471,7 +467,7 @@ void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
   // Build and append Load
   const uint32_t ldResultId = TakeNextId();
   const uint32_t varId =
-    ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0];
+    ptrInst->GetInOperand(kSpvAccessChainPtrId).words[0];
   const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
   assert(varInst->opcode() == SpvOpVariable);
   const uint32_t varPteTypeId = GetPteTypeId(varInst);
@@ -495,7 +491,7 @@ void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
   ptrInst->ForEachInId([&iidIdx, &ext_in_opnds, this](const uint32_t *iid) {
     if (iidIdx > 0) {
       const ir::Instruction* cInst = def_use_mgr_->GetDef(*iid);
-      uint32_t val = cInst->GetInOperand(SPV_CONSTANT_VALUE).words[0];
+      uint32_t val = cInst->GetInOperand(kSpvConstantValue).words[0];
       ext_in_opnds.push_back(
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
           std::initializer_list<uint32_t>{val}));
@@ -516,7 +512,7 @@ void SSAMemPass::GenACStoreRepl(const ir::Instruction* ptrInst,
   // Build and append Load
   const uint32_t ldResultId = TakeNextId();
   const uint32_t varId =
-    ptrInst->GetInOperand(SPV_ACCESS_CHAIN_PTR_ID).words[0];
+    ptrInst->GetInOperand(kSpvAccessChainPtrId).words[0];
   const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
   assert(varInst->opcode() == SpvOpVariable);
   const uint32_t varPteTypeId = GetPteTypeId(varInst);
@@ -542,7 +538,7 @@ void SSAMemPass::GenACStoreRepl(const ir::Instruction* ptrInst,
   ptrInst->ForEachInId([&iidIdx, &ins_in_opnds, this](const uint32_t *iid) {
     if (iidIdx > 0) {
       const ir::Instruction* cInst = def_use_mgr_->GetDef(*iid);
-      uint32_t val = cInst->GetInOperand(SPV_CONSTANT_VALUE).words[0];
+      uint32_t val = cInst->GetInOperand(kSpvConstantValue).words[0];
       ins_in_opnds.push_back(
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
           std::initializer_list<uint32_t>{val}));
@@ -634,7 +630,7 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
         if (!IsTargetVar(varId))
           break;
         std::vector<std::unique_ptr<ir::Instruction>> newInsts;
-        uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        uint32_t valId = ii->GetInOperand(kSpvStoreValId).words[0];
         GenACStoreRepl(ptrInst, valId, newInsts);
         def_use_mgr_->KillInst(&*ii);
         DeleteIfUseless(ptrInst);
@@ -743,8 +739,8 @@ bool SSAMemPass::CommonExtractElimination(ir::Function* func) {
         continue;
       if (ii->NumInOperands() > 2)
         continue;
-      uint32_t compId = ii->GetSingleWordInOperand(SPV_EXTRACT_COMPOSITE_ID);
-      uint32_t idx = ii->GetSingleWordInOperand(SPV_EXTRACT_IDX0);
+      uint32_t compId = ii->GetSingleWordInOperand(kSpvExtractCompositeId);
+      uint32_t idx = ii->GetSingleWordInOperand(kSpvExtractIdx0);
       comp2idx2inst_[compId][idx].push_back(&*ii);
     }
   }
@@ -791,9 +787,9 @@ uint32_t SSAMemPass::GetMergeBlkId(ir::BasicBlock* block_ptr) {
     return 0;
   iItr--;
   if (iItr->opcode() == SpvOpLoopMerge)
-    return iItr->GetSingleWordInOperand(SPV_LOOP_MERGE_BLK_ID);
+    return iItr->GetSingleWordInOperand(kSpvLoopMergeMergeBlockId);
   else if (iItr->opcode() == SpvOpSelectionMerge)
-    return iItr->GetSingleWordInOperand(SPV_SELECT_MERGE_BLK_ID);
+    return iItr->GetSingleWordInOperand(kSpvSelectionMergeMergeBlockId);
   else
     return 0;
 }
@@ -844,7 +840,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       outerLoopCount++;
       outerLoopOrd = outerLoopCount;
       nextMergeBlockId =
-          blk.begin()->GetSingleWordInOperand(SPV_LOOP_MERGE_BLK_ID);
+          blk.begin()->GetSingleWordInOperand(kSpvLoopMergeMergeBlockId);
     }
     block2loop_[blkId] = outerLoopOrd;
     for (auto& inst : blk) {
@@ -899,7 +895,8 @@ uint32_t SSAMemPass::Type2Undef(uint32_t type_id) {
   return undefId;
 }
 
-void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> block_itr) {
+void SSAMemPass::SSABlockInitLoopHeader(
+    ir::UptrVectorIterator<ir::BasicBlock> block_itr) {
   uint32_t label = block_itr->GetLabelId();
   // Determine backedge label.
   uint32_t backLabel = 0;
@@ -912,7 +909,8 @@ void SSAMemPass::SSABlockInitLoopHeader(ir::UptrVectorIterator<ir::BasicBlock> b
   assert(backLabel != 0);
   // Determine merge block.
   auto mergeInst = block_itr->begin();
-  uint32_t mergeLabel = mergeInst->GetSingleWordInOperand(SPV_LOOP_MERGE_BLK_ID);
+  uint32_t mergeLabel = mergeInst->GetSingleWordInOperand(
+      kSpvLoopMergeMergeBlockId);
   // Collect all live variables and a default value for each across all
   // non-backedge predecesors.
   std::unordered_map<uint32_t, uint32_t> liveVars;
@@ -1122,7 +1120,7 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
         if (!IsTargetVar(varId))
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
-        uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        uint32_t valId = ii->GetInOperand(kSpvStoreValId).words[0];
         // Register new stored value for the variable
         label2ssa_map_[label][varId] = valId;
       } break;
@@ -1217,17 +1215,17 @@ bool SSAMemPass::InsertExtractElim(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ii++) {
       switch (ii->opcode()) {
       case SpvOpCompositeExtract: {
-        uint32_t cid = ii->GetInOperand(SPV_EXTRACT_COMPOSITE_ID).words[0];
+        uint32_t cid = ii->GetInOperand(kSpvExtractCompositeId).words[0];
         ir::Instruction* cinst = def_use_mgr_->GetDef(cid);
         uint32_t replId = 0;
         while (cinst->opcode() == SpvOpCompositeInsert) {
           if (SSAMemExtInsConflict(&*ii, cinst))
             break;
           if (SSAMemExtInsMatch(&*ii, cinst)) {
-            replId = cinst->GetInOperand(SPV_INSERT_OBJECT_ID).words[0];
+            replId = cinst->GetInOperand(kSpvInsertObjectId).words[0];
             break;
           }
-          cid = cinst->GetInOperand(SPV_INSERT_COMPOSITE_ID).words[0];
+          cid = cinst->GetInOperand(kSpvInsertCompositeId).words[0];
           cinst = def_use_mgr_->GetDef(cid);
         }
         if (replId == 0)
@@ -1260,7 +1258,7 @@ bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
         analysis::UseList* vuses = def_use_mgr_->GetUses(varId);
         if (vuses->size() > 2)
           break;
-        uint32_t valId = ii->GetInOperand(SPV_STORE_VAL_ID).words[0];
+        uint32_t valId = ii->GetInOperand(kSpvStoreValId).words[0];
         ir::Instruction* vinst = def_use_mgr_->GetDef(valId);
         uint32_t intermediate = false;
         while (vinst->opcode() == SpvOpCompositeInsert) {
@@ -1270,13 +1268,13 @@ bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
             if (uses->size() > 1)
               break;
           }
-          valId = vinst->GetInOperand(SPV_INSERT_COMPOSITE_ID).words[0];
+          valId = vinst->GetInOperand(kSpvInsertCompositeId).words[0];
           vinst = def_use_mgr_->GetDef(valId);
           intermediate = true;
         }
         if (vinst->opcode() != SpvOpLoad)
           break;
-        uint32_t lvarId = vinst->GetInOperand(SPV_LOAD_PTR_ID).words[0];
+        uint32_t lvarId = vinst->GetInOperand(kSpvLoadPtrId).words[0];
         if (lvarId != varId)
           break;
         const uint32_t resId = vinst->result_id();
@@ -1385,15 +1383,15 @@ bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
     bool condVal;
     bool condIsConst;
     (void) SSAMemGetConstCondition(
-        br->GetInOperand(SPV_BRANCH_COND_CONDITIONAL_ID).words[0],
+        br->GetInOperand(kSpvBranchCondConditionalId).words[0],
         &condVal,
         &condIsConst);
     if (!condIsConst)
       continue;
     // Replace conditional branch with unconditional branch
-    uint32_t trueLabId = br->GetInOperand(SPV_BRANCH_COND_TRUE_LAB_ID).words[0];
-    uint32_t falseLabId = br->GetInOperand(SPV_BRANCH_COND_FALSE_LAB_ID).words[0];
-    uint32_t mergeLabId = mergeInst->GetInOperand(SPV_SEL_MERGE_LAB_ID).words[0];
+    uint32_t trueLabId = br->GetInOperand(kSpvBranchCondTrueLabId).words[0];
+    uint32_t falseLabId = br->GetInOperand(kSpvBranchCondFalseLabId).words[0];
+    uint32_t mergeLabId = mergeInst->GetInOperand(kSpvSelectionMergeMergeBlockId).words[0];
     uint32_t liveLabId = condVal == true ? trueLabId : falseLabId;
     uint32_t deadLabId = condVal == true ? falseLabId : trueLabId;
     AddBranch(liveLabId, &*bi);
@@ -1430,9 +1428,9 @@ bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
     if (deadLabId == mergeLabId)
       deadLabIds.insert(bi->GetLabelId());
     dbi->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
-      uint32_t phiLabId0 = phiInst->GetInOperand(SPV_PHI_LAB0_ID).words[0];
+      uint32_t phiLabId0 = phiInst->GetInOperand(kSpvPhiLab0Id).words[0];
       bool useFirst = deadLabIds.find(phiLabId0) == deadLabIds.end();
-      uint32_t phiValIdx = useFirst ? SPV_PHI_VAL0_ID : SPV_PHI_VAL1_ID;
+      uint32_t phiValIdx = useFirst ? kSpvPhiVal0Id : kSpvPhiVal1Id;
       uint32_t replId = phiInst->GetInOperand(phiValIdx).words[0];
       uint32_t phiId = phiInst->result_id();
       (void)def_use_mgr_->ReplaceAllUsesWith(phiId, replId);
@@ -1489,7 +1487,7 @@ void SSAMemPass::FindCalledFuncs(uint32_t funcId) {
       if (ii->opcode() != SpvOpFunctionCall)
         continue;
       uint32_t calledFuncId =
-        ii->GetSingleWordInOperand(SPV_FUNCTION_CALL_FUNCTION_ID);
+        ii->GetSingleWordInOperand(kSpvFunctionCallFunctionId);
       if (live_func_ids_.find(calledFuncId) != live_func_ids_.end())
         continue;
       called_func_ids_.push(calledFuncId);
@@ -1501,15 +1499,15 @@ bool SSAMemPass::DeadFunctionElim() {
   bool modified = false;
   live_func_ids_.clear();
   for (auto& e : module_->entry_points())
-    called_func_ids_.push(e.GetSingleWordOperand(SPV_ENTRY_POINT_FUNCTION_ID));
+    called_func_ids_.push(e.GetSingleWordOperand(kSpvEntryPointFunctionId));
   for (auto& a : module_->annotations()) {
     if (a.opcode() != SpvOpDecorate)
       continue;
-    if (a.GetSingleWordInOperand(SPV_DECORATION_DECORATION) != SpvDecorationLinkageAttributes)
+    if (a.GetSingleWordInOperand(kSpvDecorationDecoration) != SpvDecorationLinkageAttributes)
       continue;
-    if (a.GetSingleWordInOperand(SPV_DECORATION_LINKAGE_TYPE) != SpvLinkageTypeExport)
+    if (a.GetSingleWordInOperand(kSpvDecorationLinkageType) != SpvLinkageTypeExport)
       continue;
-    uint32_t funcId = a.GetSingleWordInOperand(SPV_DECORATION_TARGET_ID);
+    uint32_t funcId = a.GetSingleWordInOperand(kSpvDecorationTargetId);
     // Verify that target id maps to a function
     const auto fii = id2function_.find(funcId);
     if (fii == id2function_.end())
@@ -1598,7 +1596,7 @@ Pass::Status SSAMemPass::ProcessImpl() {
   // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
-        id2function_[e.GetOperand(SPV_ENTRY_POINT_FUNCTION_ID).words[0]];
+        id2function_[e.GetOperand(kSpvEntryPointFunctionId).words[0]];
     modified = modified || SSAMem(fn);
   }
 
