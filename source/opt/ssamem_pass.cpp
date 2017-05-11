@@ -82,7 +82,7 @@ bool SSAMemPass::IsTargetType(const ir::Instruction* typeInst) {
         def_use_mgr_->id_to_defs().find(*tid)->second;
     // Ignore length operand in Array type
     if (compTypeInst->opcode() == SpvOpConstant) return;
-    if (!IsMathType(compTypeInst)) nonMathComp++;
+    if (!IsMathType(compTypeInst)) ++nonMathComp;
   });
   return nonMathComp == 0;
 }
@@ -145,8 +145,8 @@ void SSAMemPass::SingleStoreAnalyze(ir::Function* func) {
   non_ssa_vars_.clear();
   store2idx_.clear();
   uint32_t instIdx = 0;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii, ++instIdx) {
       if (ii->opcode() != SpvOpStore)
         continue;
       // Verify store variable is target type
@@ -202,8 +202,8 @@ void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
 bool SSAMemPass::SingleStoreProcess(ir::Function* func) {
   bool modified = false;
   uint32_t instIdx = 0;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++, instIdx++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii, ++instIdx) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
@@ -347,11 +347,11 @@ bool SSAMemPass::LocalSingleStoreElim(ir::Function* func) {
 
 bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
     var2store_.clear();
     var2load_.clear();
     pinned_vars_.clear();
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         // Verify store variable is target type
@@ -413,7 +413,7 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
       }
     }
     // Go back and delete useless stores in block
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpStore)
         continue;
       if (IsLiveStore(&*ii))
@@ -426,8 +426,8 @@ bool SSAMemPass::LocalSingleBlockElim(ir::Function* func) {
 
 bool SSAMemPass::FuncDCE(ir::Function* func) {
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
@@ -496,7 +496,7 @@ void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
           std::initializer_list<uint32_t>{val}));
     }
-    iidIdx++;
+    ++iidIdx;
   });
   std::unique_ptr<ir::Instruction> newExt(new ir::Instruction(
     SpvOpCompositeExtract, ptrPteTypeId, extResultId, ext_in_opnds));
@@ -543,7 +543,7 @@ void SSAMemPass::GenACStoreRepl(const ir::Instruction* ptrInst,
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
           std::initializer_list<uint32_t>{val}));
     }
-    iidIdx++;
+    ++iidIdx;
   });
   std::unique_ptr<ir::Instruction> newIns(new ir::Instruction(
     SpvOpCompositeInsert, varPteTypeId, insResultId, ins_in_opnds));
@@ -570,17 +570,17 @@ bool SSAMemPass::IsConstantIndexAccessChain(ir::Instruction* acp) {
   acp->ForEachInId([&inIdx, &nonConstCnt, this](uint32_t* tid) {
     if (inIdx > 0) {
       ir::Instruction* opInst = def_use_mgr_->GetDef(*tid);
-      if (opInst->opcode() != SpvOpConstant) nonConstCnt++;
+      if (opInst->opcode() != SpvOpConstant) ++nonConstCnt;
     }
-    inIdx++;
+    ++inIdx;
   });
   return nonConstCnt == 0;
 }
 
 bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
   // rule out variables accessed with non-constant indices
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpStore:
       case SpvOpLoad: {
@@ -603,8 +603,8 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
   }
   // replace ACs of all targeted variables
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpLoad: {
         uint32_t varId;
@@ -617,9 +617,9 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
         uint32_t replId;
         GenACLoadRepl(ptrInst, newInsts, replId);
         ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
-        ii++;
+        ++ii;
         ii = ii.MoveBefore(newInsts);
-        ii++;
+        ++ii;
         modified = true;
       } break;
       case SpvOpStore: {
@@ -634,10 +634,10 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
         GenACStoreRepl(ptrInst, valId, newInsts);
         def_use_mgr_->KillInst(&*ii);
         DeleteIfUseless(ptrInst);
-        ii++;
+        ++ii;
         ii = ii.MoveBefore(newInsts);
-        ii++;
-        ii++;
+        ++ii;
+        ++ii;
         modified = true;
       } break;
       default:
@@ -650,8 +650,8 @@ bool SSAMemPass::LocalAccessChainConvert(ir::Function* func) {
 
 bool SSAMemPass::UniformAccessChainConvert(ir::Function* func) {
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
@@ -666,9 +666,9 @@ bool SSAMemPass::UniformAccessChainConvert(ir::Function* func) {
       uint32_t replId;
       GenACLoadRepl(ptrInst, newInsts, replId);
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
-      ii++;
+      ++ii;
       ii = ii.MoveBefore(newInsts);
-      ii++;
+      ++ii;
       modified = true;
     }
   }
@@ -681,16 +681,16 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
   // loads.
   auto insertItr = func->begin()->begin();
   while (insertItr->opcode() == SpvOpVariable || insertItr->opcode() == SpvOpNop)
-    insertItr++;
+    ++insertItr;
   uint32_t mergeBlockId = 0;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
     // Check if we are exiting control flow
     if (mergeBlockId == bi->GetLabelId())
       mergeBlockId = 0;
     // Check if we are enterinig loop
     if (mergeBlockId == 0 && IsLoopHeader(&*bi))
       mergeBlockId = GetMergeBlkId(&*bi);
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
@@ -717,7 +717,7 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
             ii->type_id(), replId, {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {varId}}}));
           def_use_mgr_->AnalyzeInstDefUse(&*newLoad);
           insertItr = insertItr.InsertBefore(std::move(newLoad));
-          insertItr++;
+          ++insertItr;
           uniform2load_id_[varId] = replId;
         }
       }
@@ -733,8 +733,8 @@ bool SSAMemPass::CommonUniformLoadElimination(ir::Function* func) {
 
 bool SSAMemPass::CommonExtractElimination(ir::Function* func) {
   // Find all composite ids with duplicate extracts.
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpCompositeExtract)
         continue;
       if (ii->NumInOperands() > 2)
@@ -747,8 +747,8 @@ bool SSAMemPass::CommonExtractElimination(ir::Function* func) {
   // For all defs of ids with duplicate extracts, insert new extracts
   // after def, and replace and delete old extracts
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       const auto cItr = comp2idx2inst_.find(ii->result_id());
       if (cItr == comp2idx2inst_.end())
         continue;
@@ -759,7 +759,7 @@ bool SSAMemPass::CommonExtractElimination(ir::Function* func) {
         std::unique_ptr<ir::Instruction> newExtract(new ir::Instruction(*idxItr.second.front()));
         newExtract->SetResultId(replId);
         def_use_mgr_->AnalyzeInstDefUse(&*newExtract);
-        ii++;
+        ++ii;
         ii = ii.InsertBefore(std::move(newExtract));
         for (auto instItr : idxItr.second) {
           (void)def_use_mgr_->ReplaceAllUsesWith(instItr->result_id(), replId);
@@ -782,10 +782,10 @@ bool SSAMemPass::IsStructured(ir::Function* func) {
 
 uint32_t SSAMemPass::GetMergeBlkId(ir::BasicBlock* block_ptr) {
   auto iItr = block_ptr->end();
-  iItr--;
+  --iItr;
   if (iItr == block_ptr->begin())
     return 0;
-  iItr--;
+  --iItr;
   if (iItr->opcode() == SpvOpLoopMerge)
     return iItr->GetSingleWordInOperand(kSpvLoopMergeMergeBlockId);
   else if (iItr->opcode() == SpvOpSelectionMerge)
@@ -796,10 +796,10 @@ uint32_t SSAMemPass::GetMergeBlkId(ir::BasicBlock* block_ptr) {
 
 bool SSAMemPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
   auto iItr = block_ptr->end();
-  iItr--;
+  --iItr;
   if (iItr == block_ptr->begin())
     return false;
-  iItr--;
+  --iItr;
   return iItr->opcode() == SpvOpLoopMerge;
 }
 
@@ -837,7 +837,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       outerLoopOrd = 0;
     }
     if (outerLoopOrd == 0 && IsLoopHeader(&blk)) {
-      outerLoopCount++;
+      ++outerLoopCount;
       outerLoopOrd = outerLoopCount;
       nextMergeBlockId =
           blk.begin()->GetSingleWordInOperand(kSpvLoopMergeMergeBlockId);
@@ -853,7 +853,7 @@ void SSAMemPass::InitSSARewrite(ir::Function& func) {
       var2last_load_block_[varId] = blkId;
     }
     lastBlkId = blkId;
-    blockOrd++;
+    ++blockOrd;
   }
   // Compute the last live block for each variable
   for (auto& var_blk : var2last_load_block_) {
@@ -921,8 +921,8 @@ void SSAMemPass::SSABlockInitLoopHeader(
     }
   }
   // Add all stored variables in loop. Set their default value id to zero.
-  for (auto bi = block_itr; bi->GetLabelId() != mergeLabel; bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = block_itr; bi->GetLabelId() != mergeLabel; ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpStore)
         continue;
       uint32_t varId;
@@ -1001,7 +1001,7 @@ void SSAMemPass::SSABlockInitLoopHeader(
     // phi backedge predecessor value is patched.
     def_use_mgr_->AnalyzeInstDef(&*newPhi);
     insertItr = insertItr.InsertBefore(std::move(newPhi));
-    insertItr++;
+    ++insertItr;
     label2ssa_map_[label].insert({ varId, phiId });
   }
 }
@@ -1065,7 +1065,7 @@ void SSAMemPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
       new ir::Instruction(SpvOpPhi, typeId, phiId, phi_in_operands));
     def_use_mgr_->AnalyzeInstDefUse(&*newPhi);
     insertItr = insertItr.InsertBefore(std::move(newPhi));
-    insertItr++;
+    ++insertItr;
     label2ssa_map_[label].insert({varId, phiId});
   }
 }
@@ -1085,12 +1085,12 @@ void SSAMemPass::SSABlockInit(ir::UptrVectorIterator<ir::BasicBlock> block_itr) 
 void SSAMemPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
   ir::BasicBlock* header = label2block_[header_id];
   auto phiItr = header->begin();
-  for (; phiItr->opcode() == SpvOpPhi; phiItr++) {
+  for (; phiItr->opcode() == SpvOpPhi; ++phiItr) {
     uint32_t cnt = 0;
     uint32_t idx;
     phiItr->ForEachInId([&cnt,&back_id,&idx](uint32_t* iid) {
       if (cnt % 2 == 1 && *iid == back_id) idx = cnt - 1;
-      cnt++;
+      ++cnt;
     });
     // Only patch operands that are in the backedge predecessor map
     uint32_t varId = phiItr->GetSingleWordInOperand(idx);
@@ -1108,11 +1108,11 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
     return false;
   InitSSARewrite(*func);
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
     // Initialize this block's SSA map using predecessor's maps.
     SSABlockInit(bi);
     uint32_t label = bi->GetLabelId();
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
@@ -1166,8 +1166,8 @@ bool SSAMemPass::LocalSSARewrite(ir::Function* func) {
       PatchPhis(header, label);
   }
   // Remove all target variable stores.
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpStore)
         continue;
       uint32_t varId;
@@ -1188,7 +1188,7 @@ bool SSAMemPass::SSAMemExtInsMatch(ir::Instruction* extInst,
   if (extInst->NumInOperands() != insInst->NumInOperands() - 1)
     return false;
   uint32_t numIdx = extInst->NumInOperands() - 1;
-  for (uint32_t i = 0; i < numIdx; i++)
+  for (uint32_t i = 0; i < numIdx; ++i)
     if (extInst->GetInOperand(i + 1).words[0] !=
         insInst->GetInOperand(i + 2).words[0])
       return false;
@@ -1202,7 +1202,7 @@ bool SSAMemPass::SSAMemExtInsConflict(ir::Instruction* extInst,
   uint32_t extNumIdx = extInst->NumInOperands() - 1;
   uint32_t insNumIdx = insInst->NumInOperands() - 2;
   uint32_t numIdx = extNumIdx < insNumIdx ? extNumIdx : insNumIdx;
-  for (uint32_t i = 0; i < numIdx; i++)
+  for (uint32_t i = 0; i < numIdx; ++i)
     if (extInst->GetInOperand(i + 1).words[0] !=
         insInst->GetInOperand(i + 2).words[0])
       return false;
@@ -1211,8 +1211,8 @@ bool SSAMemPass::SSAMemExtInsConflict(ir::Instruction* extInst,
 
 bool SSAMemPass::InsertExtractElim(ir::Function* func) {
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpCompositeExtract: {
         uint32_t cid = ii->GetInOperand(kSpvExtractCompositeId).words[0];
@@ -1245,8 +1245,8 @@ bool SSAMemPass::InsertExtractElim(ir::Function* func) {
 
 bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
@@ -1291,8 +1291,8 @@ bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
   }
   if (modified) {
     // look for loads with no stores and replace with undef
-    for (auto bi = func->begin(); bi != func->end(); bi++) {
-      for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+    for (auto bi = func->begin(); bi != func->end(); ++bi) {
+      for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
         switch (ii->opcode()) {
         case SpvOpLoad: {
           uint32_t varId;
@@ -1309,7 +1309,7 @@ bool SSAMemPass::InsertCycleBreak(ir::Function* func) {
               new ir::Instruction(SpvOpUndef, typeId, undefId, {}));
             def_use_mgr_->AnalyzeInstDefUse(&*undef_inst);
             ii = ii.InsertBefore(std::move(undef_inst));
-            ii++; // back to load
+            ++ii; // back to load
             assert(ii->opcode() == SpvOpLoad);
             uint32_t loadId = ii->result_id();
             (void)def_use_mgr_->ReplaceAllUsesWith(loadId, undefId);
@@ -1368,13 +1368,13 @@ void SSAMemPass::SSAMemKillBlk(ir::BasicBlock* bp) {
 
 bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
     auto ii = bi->end();
-    ii--;
+    --ii;
     ir::Instruction* br = &*ii;
     if (br->opcode() != SpvOpBranchConditional)
       continue;
-    ii--;
+    --ii;
     ir::Instruction* mergeInst = &*ii;
     // GSF TBD Verify that both branches are also sequences of
     // structured control flow
@@ -1401,7 +1401,7 @@ bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
     std::unordered_set<uint32_t> deadLabIds;
     deadLabIds.insert(deadLabId);
     auto dbi = bi;
-    dbi++;
+    ++dbi;
     uint32_t dLabId = dbi->GetLabelId();
     while (dLabId != mergeLabId) {
       if (deadLabIds.find(dLabId) != deadLabIds.end()) {
@@ -1418,8 +1418,9 @@ bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
         SSAMemKillBlk(&*dbi);
         dbi = dbi.Erase();
       }
-      else
-        dbi++;
+      else {
+        ++dbi;
+      }
       dLabId = dbi->GetLabelId();
     }
     // process phi instructions in merge block
@@ -1446,28 +1447,28 @@ bool SSAMemPass::BlockMerge(ir::Function* func) {
   for (auto bi = func->begin(); bi != func->end(); ) {
     // Do not merge loop header blocks, at least for now.
     if (IsLoopHeader(&*bi)) {
-      bi++;
+      ++bi;
       continue;
     }
     // Find block with single successor which has
     // no other predecessors
     auto ii = bi->end();
-    ii--;
+    --ii;
     ir::Instruction* br = &*ii;
     if (br->opcode() != SpvOpBranch) {
-      bi++;
+      ++bi;
       continue;
     }
     uint32_t labId = br->GetInOperand(0).words[0];
     analysis::UseList* uses = def_use_mgr_->GetUses(labId);
     if (uses->size() > 1) {
-      bi++;
+      ++bi;
       continue;
     }
     // Merge blocks
     def_use_mgr_->KillInst(br);
     auto sbi = bi;
-    for (; sbi != func->end(); sbi++)
+    for (; sbi != func->end(); ++sbi)
       if (sbi->GetLabelId() == labId)
         break;
     assert(sbi != func->end());
@@ -1482,8 +1483,8 @@ bool SSAMemPass::BlockMerge(ir::Function* func) {
 
 void SSAMemPass::FindCalledFuncs(uint32_t funcId) {
   ir::Function* func = id2function_[funcId];
-  for (auto bi = func->begin(); bi != func->end(); bi++) {
-    for (auto ii = bi->begin(); ii != bi->end(); ii++) {
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpFunctionCall)
         continue;
       uint32_t calledFuncId =
@@ -1529,7 +1530,7 @@ bool SSAMemPass::DeadFunctionElim() {
       modified = true;
     }
     else {
-      fni++;
+      ++fni;
     }
   }
   return modified;
@@ -1591,7 +1592,7 @@ Pass::Status SSAMemPass::ProcessImpl() {
   for (const auto& id_def : def_use_mgr_->id_to_defs()) {
     next_id_ = std::max(next_id_, id_def.first);
   }
-  next_id_++;
+  ++next_id_;
 
   // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
