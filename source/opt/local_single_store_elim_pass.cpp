@@ -309,6 +309,8 @@ bool LocalSingleStoreElimPass::SingleStoreDCE() {
 bool LocalSingleStoreElimPass::LocalSingleStoreElim(ir::Function* func) {
   bool modified = false;
   SingleStoreAnalyze(func);
+  if (ssa_var2store_.empty())
+    return false;
   modified |= SingleStoreProcess(func);
   modified |= SingleStoreDCE();
   return modified;

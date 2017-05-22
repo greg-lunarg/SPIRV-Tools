@@ -111,12 +111,9 @@ class LocalSingleStoreElimPass : public Pass {
     ir::Instruction* ptrInst);
 
   // For each load of an SSA variable in |func|, replace all uses of
-  // the load with the value stored, if possible. Assumes that
-  // SingleStoreAnalyze() and SingleStoreProcess() has just been run.
-  // Return true if any instructions are modified.
-  // TODO(): Add requirement that store dominates load. Until then,
-  // the generated code is not incorrect, but we can lose the fact
-  // that the load is ultimately undefined.
+  // the load with the value stored if the store dominates the load.
+  // Assumes that SingleStoreAnalyze() has just been run. Return true
+  // if any instructions are modified.
   bool SingleStoreProcess(ir::Function* func);
 
   // Return true if any instruction loads from |varId|
