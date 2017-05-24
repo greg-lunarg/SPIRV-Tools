@@ -16,6 +16,7 @@
 
 #include "local_single_store_elim_pass.h"
 #include "iterator.h"
+#include "cfa.h"
 
 static const int kSpvEntryPointFunctionId = 1;
 static const int kSpvStorePtrId = 0;
@@ -24,6 +25,9 @@ static const int kSpvLoadPtrId = 0;
 static const int kSpvAccessChainPtrId = 0;
 static const int kSpvTypePointerStorageClass = 0;
 static const int kSpvTypePointerTypeId = 1;
+
+// Universal Limit of ResultID + 1
+static const int kInvalidId = 0x400000;
 
 namespace spvtools {
 namespace opt {
@@ -103,8 +107,9 @@ void LocalSingleStoreElimPass::SingleStoreAnalyze(ir::Function* func) {
   ssa_var2store_.clear();
   non_ssa_vars_.clear();
   store2idx_.clear();
-  uint32_t instIdx = 0;
+  store2blk_.clear();
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    uint32_t instIdx = 0;
     for (auto ii = bi->begin(); ii != bi->end(); ++ii, ++instIdx) {
       switch (ii->opcode()) {
       case SpvOpStore: {
@@ -133,6 +138,7 @@ void LocalSingleStoreElimPass::SingleStoreAnalyze(ir::Function* func) {
         // ordinal position in function
         ssa_var2store_[varId] = &*ii;
         store2idx_[&*ii] = instIdx;
+        store2blk_[&*ii] = &*bi;
       } break;
       case SpvOpFunctionCall: {
         // For now, empty SSA variable set and terminate analysis
@@ -168,10 +174,89 @@ void LocalSingleStoreElimPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
   }
 }
 
+LocalSingleStoreElimPass::GetBlocksFunction
+LocalSingleStoreElimPass::AugmentedCFGSuccessorsFunction() const {
+  return [this](const ir::BasicBlock* block) {
+    auto asmi = augmented_successors_map_.find(block);
+    if (asmi != augmented_successors_map_.end())
+      return &(*asmi).second;
+    auto smi = successors_map_.find(block);
+    return &(*smi).second;
+  };
+}
+
+LocalSingleStoreElimPass::GetBlocksFunction
+LocalSingleStoreElimPass::AugmentedCFGPredecessorsFunction() const {
+  return [this](const ir::BasicBlock* block) {
+    auto apmi = augmented_predecessors_map_.find(block);
+    if (apmi != augmented_predecessors_map_.end())
+      return &(*apmi).second;
+    auto pmi = predecessors_map_.find(block);
+    return &(*pmi).second;
+  };
+}
+
+void LocalSingleStoreElimPass::CalculateDominators(ir::Function* func) {
+  // Compute CFG
+  vector<ir::BasicBlock*> ordered_blocks;
+  predecessors_map_.clear();
+  successors_map_.clear();
+  for (auto& blk : *func) {
+    ordered_blocks.push_back(&blk);
+    blk.ForEachSuccessorLabel([&blk, &ordered_blocks, this](uint32_t sbid) {
+      successors_map_[&blk].push_back(label2block_[sbid]);
+      predecessors_map_[label2block_[sbid]].push_back(&blk);
+    });
+  }
+  // Compute Augmented CFG
+  augmented_successors_map_.clear();
+  augmented_predecessors_map_.clear();
+  auto succ_func = [this](const ir::BasicBlock* b)
+    { return &successors_map_[b]; };
+  auto pred_func = [this](const ir::BasicBlock* b)
+    { return &predecessors_map_[b]; };
+  CFA<ir::BasicBlock>::ComputeAugmentedCFG(
+    ordered_blocks,
+    &pseudo_entry_block_,
+    &pseudo_exit_block_,
+    &augmented_successors_map_,
+    &augmented_predecessors_map_,
+    succ_func,
+    pred_func);
+  // Compute Dominators
+  vector<const ir::BasicBlock*> postorder;
+  auto ignore_block = [](cbb_ptr) {};
+  auto ignore_edge = [](cbb_ptr, cbb_ptr) {};
+  spvtools::CFA<ir::BasicBlock>::DepthFirstTraversal(
+    ordered_blocks[0], AugmentedCFGSuccessorsFunction(),
+    ignore_block, [&](cbb_ptr b) { postorder.push_back(b); },
+    ignore_edge);
+  auto edges = spvtools::CFA<ir::BasicBlock>::CalculateDominators(
+    postorder, AugmentedCFGPredecessorsFunction());
+  idom_.clear();
+  for (auto edge : edges)
+    idom_[edge.first] = edge.second;
+}
+
+bool LocalSingleStoreElimPass::Dominates(
+    ir::BasicBlock* blk0, uint32_t idx0,
+    ir::BasicBlock* blk1, uint32_t idx1) {
+  if (blk0 == blk1)
+    return idx0 < idx1;
+  ir::BasicBlock* b = idom_[blk1];
+  while (b != &pseudo_entry_block_) {
+    if (b == blk0)
+      return true;
+    b = idom_[b];
+  }
+  return false;
+}
+
 bool LocalSingleStoreElimPass::SingleStoreProcess(ir::Function* func) {
+  CalculateDominators(func);
   bool modified = false;
-  uint32_t instIdx = 0;
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    uint32_t instIdx = 0;
     for (auto ii = bi->begin(); ii != bi->end(); ++ii, ++instIdx) {
       if (ii->opcode() != SpvOpLoad)
         continue;
@@ -186,11 +271,11 @@ bool LocalSingleStoreElimPass::SingleStoreProcess(ir::Function* func) {
         continue;
       if (non_ssa_vars_.find(varId) != non_ssa_vars_.end())
         continue;
+      // store must dominate load
+      if (!Dominates(store2blk_[vsi->second], store2idx_[vsi->second], &*bi, instIdx))
+        continue;
       // Use store value as replacement id
       uint32_t replId = vsi->second->GetSingleWordInOperand(kSpvStoreValId);
-      // store must dominate load
-      if (instIdx < store2idx_[vsi->second])
-        continue;
       // replace all instances of the load's id with the SSA value's id
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
       modified = true;
@@ -322,8 +407,14 @@ void LocalSingleStoreElimPass::Initialize(ir::Module* module) {
 
   // Initialize function and block maps
   id2function_.clear();
-  for (auto& fn : *module_)
+  label2block_.clear();
+  for (auto& fn : *module_) {
     id2function_[fn.result_id()] = &fn;
+    for (auto& blk : fn) {
+      uint32_t bid = blk.id();
+      label2block_[bid] = &blk;
+    }
+  }
 
   // Initialize Target Type Caches
   seen_target_vars_.clear();
@@ -352,7 +443,8 @@ Pass::Status LocalSingleStoreElimPass::ProcessImpl() {
 }
 
 LocalSingleStoreElimPass::LocalSingleStoreElimPass()
-    : module_(nullptr), def_use_mgr_(nullptr), next_id_(0) {}
+    : module_(nullptr), def_use_mgr_(nullptr), pseudo_entry_block_(0),
+      pseudo_exit_block_(0), next_id_(0) {}
 
 Pass::Status LocalSingleStoreElimPass::Process(ir::Module* module) {
   Initialize(module);

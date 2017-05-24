@@ -35,6 +35,8 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class LocalSingleStoreElimPass : public Pass {
+  using cbb_ptr = const ir::BasicBlock*;
+
  public:
   LocalSingleStoreElimPass();
   const char* name() const override { return "sroa"; }
@@ -50,11 +52,17 @@ class LocalSingleStoreElimPass : public Pass {
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
+  // Map from block's label id to block
+  std::unordered_map<uint32_t, ir::BasicBlock*> label2block_;
+
   // Map from SSA Variable to its single store
   std::unordered_map<uint32_t, ir::Instruction*> ssa_var2store_;
 
-  // Map from store to its ordinal position in the function.
+  // Map from store to its ordinal position in its block.
   std::unordered_map<ir::Instruction*, uint32_t> store2idx_;
+
+  // Map from store to its block.
+  std::unordered_map<ir::Instruction*, ir::BasicBlock*> store2blk_;
 
   // Set of non-SSA Variables
   std::unordered_set<uint32_t> non_ssa_vars_;
@@ -64,6 +72,31 @@ class LocalSingleStoreElimPass : public Pass {
 
   // Set of verified non-target types
   std::unordered_set<uint32_t> seen_non_target_vars_;
+
+  // Augmented CFG Entry Block
+  ir::BasicBlock pseudo_entry_block_;
+
+  // Augmented CFG Exit Block
+  ir::BasicBlock pseudo_exit_block_;
+
+  // CFG Predecessors
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+    predecessors_map_;
+
+  // CFG Successors
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+    successors_map_;
+
+  // CFG Augmented Predecessors
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+    augmented_predecessors_map_;
+
+  // CFG Augmented Successors
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+    augmented_successors_map_;
+
+  // Immediate Dominator Map
+  std::unordered_map<ir::BasicBlock*, ir::BasicBlock*> idom_;
 
   // Next unused ID
   uint32_t next_id_;
@@ -109,6 +142,21 @@ class LocalSingleStoreElimPass : public Pass {
   void ReplaceAndDeleteLoad(ir::Instruction* loadInst,
     uint32_t replId,
     ir::Instruction* ptrInst);
+
+  using GetBlocksFunction =
+    std::function<const std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
+
+  /// Returns the block successors function for the augmented CFG.
+  GetBlocksFunction AugmentedCFGSuccessorsFunction() const;
+
+  /// Returns the block predecessors function for the augmented CFG.
+  GetBlocksFunction AugmentedCFGPredecessorsFunction() const;
+
+  // Calculate dominators for |func|'s CFG. 
+  void CalculateDominators(ir::Function* func);
+  
+  bool Dominates(ir::BasicBlock* blk0, uint32_t idx0,
+    ir::BasicBlock* blk1, uint32_t idx1);
 
   // For each load of an SSA variable in |func|, replace all uses of
   // the load with the value stored if the store dominates the load.
