@@ -211,6 +211,8 @@ void LocalSingleStoreElimPass::CalculateDominators(ir::Function* func) {
   // Compute Augmented CFG
   augmented_successors_map_.clear();
   augmented_predecessors_map_.clear();
+  successors_map_[&pseudo_exit_block_] = {};
+  predecessors_map_[&pseudo_entry_block_] = {};
   auto succ_func = [this](const ir::BasicBlock* b)
     { return &successors_map_[b]; };
   auto pred_func = [this](const ir::BasicBlock* b)
@@ -243,11 +245,11 @@ bool LocalSingleStoreElimPass::Dominates(
     ir::BasicBlock* blk1, uint32_t idx1) {
   if (blk0 == blk1)
     return idx0 < idx1;
-  ir::BasicBlock* b = idom_[blk1];
-  while (b != &pseudo_entry_block_) {
+  ir::BasicBlock* b = blk1;
+  while (idom_[b] != b) {
+    b = idom_[b];
     if (b == blk0)
       return true;
-    b = idom_[b];
   }
   return false;
 }
@@ -443,8 +445,12 @@ Pass::Status LocalSingleStoreElimPass::ProcessImpl() {
 }
 
 LocalSingleStoreElimPass::LocalSingleStoreElimPass()
-    : module_(nullptr), def_use_mgr_(nullptr), pseudo_entry_block_(0),
-      pseudo_exit_block_(0), next_id_(0) {}
+    : module_(nullptr), def_use_mgr_(nullptr),
+      pseudo_entry_block_(std::unique_ptr<ir::Instruction>(
+          new ir::Instruction(SpvOpLabel, 0, 0, {}))),
+      pseudo_exit_block_(std::unique_ptr<ir::Instruction>(
+          new ir::Instruction(SpvOpLabel, 0, kInvalidId, {}))),
+      next_id_(0) {}
 
 Pass::Status LocalSingleStoreElimPass::Process(ir::Module* module) {
   Initialize(module);
