@@ -196,12 +196,12 @@ Optimizer::PassToken CreateInlinePass();
 
 // Creates a local single store elimination pass.
 // For each entry point function, this pass eliminates loads and stores for 
-// function scope variable that are stored to only once. Only whole variable
-// loads and stores are eliminated; access-chain references are not optimized.
-// Replace all loads of such variables with the value that is stored and
-// eliminate any resulting dead code.
+// function scope variable that are stored to only once, where possible. Only
+// whole variable loads and stores are eliminated; access-chain references are
+// not optimized. Replace all loads of such variables with the value that is
+// stored and eliminate any resulting dead code.
 //
-// Currently, the presence of access chains and function calls inhibit this
+// Currently, the presence of access chains and function calls can inhibit this
 // pass, however the Inlining and LocalAccessChainConvert passes can make it
 // more effective.
 //

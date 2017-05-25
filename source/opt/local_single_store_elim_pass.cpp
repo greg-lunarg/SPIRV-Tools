@@ -196,7 +196,8 @@ LocalSingleStoreElimPass::AugmentedCFGPredecessorsFunction() const {
   };
 }
 
-void LocalSingleStoreElimPass::CalculateDominators(ir::Function* func) {
+void LocalSingleStoreElimPass::CalculateImmediateDominators(
+    ir::Function* func) {
   // Compute CFG
   vector<ir::BasicBlock*> ordered_blocks;
   predecessors_map_.clear();
@@ -255,7 +256,7 @@ bool LocalSingleStoreElimPass::Dominates(
 }
 
 bool LocalSingleStoreElimPass::SingleStoreProcess(ir::Function* func) {
-  CalculateDominators(func);
+  CalculateImmediateDominators(func);
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     uint32_t instIdx = 0;

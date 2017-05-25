@@ -96,6 +96,7 @@ class LocalSingleStoreElimPass : public Pass {
     augmented_successors_map_;
 
   // Immediate Dominator Map
+  // If block has no idom it points to itself.
   std::unordered_map<ir::BasicBlock*, ir::BasicBlock*> idom_;
 
   // Next unused ID
@@ -152,9 +153,12 @@ class LocalSingleStoreElimPass : public Pass {
   /// Returns the block predecessors function for the augmented CFG.
   GetBlocksFunction AugmentedCFGPredecessorsFunction() const;
 
-  // Calculate dominators for |func|'s CFG. 
-  void CalculateDominators(ir::Function* func);
+  // Calculate immediate dominators for |func|'s CFG. Leaves result
+  // in idom_. Entries for augmented CFG (pseudo blocks) are not created.
+  void CalculateImmediateDominators(ir::Function* func);
   
+  // Return true if instruction in |blk0| at ordinal position |idx0|
+  // dominates instruction in |blk1| at position |idx1|.
   bool Dominates(ir::BasicBlock* blk0, uint32_t idx0,
     ir::BasicBlock* blk1, uint32_t idx1);
 
