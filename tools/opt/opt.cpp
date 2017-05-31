@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
       } else if (0 == strcmp(cur_arg, "--inline-entry-points-exhaustive")) {
         optimizer.RegisterPass(CreateInlinePass());
       } else if (0 == strcmp(cur_arg, "--eliminate-insert-extract")) {
-        optimizer.RegisterPass(CreateInlinePass());
+        optimizer.RegisterPass(CreateInsertExtractElimPass());
       } else if (0 == strcmp(cur_arg, "--eliminate-dead-const")) {
         optimizer.RegisterPass(CreateEliminateDeadConstantPass());
       } else if (0 == strcmp(cur_arg, "--fold-spec-const-op-composite")) {
