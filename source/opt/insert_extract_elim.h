@@ -63,7 +63,7 @@ class InsertExtractElimPass : public Pass {
   // Look for OpExtract on sequence of OpInserts in |func|. If there is an
   // insert with identical indices, replace the extract with the value
   // that is inserted if possible.
-  bool InsertExtractElim(ir::Function* func);
+  bool EliminateInsertExtract(ir::Function* func);
 
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();

@@ -51,7 +51,7 @@ bool InsertExtractElimPass::ExtInsConflict(ir::Instruction* extInst,
   return true;
 }
 
-bool InsertExtractElimPass::InsertExtractElim(ir::Function* func) {
+bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
@@ -105,7 +105,7 @@ Pass::Status InsertExtractElimPass::ProcessImpl() {
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
         id2function_[e.GetSingleWordOperand(kSpvEntryPointFunctionId)];
-    modified = modified || InsertExtractElim(fn);
+    modified = modified || EliminateInsertExtract(fn);
   }
 
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
