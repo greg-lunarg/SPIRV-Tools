@@ -39,33 +39,35 @@ class InsertExtractElimPass : public Pass {
   Status Process(ir::Module*) override;
 
  private:
-   // Module this pass is processing
-   ir::Module* module_;
-
-   // Def-Uses for the module we are processing
-   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
-
-  // Map from function's result id to function
-  std::unordered_map<uint32_t, ir::Function*> id2function_;
-
   // Return true if indices of extract |extInst| and insert |insInst| match
-  bool ExtInsMatch(ir::Instruction* extInst, ir::Instruction* insInst);
+  bool ExtInsMatch(
+    const ir::Instruction* extInst, const ir::Instruction* insInst) const;
 
   // Return true if indices of extract |extInst| and insert |insInst| conflict,
   // specifically, if the insert changes bits specified by the extract, but
   // changes either more bits or less bits than the extract specifies,
   // meaning the exact value being inserted cannot be used to replace
   // the extract.
-  bool ExtInsConflict(ir::Instruction* extInst, ir::Instruction* insInst);
+  bool ExtInsConflict(
+    const ir::Instruction* extInst, const ir::Instruction* insInst) const;
 
   // Look for OpExtract on sequence of OpInserts in |func|. If there is an
   // insert with identical indices, replace the extract with the value
   // that is inserted if possible. Specifically, replace if there is no
-  // intervening insert which changes the bits of interest.
+  // intervening insert which conflicts.
   bool EliminateInsertExtract(ir::Function* func);
 
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
+
+  // Module this pass is processing
+  ir::Module* module_;
+
+  // Def-Uses for the module we are processing
+  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
+
+  // Map from function's result id to function
+  std::unordered_map<uint32_t, ir::Function*> id2function_;
 };
 
 }  // namespace opt

@@ -26,8 +26,8 @@ static const int kSpvInsertCompositeId = 1;
 namespace spvtools {
 namespace opt {
 
-bool InsertExtractElimPass::ExtInsMatch(ir::Instruction* extInst,
-    ir::Instruction* insInst) {
+bool InsertExtractElimPass::ExtInsMatch(const ir::Instruction* extInst,
+    const ir::Instruction* insInst) const {
   if (extInst->NumInOperands() != insInst->NumInOperands() - 1)
     return false;
   uint32_t numIdx = extInst->NumInOperands() - 1;
@@ -38,8 +38,8 @@ bool InsertExtractElimPass::ExtInsMatch(ir::Instruction* extInst,
   return true;
 }
 
-bool InsertExtractElimPass::ExtInsConflict(ir::Instruction* extInst,
-    ir::Instruction* insInst) {
+bool InsertExtractElimPass::ExtInsConflict(const ir::Instruction* extInst,
+    const ir::Instruction* insInst) const {
   if (extInst->NumInOperands() == insInst->NumInOperands() - 1)
     return false;
   uint32_t extNumIdx = extInst->NumInOperands() - 1;
