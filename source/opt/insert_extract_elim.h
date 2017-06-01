@@ -20,9 +20,7 @@
 
 #include <algorithm>
 #include <map>
-#include <queue>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 #include "basic_block.h"
@@ -62,7 +60,8 @@ class InsertExtractElimPass : public Pass {
 
   // Look for OpExtract on sequence of OpInserts in |func|. If there is an
   // insert with identical indices, replace the extract with the value
-  // that is inserted if possible.
+  // that is inserted if possible. Specifically, replace if there is no
+  // intervening insert which changes the bits of interest.
   bool EliminateInsertExtract(ir::Function* func);
 
   void Initialize(ir::Module* module);

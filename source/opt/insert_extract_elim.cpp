@@ -15,6 +15,7 @@
 // limitations under the License.
 
 #include "insert_extract_elim.h"
+
 #include "iterator.h"
 
 static const int kSpvEntryPointFunctionId = 1;
