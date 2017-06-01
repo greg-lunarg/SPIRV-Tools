@@ -330,6 +330,7 @@ class SSAMemPass : public Pass {
   // to a branch. Fix phi functions in block whose branch is eliminated.
   // Eliminate preceding OpSelectionMerge if it exists.
   bool DeadBranchEliminate(ir::Function* func);
+  bool DeadBranchEliminate2(ir::Function* func);
 
   // If a block branches to another block and no other block branches
   // to that block, the two blocks can be merged. This is primarily

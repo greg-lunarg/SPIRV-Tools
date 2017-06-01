@@ -1442,6 +1442,102 @@ bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
   return modified;
 }
 
+bool SSAMemPass::DeadBranchEliminate2(ir::Function* func) {
+  bool modified = false;
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    auto ii = bi->end();
+    --ii;
+    ir::Instruction* br = &*ii;
+    if (br->opcode() != SpvOpBranchConditional)
+      continue;
+    --ii;
+    ir::Instruction* mergeInst = &*ii;
+    if (mergeInst->opcode() != SpvOpSelectionMerge)
+      continue;
+    bool condVal;
+    bool condIsConst;
+    (void)SSAMemGetConstCondition(
+      br->GetInOperand(kSpvBranchCondConditionalId).words[0],
+      &condVal,
+      &condIsConst);
+    if (!condIsConst)
+      continue;
+    // Replace conditional branch with unconditional branch
+    uint32_t trueLabId = br->GetInOperand(kSpvBranchCondTrueLabId).words[0];
+    uint32_t falseLabId = br->GetInOperand(kSpvBranchCondFalseLabId).words[0];
+    uint32_t mergeLabId = mergeInst->GetInOperand(kSpvSelectionMergeMergeBlockId).words[0];
+    uint32_t liveLabId = condVal == true ? trueLabId : falseLabId;
+    uint32_t deadLabId = condVal == true ? falseLabId : trueLabId;
+    AddBranch(liveLabId, &*bi);
+    def_use_mgr_->KillInst(br);
+    def_use_mgr_->KillInst(mergeInst);
+    // Iterate to merge block marking all live blocks until no change
+    std::unordered_set<uint32_t> liveLabIds;
+    liveLabIds.insert(liveLabId);
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      auto lbi = bi;
+      ++lbi;
+      uint32_t lLabId = lbi->GetLabelId();
+      while (lLabId != mergeLabId) {
+        if (liveLabIds.find(lLabId) != liveLabIds.end()) {
+          // Add successor blocks to live block set
+          lbi->ForEachSucc([&liveLabIds,&changed](uint32_t succ) {
+            if (liveLabIds.find(succ) == liveLabIds.end()) {
+              liveLabIds.insert(succ);
+              changed = true;
+            }
+          });
+          // Add merge block to live block set in case it has
+          // no predecessors.
+          uint32_t lMergeLabId = GetMergeBlkId(&*lbi);
+          if (lMergeLabId != 0 &&
+              liveLabIds.find(lMergeLabId) == liveLabIds.end()) {
+            liveLabIds.insert(lMergeLabId);
+            changed = true;
+          }
+        }
+        ++lbi;
+        uint32_t lLabId = lbi->GetLabelId();
+      }
+    }
+    // Iterate once more to merge block, this time deleting dead blocks
+    std::unordered_set<uint32_t> deadLabIds;
+    auto dbi = bi;
+    ++dbi;
+    uint32_t dLabId = dbi->GetLabelId();
+    while (dLabId != mergeLabId) {
+      if (liveLabIds.find(dLabId) == liveLabIds.end()) {
+        deadLabIds.insert(dLabId);
+        // Kill use/def for all instructions and delete block
+        SSAMemKillBlk(&*dbi);
+        dbi = dbi.Erase();
+      }
+      else {
+        ++dbi;
+      }
+      dLabId = dbi->GetLabelId();
+    }
+    // Process phi instructions in merge block.
+    // deadLabIds are now blocks which cannot precede merge block.
+    // If eliminated branch is to merge label, add current block to dead blocks.
+    if (deadLabId == mergeLabId)
+      deadLabIds.insert(bi->GetLabelId());
+    dbi->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
+      uint32_t phiLabId0 = phiInst->GetInOperand(kSpvPhiLab0Id).words[0];
+      bool useFirst = deadLabIds.find(phiLabId0) == deadLabIds.end();
+      uint32_t phiValIdx = useFirst ? kSpvPhiVal0Id : kSpvPhiVal1Id;
+      uint32_t replId = phiInst->GetInOperand(phiValIdx).words[0];
+      uint32_t phiId = phiInst->result_id();
+      (void)def_use_mgr_->ReplaceAllUsesWith(phiId, replId);
+      def_use_mgr_->KillInst(phiInst);
+    });
+    modified = true;
+  }
+  return modified;
+}
+
 bool SSAMemPass::BlockMerge(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ) {
@@ -1543,7 +1639,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= LocalSingleStoreElim(func);
     modified |= InsertExtractElim(func);
     modified |= InsertCycleBreak(func);
-    modified |= DeadBranchEliminate(func);
+    modified |= DeadBranchEliminate2(func);
     modified |= BlockMerge(func);
 
     modified |= LocalSingleBlockElim(func);
