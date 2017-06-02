@@ -137,7 +137,8 @@ Optimizer::PassToken CreateInlinePass() {
 }
 
 Optimizer::PassToken CreateDeadBranchElimPass() {
-  return MakeUnique<Optimizer::PassToken::Impl>(MakeUnique<opt::InlinePass>());
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::DeadBranchElimPass>());
 }
 
 Optimizer::PassToken CreateCompactIdsPass() {
