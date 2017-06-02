@@ -1442,6 +1442,7 @@ bool SSAMemPass::DeadBranchEliminate(ir::Function* func) {
   return modified;
 }
 
+// Currently broken, aborts when optimizing hero
 bool SSAMemPass::DeadBranchEliminate2(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
@@ -1639,7 +1640,7 @@ bool SSAMemPass::SSAMem(ir::Function* func) {
     modified |= LocalSingleStoreElim(func);
     modified |= InsertExtractElim(func);
     modified |= InsertCycleBreak(func);
-    modified |= DeadBranchEliminate2(func);
+    modified |= DeadBranchEliminate(func);
     modified |= BlockMerge(func);
 
     modified |= LocalSingleBlockElim(func);
