@@ -106,13 +106,14 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     // Replace conditional branch with unconditional branch
     uint32_t trueLabId = br->GetSingleWordInOperand(kSpvBranchCondTrueLabId);
     uint32_t falseLabId = br->GetSingleWordInOperand(kSpvBranchCondFalseLabId);
-    uint32_t mergeLabId = mergeInst->GetSingleWordInOperand(kSpvSelectionMergeMergeBlockId);
+    uint32_t mergeLabId =
+        mergeInst->GetSingleWordInOperand(kSpvSelectionMergeMergeBlockId);
     uint32_t liveLabId = condVal == true ? trueLabId : falseLabId;
     uint32_t deadLabId = condVal == true ? falseLabId : trueLabId;
     AddBranch(liveLabId, &*bi);
     def_use_mgr_->KillInst(br);
     def_use_mgr_->KillInst(mergeInst);
-    // iterate to merge block deleting dead blocks
+    // Iterate to merge block deleting dead blocks
     std::unordered_set<uint32_t> deadLabIds;
     deadLabIds.insert(deadLabId);
     auto dbi = bi;
@@ -120,7 +121,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     uint32_t dLabId = dbi->id();
     while (dLabId != mergeLabId) {
       if (deadLabIds.find(dLabId) != deadLabIds.end()) {
-        // add successor blocks to dead block set
+        // Add successor blocks to dead block set
         dbi->ForEachSuccessorLabel([&deadLabIds](uint32_t succ) {
           deadLabIds.insert(succ);
         });
@@ -138,9 +139,9 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       }
       dLabId = dbi->id();
     }
-    // process phi instructions in merge block
+    // Process phi instructions in merge block.
     // deadLabIds are now blocks which cannot precede merge block.
-    // if eliminated branch is to merge label, add current block to dead blocks.
+    // If eliminated branch is to merge label, add current block to dead blocks.
     if (deadLabId == mergeLabId)
       deadLabIds.insert(bi->id());
     dbi->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
