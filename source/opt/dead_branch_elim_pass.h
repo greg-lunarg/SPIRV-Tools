@@ -35,12 +35,42 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class DeadBranchElimPass : public Pass {
+
+  using cbb_ptr = const ir::BasicBlock*;
+
  public:
+   using GetBlocksFunction =
+     std::function<std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
+
   DeadBranchElimPass();
   const char* name() const override { return "sroa"; }
   Status Process(ir::Module*) override;
 
  private:
+  // Returns the id of the merge block declared by a merge instruction in 
+  // this block, if any.  If none, returns zero.
+  uint32_t MergeBlockIdIfAny(const ir::BasicBlock& blk);
+
+  // Compute structured successors for function |func|.
+  // A block's structured successors are the blocks it branches to
+  // together with its declared merge block if it has one.
+  // When order matters, the merge block always appears first.
+  // This assures correct depth first search in the presence of early 
+  // returns and kills. If the successor vector contain duplicates
+  // if the merge block, they are safely ignored by DFS.
+  void ComputeStructuredSuccessors(ir::Function* func);
+
+  // Compute structured block order |order| for function |func|. This order
+  // has the property that dominators are before all blocks they dominate and
+  // merge blocks are after all blocks that are in the control constructs of
+  // their header.
+  void ComputeStructuredOrder(
+    ir::Function* func, std::list<ir::BasicBlock*>* order);
+
+  // Return function to return ordered structure successors for a given block
+  // Assumes ComputeStructuredSuccessors() has been called.
+  GetBlocksFunction StructuredSuccessorsFunction();
+
   // If |condId| is boolean constant, return value in |condVal| and
   // |condIsConst| as true, otherwise return |condIsConst| as false.
   void GetConstCondition(uint32_t condId, bool* condVal, bool* condIsConst);
@@ -51,14 +81,11 @@ class DeadBranchElimPass : public Pass {
   // Kill all instructions in block |bp|.
   void KillBlk(ir::BasicBlock* bp);
 
-  // Return merge block label id if |block_ptr| is loop header. Otherwise
-  // return 0.
-  uint32_t GetMergeBlkId(ir::BasicBlock* block_ptr);
-
   // For function |func|, look for BranchConditionals with constant condition
-  // and convert to a Branch to the indicted label. The BranchConditional must
-  // be preceeded by OpSelectionMerge. For all phi functions in merge block,
-  // replace all uses with id corresponding to living predecessor.
+  // and convert to a Branch to the indicated label. Delete all resulting dead
+  // blocks. For all phi functions in the corresponding merge block, replace
+  // all uses with id corresponding to the living predecessor. Assumes only
+  // structured control flow in shader.
   bool EliminateDeadBranches(ir::Function* func);
 
   void Initialize(ir::Module* module);
@@ -72,6 +99,14 @@ class DeadBranchElimPass : public Pass {
 
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
+
+  // Map from block's label id to block.
+  std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
+
+  // Map from block to its structured successor blocks. See 
+  // ComputeStructuredSuccessors() for definition.
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+      block2structured_succs_;
 };
 
 }  // namespace opt

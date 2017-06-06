@@ -16,6 +16,7 @@
 
 #include "dead_branch_elim_pass.h"
 
+#include "cfa.h"
 #include "iterator.h"
 
 static const int kSpvEntryPointFunctionId = 1;
@@ -30,6 +31,51 @@ static const int kSpvLoopMergeMergeBlockId = 0;
 
 namespace spvtools {
 namespace opt {
+
+uint32_t DeadBranchElimPass::MergeBlockIdIfAny(const ir::BasicBlock& blk) {
+  auto merge_ii = blk.cend();
+  --merge_ii;
+  uint32_t mbid = 0;
+  if (merge_ii != blk.cbegin()) {
+    --merge_ii;
+    if (merge_ii->opcode() == SpvOpLoopMerge)
+      mbid = merge_ii->GetSingleWordOperand(kSpvLoopMergeMergeBlockId);
+    else if (merge_ii->opcode() == SpvOpSelectionMerge)
+      mbid = merge_ii->GetSingleWordOperand(kSpvSelectionMergeMergeBlockId);
+  }
+  return mbid;
+}
+
+void DeadBranchElimPass::ComputeStructuredSuccessors(ir::Function* func) {
+  // If header, make merge block first successor.
+  for (auto& blk : *func) {
+    uint32_t mbid = MergeBlockIdIfAny(blk);
+    if (mbid != 0)
+      block2structured_succs_[&blk].push_back(id2block_[mbid]);
+    // add true successors
+    blk.ForEachSuccessorLabel([&blk, this](uint32_t sbid) {
+      block2structured_succs_[&blk].push_back(id2block_[sbid]);
+    });
+  }
+}
+
+DeadBranchElimPass::GetBlocksFunction
+DeadBranchElimPass::StructuredSuccessorsFunction() {
+  return [this](const ir::BasicBlock* block) {
+    return &(block2structured_succs_[block]);
+  };
+}
+
+void DeadBranchElimPass::ComputeStructuredOrder(
+    ir::Function* func, std::list<ir::BasicBlock*>* order) {
+  // Compute structured successors and do DFS
+  ComputeStructuredSuccessors(func);
+  auto ignore_block = [](cbb_ptr) {};
+  auto ignore_edge = [](cbb_ptr, cbb_ptr) {};
+  spvtools::CFA<ir::BasicBlock>::DepthFirstTraversal(
+    &*func->begin(), StructuredSuccessorsFunction(), ignore_block,
+    [&](cbb_ptr b) { order->push_front(const_cast<ir::BasicBlock*>(b)); }, ignore_edge);
+}
 
 void DeadBranchElimPass::GetConstCondition(
     uint32_t condId, bool* condVal, bool* condIsConst) {
@@ -69,24 +115,14 @@ void DeadBranchElimPass::KillBlk(ir::BasicBlock* bp) {
   });
 }
 
-uint32_t DeadBranchElimPass::GetMergeBlkId(ir::BasicBlock* block_ptr) {
-  auto iItr = block_ptr->end();
-  --iItr;
-  if (iItr == block_ptr->begin())
-    return 0;
-  --iItr;
-  if (iItr->opcode() == SpvOpLoopMerge)
-    return iItr->GetSingleWordInOperand(kSpvLoopMergeMergeBlockId);
-  else if (iItr->opcode() == SpvOpSelectionMerge)
-    return iItr->GetSingleWordInOperand(kSpvSelectionMergeMergeBlockId);
-  else
-    return 0;
-}
-
 bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
+  // Traverse blocks in structured order
+  std::list<ir::BasicBlock*> structuredOrder;
+  ComputeStructuredOrder(func, &structuredOrder);
+  std::unordered_set<ir::BasicBlock*> eraseBlocks;
   bool modified = false;
-  for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    auto ii = bi->end();
+  for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    auto ii = (*bi)->end();
     --ii;
     ir::Instruction* br = &*ii;
     if (br->opcode() != SpvOpBranchConditional)
@@ -110,7 +146,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
         mergeInst->GetSingleWordInOperand(kSpvSelectionMergeMergeBlockId);
     uint32_t liveLabId = condVal == true ? trueLabId : falseLabId;
     uint32_t deadLabId = condVal == true ? falseLabId : trueLabId;
-    AddBranch(liveLabId, &*bi);
+    AddBranch(liveLabId, *bi);
     def_use_mgr_->KillInst(br);
     def_use_mgr_->KillInst(mergeInst);
     // Iterate to merge block deleting dead blocks
@@ -118,33 +154,31 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     deadLabIds.insert(deadLabId);
     auto dbi = bi;
     ++dbi;
-    uint32_t dLabId = dbi->id();
+    uint32_t dLabId = (*dbi)->id();
     while (dLabId != mergeLabId) {
       if (deadLabIds.find(dLabId) != deadLabIds.end()) {
         // Add successor blocks to dead block set
-        dbi->ForEachSuccessorLabel([&deadLabIds](uint32_t succ) {
+        (*dbi)->ForEachSuccessorLabel([&deadLabIds](uint32_t succ) {
           deadLabIds.insert(succ);
         });
         // Add merge block to dead block set in case it has
         // no predecessors.
-        uint32_t dMergeLabId = GetMergeBlkId(&*dbi);
+        uint32_t dMergeLabId = MergeBlockIdIfAny(**dbi);
         if (dMergeLabId != 0)
           deadLabIds.insert(dMergeLabId);
         // Kill use/def for all instructions and delete block
-        KillBlk(&*dbi);
-        dbi = dbi.Erase();
+        KillBlk(*dbi);
+        eraseBlocks.insert(*dbi);
       }
-      else {
-        ++dbi;
-      }
-      dLabId = dbi->id();
+      ++dbi;
+      dLabId = (*dbi)->id();
     }
     // Process phi instructions in merge block.
     // deadLabIds are now blocks which cannot precede merge block.
     // If eliminated branch is to merge label, add current block to dead blocks.
     if (deadLabId == mergeLabId)
-      deadLabIds.insert(bi->id());
-    dbi->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
+      deadLabIds.insert((*bi)->id());
+    (*dbi)->ForEachPhiInst([&deadLabIds, this](ir::Instruction* phiInst) {
       uint32_t phiLabId0 = phiInst->GetSingleWordInOperand(kSpvPhiLab0Id);
       bool useFirst = deadLabIds.find(phiLabId0) == deadLabIds.end();
       uint32_t phiValIdx = useFirst ? kSpvPhiVal0Id : kSpvPhiVal1Id;
@@ -154,7 +188,14 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       def_use_mgr_->KillInst(phiInst);
     });
     modified = true;
+    bi = dbi;
   }
+  // Erase dead blocks
+  for (auto ebi = func->begin(); ebi != func->end(); )
+    if (eraseBlocks.find(&*ebi) != eraseBlocks.end())
+      ebi = ebi.Erase();
+    else
+      ++ebi;
   return modified;
 }
 
@@ -164,22 +205,32 @@ void DeadBranchElimPass::Initialize(ir::Module* module) {
 
   // Initialize function and block maps
   id2function_.clear();
-  for (auto& fn : *module_)
+  id2block_.clear();
+  block2structured_succs_.clear();
+  for (auto& fn : *module_) {
+    // Initialize function and block maps.
     id2function_[fn.result_id()] = &fn;
+    for (auto& blk : fn) {
+      id2block_[blk.id()] = &blk;
+    }
+  }
 
   def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
 };
 
 Pass::Status DeadBranchElimPass::ProcessImpl() {
-  bool modified = false;
+  // Current functionality assumes structured control flow. 
+  // TODO(): Handle non-structured control-flow.
+  if (!module_->HasCapability(SpvCapabilityShader))
+    return Status::SuccessWithoutChange;
 
+  bool modified = false;
   // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
         id2function_[e.GetSingleWordOperand(kSpvEntryPointFunctionId)];
     modified = modified || EliminateDeadBranches(fn);
   }
-
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
