@@ -120,9 +120,12 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
   // Traverse blocks in structured order
   std::list<ir::BasicBlock*> structuredOrder;
   ComputeStructuredOrder(func, &structuredOrder);
-  std::unordered_set<ir::BasicBlock*> eraseBlocks;
+  std::unordered_set<ir::BasicBlock*> elimBlocks;
   bool modified = false;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    // Skip blocks that are already in the elimination set
+    if (elimBlocks.find(*bi) != elimBlocks.end())
+      continue;
     auto ii = (*bi)->end();
     --ii;
     ir::Instruction* br = &*ii;
@@ -169,7 +172,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
           deadLabIds.insert(dMergeLabId);
         // Kill use/def for all instructions and delete block
         KillAllInsts(*dbi);
-        eraseBlocks.insert(*dbi);
+        elimBlocks.insert(*dbi);
       }
       ++dbi;
       dLabId = (*dbi)->id();
@@ -189,11 +192,10 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       def_use_mgr_->KillInst(phiInst);
     });
     modified = true;
-    bi = dbi;
   }
   // Erase dead blocks
   for (auto ebi = func->begin(); ebi != func->end(); )
-    if (eraseBlocks.find(&*ebi) != eraseBlocks.end())
+    if (elimBlocks.find(&*ebi) != elimBlocks.end())
       ebi = ebi.Erase();
     else
       ++ebi;
