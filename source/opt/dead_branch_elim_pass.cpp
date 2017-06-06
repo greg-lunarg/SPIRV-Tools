@@ -109,7 +109,7 @@ void DeadBranchElimPass::AddBranch(uint32_t labelId, ir::BasicBlock* bp) {
   bp->AddInstruction(std::move(newBranch));
 }
 
-void DeadBranchElimPass::KillBlk(ir::BasicBlock* bp) {
+void DeadBranchElimPass::KillAllInsts(ir::BasicBlock* bp) {
   bp->ForEachInst([this](ir::Instruction* ip) {
     def_use_mgr_->KillInst(ip);
   });
@@ -167,7 +167,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
         if (dMergeLabId != 0)
           deadLabIds.insert(dMergeLabId);
         // Kill use/def for all instructions and delete block
-        KillBlk(*dbi);
+        KillAllInsts(*dbi);
         eraseBlocks.insert(*dbi);
       }
       ++dbi;

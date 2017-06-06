@@ -79,7 +79,7 @@ class DeadBranchElimPass : public Pass {
   void AddBranch(uint32_t labelId, ir::BasicBlock* bp);
 
   // Kill all instructions in block |bp|.
-  void KillBlk(ir::BasicBlock* bp);
+  void KillAllInsts(ir::BasicBlock* bp);
 
   // For function |func|, look for BranchConditionals with constant condition
   // and convert to a Branch to the indicated label. Delete all resulting dead
