@@ -139,7 +139,16 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   // Create Control Dependence Tree
   std::list<ir::BasicBlock*> structuredOrder;
   ComputeStructuredOrder(func, &structuredOrder);
+  std::stack<ir::BasicBlock*> currentHeaders;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    if (IsMergeBlock(*bi))
+      (void) currentHeaders.pop();
+    if (currentHeaders.empty())
+      immediateControlParent_[*bi] = nullptr;
+    else
+      immediateControlParent_[*bi] = currentHeaders.top();
+    if (IsHeader(*bi))
+      currentHeaders.push(*bi);
   }
 //
   std::list<ir::BasicBlock*> structuredOrder;
