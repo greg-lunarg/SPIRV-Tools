@@ -140,15 +140,21 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   std::list<ir::BasicBlock*> structuredOrder;
   ComputeStructuredOrder(func, &structuredOrder);
   std::stack<ir::BasicBlock*> currentHeaders;
+  std::stack<uint32_t> currentMergeIds;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
-    if (IsMergeBlock(*bi))
+    if ((*bi)->id() == currentMergeIds.top()) {
       (void) currentHeaders.pop();
+      (void) currentMergeIds.pop();
+    }
     if (currentHeaders.empty())
-      immediateControlParent_[*bi] = nullptr;
+      immediate_control_parent_[*bi] = nullptr;
     else
-      immediateControlParent_[*bi] = currentHeaders.top();
-    if (IsHeader(*bi))
+      immediate_control_parent_[*bi] = currentHeaders.top();
+    uint32_t mergeId = MergeBlockIdIfAny(*bi);
+    if (mergeId != 0) {
       currentHeaders.push(*bi);
+      currentMergeIds.push(mergeId);
+    }
   }
 //
   std::list<ir::BasicBlock*> structuredOrder;

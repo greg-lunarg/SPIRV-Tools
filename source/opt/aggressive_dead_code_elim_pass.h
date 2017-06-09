@@ -87,11 +87,12 @@ class AggressiveDCEPass : public Pass {
     ir::Instruction** branchInst, ir::Instruction** mergeInst,
     bool *condVal);
 
-  // For function |func|, look for BranchConditionals with constant condition
-  // and convert to a Branch to the indicated label. Delete all resulting dead
-  // blocks. For all phi functions in the corresponding merge block, replace
-  // all uses with id corresponding to the living predecessor. Assumes only
-  // structured control flow in shader.
+  // For function |func|, mark all Stores to non-function-scope variables
+  // as live. Recursively mark the values they use as live as well as the
+  // control flow instructions in their containing control constructs.
+  // When complete, delete any non-live instructions. For all non-live
+  // control constructs, delete all blocks and change the header to branch
+  // directly to the merge block.
   bool AggressiveDCE(ir::Function* func);
 
   void Initialize(ir::Module* module);
@@ -113,6 +114,14 @@ class AggressiveDCEPass : public Pass {
   // ComputeStructuredSuccessors() for definition.
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
       block2structured_succs_;
+
+  // Map from basic block to header block of its immediately containing
+  // control structure. nullptr is mapped if block is not contained in
+  // control structure.
+  std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>immediate_control_parent_;
+
+  // Map from instruction to its basic block
+  std::unordered_map<ir::Instruction*, ir::BasicBlock*>inst2block_;
 };
 
 }  // namespace opt
