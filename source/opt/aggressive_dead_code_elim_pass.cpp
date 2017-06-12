@@ -247,6 +247,10 @@ void AggressiveDCEPass::Initialize(ir::Module* module) {
     id2function_[fn.result_id()] = &fn;
     for (auto& blk : fn) {
       id2block_[blk.id()] = &blk;
+      // Initialize inst-to-block map
+      for (auto& inst : blk) {
+        inst2block_[&inst] = &blk;
+      }
     }
   }
 
