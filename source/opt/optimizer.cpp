@@ -141,6 +141,11 @@ Optimizer::PassToken CreateLocalAccessChainConvertPass() {
       MakeUnique<opt::LocalAccessChainConvertPass>());
 }
 
+Optimizer::PassToken CreateAggressiveDCEPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::AggressiveDCEPass>());
+}
+
 Optimizer::PassToken CreateCompactIdsPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::CompactIdsPass>());

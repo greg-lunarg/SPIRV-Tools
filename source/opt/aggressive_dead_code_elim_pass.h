@@ -46,53 +46,24 @@ class AggressiveDCEPass : public Pass {
   Status Process(ir::Module*) override;
 
  private:
-  // Returns the id of the merge block declared by a merge instruction in 
-  // this block, if any.  If none, returns zero.
-  uint32_t MergeBlockIdIfAny(const ir::BasicBlock& blk) const;
+  // Returns true if |opcode| is a non-ptr access chain op
+  bool IsNonPtrAccessChain(const SpvOp opcode) const;
 
-  // Compute structured successors for function |func|.
-  // A block's structured successors are the blocks it branches to
-  // together with its declared merge block if it has one.
-  // When order matters, the merge block always appears first.
-  // This assures correct depth first search in the presence of early 
-  // returns and kills. If the successor vector contain duplicates
-  // if the merge block, they are safely ignored by DFS.
-  void ComputeStructuredSuccessors(ir::Function* func);
+  // Given a load or store |ip|, return the pointer instruction.
+  // Also return the base variable's id in |varId|.
+  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t* varId);
 
-  // Compute structured block order |order| for function |func|. This order
-  // has the property that dominators are before all blocks they dominate and
-  // merge blocks are after all blocks that are in the control constructs of
-  // their header.
-  void ComputeStructuredOrder(
-    ir::Function* func, std::list<ir::BasicBlock*>* order);
+  // Add all store instruction which use |ptrId|, directly or indirectly,
+  // to the live instruction worklist.
+  void AddStores(uint32_t ptrId);
 
-  // Return function to return ordered structure successors for a given block
-  // Assumes ComputeStructuredSuccessors() has been called.
-  GetBlocksFunction StructuredSuccessorsFunction();
-
-  // If |condId| is boolean constant, return value in |condVal| and
-  // |condIsConst| as true, otherwise return |condIsConst| as false.
-  void GetConstCondition(uint32_t condId, bool* condVal, bool* condIsConst);
-
-  // Add branch to |labelId| to end of block |bp|.
-  void AddBranch(uint32_t labelId, ir::BasicBlock* bp);
-
-  // Kill all instructions in block |bp|.
-  void KillAllInsts(ir::BasicBlock* bp);
-
-  // If block |bp| contains constant conditional branch, return true
-  // and return branch and merge instructions in |branchInst| and |mergeInst|
-  // and the boolean constant in |condVal|. 
-  bool GetConstConditionalBranch(ir::BasicBlock* bp,
-    ir::Instruction** branchInst, ir::Instruction** mergeInst,
-    bool *condVal);
+  // Return true if variable with |varId| is function scope
+  bool IsLocalVar(uint32_t varId);
 
   // For function |func|, mark all Stores to non-function-scope variables
-  // as live. Recursively mark the values they use as live as well as the
-  // control flow instructions in their containing control constructs.
-  // When complete, delete any non-live instructions. For all non-live
-  // control constructs, delete all blocks and change the header to branch
-  // directly to the merge block.
+  // and block terminating instructions as live. Recursively mark the values
+  // they use. When complete, delete any non-live instructions. Return true
+  // if the function has been modified.
   bool AggressiveDCE(ir::Function* func);
 
   void Initialize(ir::Module* module);
@@ -107,34 +78,11 @@ class AggressiveDCEPass : public Pass {
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
-  // Map from block's label id to block.
-  std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
-
-  // Map from block to its structured successor blocks. See 
-  // ComputeStructuredSuccessors() for definition.
-  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
-      block2structured_succs_;
-
-  // Map from basic block to header block of its immediately containing
-  // control structure. nullptr is mapped if block is not contained in
-  // control structure.
-  std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>
-      immediate_control_parent_;
-
-  // Map from instruction to its basic block
-  std::unordered_map<ir::Instruction*, ir::BasicBlock*> inst2block_;
-
   // Live Instruction Worklist
   std::queue<ir::Instruction*> worklist_;
 
   // Live Instructions
   std::unordered_set<ir::Instruction*> live_insts_;
-
-  // Live Blocks
-  std::unordered_set<ir::BasicBlock*> live_blocks_;
-
-  // Live Structured Constructs (by header block)
-  std::unordered_set<ir::BasicBlock*> live_constructs_;
 
   // Live Local Variables
   std::unordered_set<uint32_t> live_local_vars_;
