@@ -118,10 +118,26 @@ class AggressiveDCEPass : public Pass {
   // Map from basic block to header block of its immediately containing
   // control structure. nullptr is mapped if block is not contained in
   // control structure.
-  std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>immediate_control_parent_;
+  std::unordered_map<ir::BasicBlock*, ir::BasicBlock*>
+      immediate_control_parent_;
 
   // Map from instruction to its basic block
-  std::unordered_map<ir::Instruction*, ir::BasicBlock*>inst2block_;
+  std::unordered_map<ir::Instruction*, ir::BasicBlock*> inst2block_;
+
+  // Live Instruction Worklist
+  std::queue<ir::Instruction*> worklist_;
+
+  // Live Instructions
+  std::unordered_set<ir::Instruction*> live_insts_;
+
+  // Live Blocks
+  std::unordered_set<ir::BasicBlock*> live_blocks_;
+
+  // Live Structured Constructs (by header block)
+  std::unordered_set<ir::BasicBlock*> live_constructs_;
+
+  // Live Local Variables
+  std::unordered_set<uint32_t> live_local_vars_;
 };
 
 }  // namespace opt

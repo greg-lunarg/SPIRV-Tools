@@ -135,7 +135,56 @@ bool AggressiveDCEPass::GetConstConditionalBranch(ir::BasicBlock* bp,
   return condIsConst;
 }
 
+bool AggressiveDCEPass::IsLocalVar(uint32_t varId) {
+  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varTypeId = varInst->type_id();
+  const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
+  return varTypeInst->GetSingleWordInOperand(kSpvTypePointerStorageClass) ==
+      SpvStorageClassFunction;
+}
+
+void AggressiveDCEPass::AddStores(uint32_t ptrId) {
+  analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
+  if (uses == nullptr)
+    return;
+  for (auto u : *uses) {
+    SpvOp op = u.inst->opcode();
+    if (op == SpvOpStore)
+      worklist_.push(u.inst);
+    else
+      AddStores(u.inst->result_id());
+  }
+  return false;
+}
+
 bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
+  // Map instruction to block. Add non-local store and return value
+  // instructions to worklist. If function call encountered, return
+  // false (unmodified).
+  for (auto& blk : *func) {
+    inst2block_[blk.GetLabelInst()] = &blk;
+    for (auto& inst : blk) {
+      inst2block_[&inst] = &blk;
+      switch (inst.opcode()) {
+      case SpvOpStore: {
+        uint32_t varId;
+        (void) GetPtr(&inst, &varId);
+        if (!IsLocalVar(varId)) {
+          worklist_.push(&inst);
+        }
+      } break;
+      case SpvOpReturnValue: {
+        worklist_.push(&inst);
+      } break;
+      case SpvOpFunctionCall: {
+        return false;
+      } break;
+      default:
+        break;
+      }
+    }
+  }
   // Create Control Dependence Tree
   std::list<ir::BasicBlock*> structuredOrder;
   ComputeStructuredOrder(func, &structuredOrder);
@@ -155,6 +204,38 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
       currentHeaders.push(*bi);
       currentMergeIds.push(mergeId);
     }
+  }
+  // Perform closure on live instruction set. Also compute live blocks
+  // and live control constructs.
+  while (!worklist_.empty()) {
+    ir::Instruction* liveInst = worklist_.front();
+    live_insts_.insert(liveInst);
+    // If block not yet live, mark it and its containing structure construct
+    // headers live.
+    ir::BasicBlock *liveBlock = inst2block_[liveInst];
+    while (liveBlock != nullptr &&
+        live_blocks_.find(liveBlock) == live_blocks_.end()) {
+      live_blocks_.insert(liveBlock);
+      liveBlock = immediate_control_parent[liveBlock];
+    }
+    // Add all operands if not already live
+    liveInst->ForEachInId([this](const uint32_t* iid) {
+      ir::Instruction* inInst = def_use_mgr_->GetDef(*iid);
+      if (live_insts_.find(inInst) == live_insts_.end())
+        worklist_.push(&inInst);
+    });
+    // If local load, add all variable's stores if variable not already live
+    if (liveInst.opcode() == SpvOpLoad) {
+      uint32_t varId;
+      (void) GetPtr(&liveInst, &varId);
+      if (IsLocalVar(varId)) {
+        if (live_local_vars_.find(varId) == live_local_vars.end()) {
+          AddStores(varId);
+          live_local_vars_.insert(varId);
+        }
+      }
+    }
+    worklist_.pop();
   }
 //
   std::list<ir::BasicBlock*> structuredOrder;
@@ -247,10 +328,6 @@ void AggressiveDCEPass::Initialize(ir::Module* module) {
     id2function_[fn.result_id()] = &fn;
     for (auto& blk : fn) {
       id2block_[blk.id()] = &blk;
-      // Initialize inst-to-block map
-      for (auto& inst : blk) {
-        inst2block_[&inst] = &blk;
-      }
     }
   }
 
@@ -261,6 +338,11 @@ Pass::Status AggressiveDCEPass::ProcessImpl() {
   // Current functionality assumes structured control flow. 
   // TODO(): Handle non-structured control-flow.
   if (!module_->HasCapability(SpvCapabilityShader))
+    return Status::SuccessWithoutChange;
+
+  // Current functionality assumes logical addressing only
+  // TODO(): Handle non-logical addressing
+  if (module_->HasCapability(SpvCapabilityAddressing))
     return Status::SuccessWithoutChange;
 
   bool modified = false;
