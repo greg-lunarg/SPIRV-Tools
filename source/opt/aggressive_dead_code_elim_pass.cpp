@@ -24,6 +24,7 @@ static const int kSpvLoadPtrId = 0;
 static const int kSpvAccessChainPtrId = 0;
 static const int kSpvTypePointerStorageClass = 0;
 static const int kSpvCopyObjectOperand = 0;
+static const int kSpvNameTargetId = 0;
 
 namespace spvtools {
 namespace opt {
@@ -130,10 +131,31 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     }
     worklist_.pop();
   }
-  // Kill all non-live instructions
+  // Mark all non-live instructions dead
   for (auto& blk : *func) {
     for (auto& inst : blk) {
       if (live_insts_.find(&inst) != live_insts_.end())
+        continue;
+      dead_insts_.insert(&inst);
+    }
+  }
+  // Remove debug statements referencing dead instructions. This must
+  // be done before killing the instructions, otherwise there are dead
+  // objects in the def/use database.
+  for (auto& di : module_->debugs()) {
+    if (di.opcode() != SpvOpName)
+      continue;
+    uint32_t tId = di.GetSingleWordInOperand(kSpvNameTargetId);
+    ir::Instruction* tInst = def_use_mgr_->GetDef(tId);
+    if (dead_insts_.find(tInst) == dead_insts_.end())
+      continue;
+    def_use_mgr_->KillInst(&di);
+    modified = true;
+  }
+  // Kill dead instructions
+  for (auto& blk : *func) {
+    for (auto& inst : blk) {
+      if (dead_insts_.find(&inst) == dead_insts_.end())
         continue;
       def_use_mgr_->KillInst(&inst);
       modified = true;
