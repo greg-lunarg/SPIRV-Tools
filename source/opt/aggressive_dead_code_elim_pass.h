@@ -64,6 +64,11 @@ class AggressiveDCEPass : public Pass {
   // and block terminating instructions as live. Recursively mark the values
   // they use. When complete, delete any non-live instructions. Return true
   // if the function has been modified.
+  // 
+  // Note: This function does not delete useless control structures. All
+  // existing control structures will remain. This can leave not-insignificant
+  // sequences of ultimately useless code.
+  // TODO(): Remove useless control constructs.
   bool AggressiveDCE(ir::Function* func);
 
   void Initialize(ir::Module* module);
