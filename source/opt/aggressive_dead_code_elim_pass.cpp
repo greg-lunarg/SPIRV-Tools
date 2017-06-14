@@ -68,7 +68,7 @@ void AggressiveDCEPass::AddStores(uint32_t ptrId) {
     SpvOp op = u.inst->opcode();
     if (op == SpvOpStore)
       worklist_.push(u.inst);
-    else
+    else if (op != SpvOpLoad)
       AddStores(u.inst->result_id());
   }
 }
