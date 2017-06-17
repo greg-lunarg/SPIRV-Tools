@@ -93,6 +93,30 @@ class LocalSSAElimPass : public Pass {
   // specifically block predecessors and target variables.
   void InitSSARewrite(ir::Function& func);
 
+  // Returns the id of the merge block declared by a merge instruction in 
+  // this block, if any.  If none, returns zero.
+  uint32_t MergeBlockIdIfAny(const ir::BasicBlock& blk);
+
+  // Compute structured successors for function |func|.
+  // A block's structured successors are the blocks it branches to
+  // together with its declared merge block if it has one.
+  // When order matters, the merge block always appears first.
+  // This assures correct depth first search in the presence of early 
+  // returns and kills. If the successor vector contain duplicates
+  // if the merge block, they are safely ignored by DFS.
+  void ComputeStructuredSuccessors(ir::Function* func);
+
+  // Return function to return ordered structure successors for a given block
+  // Assumes ComputeStructuredSuccessors() has been called.
+  GetBlocksFunction StructuredSuccessorsFunction();
+
+  // Compute structured block order for |func| into |structuredOrder|. This
+  // order has the property that dominators come before all blocks they
+  // dominate and merge blocks come after all blocks that are in the control
+  // constructs of their header.
+  void ComputeStructuredOrder(ir::Function* func,
+      std::list<const ir::BasicBlock*>* structuredOrder);
+
   // Remove remaining loads and stores of function scope variables only
   // referenced with non-access-chain loads and stores from function |func|.
   // Insert Phi functions where necessary. Running LocalAccessChainRemoval,
@@ -131,6 +155,11 @@ class LocalSSAElimPass : public Pass {
   // Variables that are only referenced by supported operations for this
   // pass ie. loads and stores.
   std::unordered_set<uint32_t> supported_ref_vars_;
+
+  // Map from block to its structured successor blocks. See 
+  // ComputeStructuredSuccessors() for definition.
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+      block2structured_succs_;
 
   // Next unused ID
   uint32_t next_id_;

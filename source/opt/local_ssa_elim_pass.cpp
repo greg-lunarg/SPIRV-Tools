@@ -245,6 +245,50 @@ void LocalSSAElim::InitSSARewrite(ir::Function& func) {
   }
 }
 
+uint32_t InlinePass::MergeBlockIdIfAny(const ir::BasicBlock& blk) {
+  auto merge_ii = blk.cend();
+  --merge_ii;
+  uint32_t mbid = 0;
+  if (merge_ii != blk.cbegin()) {
+    --merge_ii;
+    if (merge_ii->opcode() == SpvOpLoopMerge)
+      mbid = merge_ii->GetSingleWordOperand(kSpvLoopMergeMergeBlockId);
+    else if (merge_ii->opcode() == SpvOpSelectionMerge)
+      mbid = merge_ii->GetSingleWordOperand(kSpvSelectionMergeMergeBlockId);
+  }
+  return mbid;
+}
+
+void InlinePass::ComputeStructuredSuccessors(ir::Function* func) {
+  // If header, make merge block first successor.
+  for (auto& blk : *func) {
+    uint32_t mbid = MergeBlockIdIfAny(blk);
+    if (mbid != 0)
+      block2structured_succs_[&blk].push_back(id2block_[mbid]);
+    // add true successors
+    blk.ForEachSuccessorLabel([&blk, this](uint32_t sbid) {
+      block2structured_succs_[&blk].push_back(id2block_[sbid]);
+    });
+  }
+}
+
+InlinePass::GetBlocksFunction InlinePass::StructuredSuccessorsFunction() {
+  return [this](const ir::BasicBlock* block) {
+    return &(block2structured_succs_[block]);
+  };
+}
+
+void LocalSSAElim::ComputeStructuredOrder(ir::Function& func,
+    std::list<const ir::BasicBlock*>* structuredOrder) {
+  ComputeStructuredSuccessors(func);
+  auto ignore_block = [](cbb_ptr) {};
+  auto ignore_edge = [](cbb_ptr, cbb_ptr) {};
+  structuredOrder->clear();
+  spvtools::CFA<ir::BasicBlock>::DepthFirstTraversal(
+    &*func->begin(), StructuredSuccessorsFunction(), ignore_block,
+    [&](cbb_ptr b) { structuredOrder->push_front(b); }, ignore_edge);
+}
+
 bool LocalSSAElimPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
   // For now, return very conservative result: true. This will result in
   // correct, but possibly usused, phi code to be generated. A subsequent
@@ -261,6 +305,8 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
   if (!module_->HasCapability(SpvCapabilityShader))
     return false;
   InitSSARewrite(*func);
+  std::list<const ir::BasicBlock*> structuredOrder;
+  ComputeStructuredOrder(func, &structuredOrder);
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     // Initialize this block's SSA map using predecessor's maps.
