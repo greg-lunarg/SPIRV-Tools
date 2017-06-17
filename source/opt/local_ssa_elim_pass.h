@@ -85,9 +85,13 @@ class LocalSSAElimPass : public Pass {
   // labels. 
   void DCEInst(ir::Instruction* inst);
 
-  // Return true if |func| contains an instruction not supported by this
-  // pass.
-  bool HasUnsupportedInst(ir::Function* func);
+  // Return true if all uses of varId are only through supported reference
+  // operations ie. loads and store. Also cache in supported_ref_vars_;
+  bool HasOnlySupportedRefs(uint32_t varId);
+
+  // Initialize data structures used by LocalSSAElim for function |func|,
+  // specifically block predecessors and target variables.
+  void InitSSARewrite(ir::Function& func);
 
   // Remove remaining loads and stores of function scope variables only
   // referenced with non-access-chain loads and stores from function |func|.
@@ -124,26 +128,9 @@ class LocalSSAElimPass : public Pass {
   // Cache of previously seen non-target types
   std::unordered_set<uint32_t> seen_non_target_vars_;
 
-  // Map from function scope variable to a store of that variable in the
-  // current block whose value is currently valid. This map is cleared
-  // at the start of each block and incrementally updated as the block
-  // is scanned. The stores are candidates for elimination. The map is
-  // conservatively cleared when a function call is encountered.
-  std::unordered_map<uint32_t, ir::Instruction*> var2store_;
-
-  // Map from function scope variable to a load of that variable in the
-  // current block whose value is currently valid. This map is cleared
-  // at the start of each block and incrementally updated as the block
-  // is scanned. The stores are candidates for elimination. The map is
-  // conservatively cleared when a function call is encountered.
-  std::unordered_map<uint32_t, ir::Instruction*> var2load_;
-
-  // Set of variables whose most recent store in the current block cannot be
-  // deleted, for example, if there is a load of the variable which is
-  // dependent on the store and is not replaced and deleted by this pass,
-  // for example, a load through an access chain. A variable is removed
-  // from this set each time a new store of that variable is encountered.
-  std::unordered_set<uint32_t> pinned_vars_;
+  // Variables that are only referenced by supported operations for this
+  // pass ie. loads and stores.
+  std::unordered_set<uint32_t> supported_ref_vars_;
 
   // Next unused ID
   uint32_t next_id_;

@@ -200,51 +200,18 @@ void LocalSSAElimPass::DCEInst(ir::Instruction* inst) {
   }
 }
 
-bool LocalSSAElim::HasUnsupportedInst(ir::Function* func) {
-  // Currently this pass only supports optimization of store and load.
-  // The presence of other memory operations as well as function calls and
-  // non-access-chain pointer operations is not currently supported and
-  // will cause the function to return unmodified.
-  // TODO(): Handle more memory operations, pointer operations, function
-  // calls.
-  for (auto& blk : *func)
-    for (auto& inst : blk)
-      switch (inst.opcode()) {
-      case SpvOpAtomicLoad:
-      case SpvOpAtomicStore:
-      case SpvOpAtomicExchange:
-      case SpvOpAtomicCompareExchange:
-      case SpvOpAtomicCompareExchangeWeak:
-      case SpvOpAtomicIIncrement:
-      case SpvOpAtomicIDecrement:
-      case SpvOpAtomicIAdd:
-      case SpvOpAtomicISub:
-      case SpvOpAtomicSMin:
-      case SpvOpAtomicUMin:
-      case SpvOpAtomicSMax:
-      case SpvOpAtomicUMax:
-      case SpvOpAtomicAnd:
-      case SpvOpAtomicOr:
-      case SpvOpAtomicXor:
-      case SpvOpLifetimeStart:
-      case SpvOpLifetimeStop:
-      case SpvOpCopyMemory:
-      case SpvOpFunctionCall:
-        return true;
-      // This is a pre-SSA pass, so Conventional SSA form including
-      // OpCopyObject is not supported.
-      case SpvOpCopyObject:
-        return true;
-      // Frexp and Modf extended ops reference memory and are unsupported
-      case SpvOpExtInst: {
-        uint32_t op = inst.GetSingleWordInOperand(kSpvExtInstInstruction);
-        if (op == GLSLstd450Frexp || op == GLSLstd450Modf)
-          return true;
-      } break;
-      default:
-       break;
-      }
-  return false;
+bool LocalSingleStoreElimPass::HasOnlySupportedRefs(uint32_t varId) {
+  if (supported_ref_vars_.find(varId) != supported_ref_vars_.end())
+    return true;
+  analysis::UseList* uses = def_use_mgr_->GetUses(varId);
+  assert(uses != nullptr);
+  for (auto u : *uses) {
+    SpvOp op = u.inst->opcode();
+    if (op != SpvOpStore && op != SpvOpLoad && op != SpvOpName)
+      return false;
+  }
+  supported_ref_vars_.insert(varId);
+  return true;
 }
 
 void LocalSSAElim::InitSSARewrite(ir::Function& func) {
@@ -256,7 +223,7 @@ void LocalSSAElim::InitSSARewrite(ir::Function& func) {
       label2preds_[sbid].push_back(blkId);
     });
   }
-  // Remove variables with non-variable refs from target variable set
+  // Remove variables with non-load/store refs from target variable set
   for (auto& blk : func) {
     for (auto& inst : blk) {
       switch (ii->opcode()) {
@@ -266,7 +233,7 @@ void LocalSSAElim::InitSSARewrite(ir::Function& func) {
         ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (!IsTargetVar(varId))
           break;
-        if (ptrInst->opcode() == SpvOpVariable)
+        if (HasOnlySupportedRefs(varId))
           break;
         seen_non_target_vars_.insert(varId);
         seen_target_vars_.erase(varId);
@@ -289,8 +256,6 @@ bool LocalSSAElimPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
 }
 
 bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
-  if (HasUnsupportedInst(func))
-    return false;
   // Assumes all control flow structured.
   // TODO: Do SSA rewrite for non-structured control flow
   if (!module_->HasCapability(SpvCapabilityShader))
@@ -383,6 +348,9 @@ void LocalSSAElimPass::Initialize(ir::Module* module) {
   // Initialize Target Type Caches
   seen_target_vars_.clear();
   seen_non_target_vars_.clear();
+
+  // Initialize set of variables only referenced by supported operations
+  supported_ref_vars_.clear();
 
   // TODO(): Reuse def/use from previous passes
   def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
