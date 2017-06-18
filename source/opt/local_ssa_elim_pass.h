@@ -74,10 +74,6 @@ class LocalSSAElimPass : public Pass {
   // a load
   bool IsLiveVar(uint32_t varId) const;
 
-  // Return true if |storeInst| is not to function variable or if its
-  // base variable has a load
-  bool IsLiveStore(ir::Instruction* storeInst);
-
   // Add stores using |ptr_id| to |insts|
   void AddStores(uint32_t ptr_id, std::queue<ir::Instruction*>* insts);
 
@@ -115,7 +111,42 @@ class LocalSSAElimPass : public Pass {
   // dominate and merge blocks come after all blocks that are in the control
   // constructs of their header.
   void ComputeStructuredOrder(ir::Function* func,
-      std::list<const ir::BasicBlock*>* structuredOrder);
+      std::list<ir::BasicBlock*>* structuredOrder);
+
+  // Return true if loop header block
+  bool IsLoopHeader(ir::BasicBlock* block_ptr);
+
+  // Copy SSA map from predecessor. No phis generated.
+  void SSABlockInitSinglePred(ir::BasicBlock* block_ptr);
+
+  // Return true if variable is loaded after the label
+  bool IsLiveAfter(uint32_t var_id, uint32_t label);
+
+  void SSABlockInitLoopHeader(std::list<ir::BasicBlock*>::iterator block_itr);
+
+  // Merge SSA Maps from all predecessors. If any variables are missing
+  // in any predecessors maps, remove that variable from the resulting map.
+  // If any value ids differ for any variable, create a phi function and
+  // use that value id for the variable in the resulting map. Assumes all
+  // predecessors have been visited by SSARewrite.
+  void SSABlockInitSelectMerge(ir::BasicBlock* block_ptr);
+
+  // Initialize the label2SSA map entry for a block. Insert phi instructions
+  // into block when necessary. All predecessor blocks must have been
+  // visited by SSARewrite except for backedges.
+  void SSABlockInit(std::list<ir::BasicBlock*>::iterator block_itr);
+
+  // Return undef in function for type. Create and insert an undef after the
+  // first non-variable in the function if it doesn't already exist. Add
+  // undef to function undef map.
+  uint32_t Type2Undef(uint32_t type_id);
+
+  // Patch phis in loop header block now that the map is complete for the
+  // backedge predecessor. Specifically, for each phi, find the value
+  // corresponding to the backedge predecessor. That contains the variable id
+  // that this phi corresponds to. Change this phi operand to the the value
+  // which corresponds to that variable in the predecessor map.
+  void PatchPhis(uint32_t header_id, uint32_t back_id);
 
   // Remove remaining loads and stores of function scope variables only
   // referenced with non-access-chain loads and stores from function |func|.
@@ -160,6 +191,13 @@ class LocalSSAElimPass : public Pass {
   // ComputeStructuredSuccessors() for definition.
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
       block2structured_succs_;
+
+  // Map from block's label id to its predecessor blocks ids
+  std::unordered_map<uint32_t, std::vector<uint32_t>> label2preds_;
+
+  // Map from block's label id to its SSA map
+  std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>>
+      label2ssa_map_;
 
   // Next unused ID
   uint32_t next_id_;
