@@ -42,7 +42,7 @@ class LocalSSAElimPass : public Pass {
      std::function<std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
 
   LocalSSAElimPass();
-  const char* name() const override { return "eliminate-local-single-block"; }
+  const char* name() const override { return "eliminate-local-ssa"; }
   Status Process(ir::Module*) override;
 
  private:
