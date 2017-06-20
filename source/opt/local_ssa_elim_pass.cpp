@@ -575,7 +575,7 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
         if (!IsTargetVar(varId))
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
-        uint32_t valId = ii->GetInOperand(kSpvStoreValId).words[0];
+        uint32_t valId = ii->GetSingleWordInOperand(kSpvStoreValId);
         // Register new stored value for the variable
         label2ssa_map_[label][varId] = valId;
       } break;
