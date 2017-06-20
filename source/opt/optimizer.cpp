@@ -146,6 +146,11 @@ Optimizer::PassToken CreateLocalSingleBlockLoadStoreElimPass() {
       MakeUnique<opt::LocalSingleBlockLoadStoreElimPass>());
 }
 
+Optimizer::PassToken CreateLocalSSAElimPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::LocalSSAElimPass>());
+}
+
 Optimizer::PassToken CreateCompactIdsPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::CompactIdsPass>());

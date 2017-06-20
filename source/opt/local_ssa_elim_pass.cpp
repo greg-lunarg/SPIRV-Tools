@@ -14,8 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "local_ssa_elim_pass.h"
+
 #include "iterator.h"
-#include "local_single_block_elim_pass.h"
+#include "cfa.h"
 
 static const int kSpvEntryPointFunctionId = 1;
 static const int kSpvStorePtrId = 0;
@@ -203,7 +205,7 @@ void LocalSSAElimPass::DCEInst(ir::Instruction* inst) {
   }
 }
 
-bool LocalSingleStoreElimPass::HasOnlySupportedRefs(uint32_t varId) {
+bool LocalSSAElimPass::HasOnlySupportedRefs(uint32_t varId) {
   if (supported_ref_vars_.find(varId) != supported_ref_vars_.end())
     return true;
   analysis::UseList* uses = def_use_mgr_->GetUses(varId);
@@ -217,23 +219,23 @@ bool LocalSingleStoreElimPass::HasOnlySupportedRefs(uint32_t varId) {
   return true;
 }
 
-void LocalSSAElim::InitSSARewrite(ir::Function& func) {
+void LocalSSAElimPass::InitSSARewrite(ir::Function& func) {
   // Init predecessors
   label2preds_.clear();
   for (auto& blk : func) {
-    uint32_t blkId = blk.GetLabelId();
-    blk.ForEachSucc([&blkId, this](uint32_t sbid) {
+    uint32_t blkId = blk.id();
+    blk.ForEachSuccessorLabel([&blkId, this](uint32_t sbid) {
       label2preds_[sbid].push_back(blkId);
     });
   }
   // Remove variables with non-load/store refs from target variable set
   for (auto& blk : func) {
     for (auto& inst : blk) {
-      switch (ii->opcode()) {
+      switch (inst.opcode()) {
       case SpvOpStore:
       case SpvOpLoad: {
         uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
+        (void) GetPtr(&inst, &varId);
         if (!IsTargetVar(varId))
           break;
         if (HasOnlySupportedRefs(varId))
@@ -282,7 +284,7 @@ LocalSSAElimPass::StructuredSuccessorsFunction() {
   };
 }
 
-void LocalSSAElim::ComputeStructuredOrder(ir::Function& func,
+void LocalSSAElimPass::ComputeStructuredOrder(ir::Function* func,
     std::list<ir::BasicBlock*>* structuredOrder) {
   ComputeStructuredSuccessors(func);
   auto ignore_block = [](cbb_ptr) {};
@@ -290,13 +292,15 @@ void LocalSSAElim::ComputeStructuredOrder(ir::Function& func,
   structuredOrder->clear();
   spvtools::CFA<ir::BasicBlock>::DepthFirstTraversal(
     &*func->begin(), StructuredSuccessorsFunction(), ignore_block,
-    [&](cbb_ptr b) { structuredOrder->push_front(b); }, ignore_edge);
+    [&](cbb_ptr b) { structuredOrder->push_front(
+        const_cast<ir::BasicBlock*>(b)); }, 
+    ignore_edge);
 }
 
 void LocalSSAElimPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
-  uint32_t label = block_ptr->GetLabelId();
+  uint32_t label = block_ptr->id();
   uint32_t predLabel = label2preds_[label].front();
-  assert(visitedBlocks.find(predLabel) != visitedBlocks.end());
+  assert(visitedBlocks_.find(predLabel) != visitedBlocks_.end());
   label2ssa_map_[label] = label2ssa_map_[predLabel];
 }
 
@@ -323,20 +327,27 @@ uint32_t LocalSSAElimPass::Type2Undef(uint32_t type_id) {
   return undefId;
 }
 
+uint32_t LocalSSAElimPass::GetPointeeTypeId(
+    const ir::Instruction* ptrInst) const {
+  const uint32_t ptrTypeId = ptrInst->type_id();
+  const ir::Instruction* ptrTypeInst = def_use_mgr_->GetDef(ptrTypeId);
+  return ptrTypeInst->GetSingleWordInOperand(kSpvTypePointerTypeId);
+}
+
 void LocalSSAElimPass::SSABlockInitLoopHeader(
-    ir::UptrVectorIterator<ir::BasicBlock> block_itr) {
-  uint32_t label = block_itr->GetLabelId();
+    std::list<ir::BasicBlock*>::iterator block_itr) {
+  uint32_t label = (*block_itr)->id();
   // Determine backedge label.
   uint32_t backLabel = 0;
   for (uint32_t predLabel : label2preds_[label])
-    if (visitedBlocks.find(predLabel) == visitedBlocks.end()) {
+    if (visitedBlocks_.find(predLabel) == visitedBlocks_.end()) {
       assert(backLabel == 0);
       backLabel = predLabel;
       break;
     }
   assert(backLabel != 0);
   // Determine merge block.
-  auto mergeInst = block_itr->begin();
+  auto mergeInst = (*block_itr)->begin();
   uint32_t mergeLabel = mergeInst->GetSingleWordInOperand(
       kSpvLoopMergeMergeBlockId);
   // Collect all live variables and a default value for each across all
@@ -349,8 +360,9 @@ void LocalSSAElimPass::SSABlockInitLoopHeader(
     }
   }
   // Add all stored variables in loop. Set their default value id to zero.
-  for (auto bi = block_itr; bi->GetLabelId() != mergeLabel; ++bi) {
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
+  for (auto bi = block_itr; (*bi)->id() != mergeLabel; ++bi) {
+    ir::BasicBlock* bp = *bi;
+    for (auto ii = bp->begin(); ii != bp->end(); ++ii) {
       if (ii->opcode() != SpvOpStore)
         continue;
       uint32_t varId;
@@ -363,7 +375,7 @@ void LocalSSAElimPass::SSABlockInitLoopHeader(
   // Insert phi for all live variables that require them. All variables
   // defined in loop require a phi. Otherwise all variables
   // with differing predecessor values require a phi.
-  auto insertItr = block_itr->begin();
+  auto insertItr = (*block_itr)->begin();
   for (auto var_val : liveVars) {
     uint32_t varId = var_val.first;
     if (!IsLiveAfter(varId, label))
@@ -399,12 +411,11 @@ void LocalSSAElimPass::SSABlockInitLoopHeader(
     // edge predecessor. For predessors that do not define a value,
     // use undef.
     std::vector<ir::Operand> phi_in_operands;
-    uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
+    uint32_t typeId = GetPointeeTypeId(def_use_mgr_->GetDef(varId));
     for (uint32_t predLabel : label2preds_[label]) {
       uint32_t valId;
       if (predLabel == backLabel) {
         if (val0Id == 0)
-                                                              896,1         58%
           valId = varId;
         else
           valId = Type2Undef(typeId);
@@ -436,12 +447,12 @@ void LocalSSAElimPass::SSABlockInitLoopHeader(
 }
 
 void LocalSSAElimPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
-  uint32_t label = block_ptr->GetLabelId();
+  uint32_t label = block_ptr->id();
   // Collect all live variables and a default value for each across all
   // predecesors.
   std::unordered_map<uint32_t, uint32_t> liveVars;
   for (uint32_t predLabel : label2preds_[label]) {
-    assert(visitedBlocks.find(predLabel) != visitedBlocks.end());
+    assert(visitedBlocks_.find(predLabel) != visitedBlocks_.end());
     for (auto var_val : label2ssa_map_[predLabel]) {
       uint32_t varId = var_val.first;
       liveVars[varId] = var_val.second;
@@ -476,7 +487,7 @@ void LocalSSAElimPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
     // Val differs across predecessors. Add phi op to block and 
     // add its result id to the map
     std::vector<ir::Operand> phi_in_operands;
-    uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
+    uint32_t typeId = GetPointeeTypeId(def_use_mgr_->GetDef(varId));
     for (uint32_t predLabel : label2preds_[label]) {
       const auto var_val_itr = label2ssa_map_[predLabel].find(varId);
       // If variable not defined on this path, use undef
@@ -510,19 +521,19 @@ bool LocalSSAElimPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
 
 void LocalSSAElimPass::SSABlockInit(
     std::list<ir::BasicBlock*>::iterator block_itr) {
-  size_t numPreds = label2preds_[block_itr->GetLabelId()].size();
+  size_t numPreds = label2preds_[(*block_itr)->id()].size();
   if (numPreds == 0)
     return;
   if (numPreds == 1)
-    SSABlockInitSinglePred(&*block_itr);
-  else if (IsLoopHeader(&*block_itr))
+    SSABlockInitSinglePred(*block_itr);
+  else if (IsLoopHeader(*block_itr))
     SSABlockInitLoopHeader(block_itr);
   else
-    SSABlockInitSelectMerge(&*block_itr);
+    SSABlockInitSelectMerge(*block_itr);
 }
 
 void LocalSSAElimPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
-  ir::BasicBlock* header = label2block_[header_id];
+  ir::BasicBlock* header = id2block_[header_id];
   auto phiItr = header->begin();
   for (; phiItr->opcode() == SpvOpPhi; ++phiItr) {
     uint32_t cnt = 0;
@@ -554,8 +565,9 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
     // Initialize this block's SSA map using predecessor's maps.
     SSABlockInit(bi);
-    uint32_t label = bi->GetLabelId();
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
+    ir::BasicBlock* bp = *bi;
+    uint32_t label = bp->id();
+    for (auto ii = bp->begin(); ii != bp->end(); ++ii) {
       switch (ii->opcode()) {
       case SpvOpStore: {
         uint32_t varId;
@@ -582,7 +594,7 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
             replId = valItr->second;
         }
         if (replId == 0) {
-          uint32_t typeId = GetPteTypeId(def_use_mgr_->GetDef(varId));
+          uint32_t typeId = GetPointeeTypeId(def_use_mgr_->GetDef(varId));
           replId = Type2Undef(typeId);
         }
         // Replace load's id with the last stored value id
@@ -596,12 +608,12 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
       } break;
       }
     }
-    visitedBlocks.insert(label);
+    visitedBlocks_.insert(label);
     // Look for successor backedge and patch phis in loop header
     // if found.
     uint32_t header = 0;
-    bi->ForEachSucc([&header,this](uint32_t succ) {
-      if (visitedBlocks.find(succ) == visitedBlocks.end()) return;
+    bp->ForEachSuccessorLabel([&header,this](uint32_t succ) {
+      if (visitedBlocks_.find(succ) == visitedBlocks_.end()) return;
       assert(header == 0);
       header = succ;
     });
@@ -631,8 +643,13 @@ void LocalSSAElimPass::Initialize(ir::Module* module) {
 
   // Initialize function and block maps
   id2function_.clear();
-  for (auto& fn : *module_) 
+  id2block_.clear();
+  block2structured_succs_.clear();
+  for (auto& fn : *module_) {
     id2function_[fn.result_id()] = &fn;
+    for (auto& blk : fn)
+      id2block_[blk.id()] = &blk;
+  }
 
   // Initialize Target Type Caches
   seen_target_vars_.clear();
@@ -646,7 +663,6 @@ void LocalSSAElimPass::Initialize(ir::Module* module) {
 
   // Start new ids with next availablein module
   next_id_ = module_->id_bound();
-
 };
 
 Pass::Status LocalSSAElimPass::ProcessImpl() {

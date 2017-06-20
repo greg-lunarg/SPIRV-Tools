@@ -14,8 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef LIBSPIRV_OPT_LOCAL_SINGLE_BLOCK_ELIM_PASS_H_
-#define LIBSPIRV_OPT_LOCAL_SINGLE_BLOCK_ELIM_PASS_H_
+#ifndef LIBSPIRV_OPT_LOCAL_SSA_ELIM_PASS_H_
+#define LIBSPIRV_OPT_LOCAL_SSA_ELIM_PASS_H_
 
 
 #include <algorithm>
@@ -35,7 +35,12 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class LocalSSAElimPass : public Pass {
+  using cbb_ptr = const ir::BasicBlock*;
+
  public:
+   using GetBlocksFunction =
+     std::function<std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
+
   LocalSSAElimPass();
   const char* name() const override { return "eliminate-local-single-block"; }
   Status Process(ir::Module*) override;
@@ -62,6 +67,9 @@ class LocalSSAElimPass : public Pass {
   // variable of target type, false otherwise. Updates caches of target 
   // and non-target variables.
   bool IsTargetVar(uint32_t varId);
+
+  // Return type id for |ptrInst|'s pointee
+  uint32_t GetPointeeTypeId(const ir::Instruction* ptrInst) const;
 
   // Replace all instances of |loadInst|'s id with |replId| and delete
   // |loadInst|.
@@ -177,11 +185,20 @@ class LocalSSAElimPass : public Pass {
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
+  // Map from block's label id to block.
+  std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
+
   // Cache of previously seen target types
   std::unordered_set<uint32_t> seen_target_vars_;
 
   // Cache of previously seen non-target types
   std::unordered_set<uint32_t> seen_non_target_vars_;
+
+  // Set of label ids of visited blocks
+  std::unordered_set<uint32_t> visitedBlocks_;
+
+  // Map from type to undef for current function
+  std::unordered_map<uint32_t, uint32_t> type2undefs_;
 
   // Variables that are only referenced by supported operations for this
   // pass ie. loads and stores.
@@ -206,5 +223,5 @@ class LocalSSAElimPass : public Pass {
 }  // namespace opt
 }  // namespace spvtools
 
-#endif  // LIBSPIRV_OPT_LOCAL_SINGLE_BLOCK_ELIM_PASS_H_
+#endif  // LIBSPIRV_OPT_LOCAL_SSA_ELIM_PASS_H_
 
