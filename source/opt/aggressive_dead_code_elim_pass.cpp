@@ -84,33 +84,25 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   bool modified = false;
   // Add non-local stores, block terminating and merge instructions
   // to worklist. If function call encountered, return false, unmodified.
-  // TODO(greg-lunarg): Improve in presence of function calls
   for (auto& blk : *func) {
     for (auto& inst : blk) {
       switch (inst.opcode()) {
-      case SpvOpStore: {
-        uint32_t varId;
-        (void) GetPtr(&inst, &varId);
-        if (!IsLocalVar(varId)) {
+        case SpvOpStore: {
+          uint32_t varId;
+          (void) GetPtr(&inst, &varId);
+          if (!IsLocalVar(varId)) {
+            worklist_.push(&inst);
+          }
+        } break;
+        case SpvOpExtInst: {
+          // TODO(next): Check Ext Inst
           worklist_.push(&inst);
-        }
-      } break;
-      case SpvOpLoopMerge:
-      case SpvOpSelectionMerge:
-      case SpvOpBranch:
-      case SpvOpBranchConditional:
-      case SpvOpSwitch: 
-      case SpvOpKill: 
-      case SpvOpUnreachable: 
-      case SpvOpReturn:
-      case SpvOpReturnValue: {
-        worklist_.push(&inst);
-      } break;
-      case SpvOpFunctionCall: {
-        return false;
-      } break;
-      default:
-        break;
+        } break;
+        default: {
+          // control flow, function call, atomics
+          if (combinator_ops_.find(inst.opcode()) == combinator_ops_.end())
+            worklist_.push(&inst);
+        } break;
       }
     }
   }
@@ -193,6 +185,8 @@ Pass::Status AggressiveDCEPass::ProcessImpl() {
   if (module_->HasCapability(SpvCapabilityAddresses))
     return Status::SuccessWithoutChange;
 
+  InitCombinatorSets();
+
   bool modified = false;
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
@@ -208,6 +202,144 @@ AggressiveDCEPass::AggressiveDCEPass()
 Pass::Status AggressiveDCEPass::Process(ir::Module* module) {
   Initialize(module);
   return ProcessImpl();
+}
+
+void AggressiveDCEPass::InitCombinatorOps() {
+  combinator_ops_ = {
+    SpvOpNop,
+    SpvOpUndef,
+    SpvOpImageTexelPointer,
+    SpvOpLoad,
+    SpvOpAccessChain,
+    SpvOpInBoundsAccessChain,
+    SpvOpArrayLength,
+    SpvOpVectorExtractDynamic,
+    SpvOpVectorInsertDynamic,
+    SpvOpVectorShuffle,
+    SpvOpCompositeConstruct,
+    SpvOpCompositeExtract,
+    SpvOpCompositeInsert,
+    SpvOpCopyObject,
+    SpvOpTranspose,
+    SpvOpSampledImage,
+    SpvOpImageSampleImplicitLod,
+    SpvOpImageSampleExplicitLod,
+    SpvOpImageSampleDrefImplicitLod,
+    SpvOpImageSampleDrefExplicitLod,
+    SpvOpImageSampleProjImplicitLod,
+    SpvOpImageSampleProjExplicitLod,
+    SpvOpImageSampleProjDrefImplicitLod,
+    SpvOpImageSampleProjDrefExplicitLod,
+    SpvOpImageFetch,
+    SpvOpImageGather,
+    SpvOpImageDrefGather,
+    SpvOpImageRead,
+    SpvOpImage,
+    SpvOpConvertFToU,
+    SpvOpConvertFToS,
+    SpvOpConvertSToF,
+    SpvOpConvertUToF,
+    SpvOpUConvert,
+    SpvOpSConvert,
+    SpvOpFConvert,
+    SpvOpQuantizeToF16,
+    SpvOpBitcast,
+    SpvOpSNegate,
+    SpvOpFNegate,
+    SpvOpIAdd,
+    SpvOpFAdd,
+    SpvOpISub,
+    SpvOpFSub,
+    SpvOpIMul,
+    SpvOpFMul,
+    SpvOpUDiv,
+    SpvOpSDiv,
+    SpvOpFDiv,
+    SpvOpUMod,
+    SpvOpSRem,
+    SpvOpSMod,
+    SpvOpFRem,
+    SpvOpFMod,
+    SpvOpVectorTimesScalar,
+    SpvOpMatrixTimesScalar,
+    SpvOpVectorTimesMatrix,
+    SpvOpMatrixTimesVector,
+    SpvOpMatrixTimesMatrix,
+    SpvOpOuterProduct,
+    SpvOpDot,
+    SpvOpIAddCarry,
+    SpvOpISubBorrow,
+    SpvOpUMulExtended,
+    SpvOpSMulExtended,
+    SpvOpAny,
+    SpvOpAll,
+    SpvOpIsNan,
+    SpvOpIsInf,
+    SpvOpLogicalEqual,
+    SpvOpLogicalNotEqual,
+    SpvOpLogicalOr,
+    SpvOpLogicalAnd,
+    SpvOpLogicalNot,
+    SpvOpSelect,
+    SpvOpIEqual,
+    SpvOpINotEqual,
+    SpvOpUGreaterThan,
+    SpvOpSGreaterThan,
+    SpvOpUGreaterThanEqual,
+    SpvOpSGreaterThanEqual,
+    SpvOpULessThan,
+    SpvOpSLessThan,
+    SpvOpULessThanEqual,
+    SpvOpSLessThanEqual,
+    SpvOpFOrdEqual,
+    SpvOpFUnordEqual,
+    SpvOpFOrdNotEqual,
+    SpvOpFUnordNotEqual,
+    SpvOpFOrdLessThan,
+    SpvOpFUnordLessThan,
+    SpvOpFOrdGreaterThan,
+    SpvOpFUnordGreaterThan,
+    SpvOpFOrdLessThanEqual,
+    SpvOpFUnordLessThanEqual,
+    SpvOpFOrdGreaterThanEqual,
+    SpvOpFUnordGreaterThanEqual,
+    SpvOpShiftRightLogical,
+    SpvOpShiftRightArithmetic,
+    SpvOpShiftLeftLogical,
+    SpvOpBitwiseOr,
+    SpvOpBitwiseXor,
+    SpvOpBitwiseAnd,
+    SpvOpNot,
+    SpvOpBitFieldInsert,
+    SpvOpBitFieldSExtract,
+    SpvOpBitFieldUExtract,
+    SpvOpBitReverse,
+    SpvOpBitCount,
+    SpvOpDPdx,
+    SpvOpDPdy,
+    SpvOpFwidth,
+    SpvOpDPdxFine,
+    SpvOpDPdyFine,
+    SpvOpFwidthFine,
+    SpvOpDPdxCoarse,
+    SpvOpDPdyCoarse,
+    SpvOpFwidthCoarse,
+    SpvOpPhi,
+    SpvOpImageSparseSampleImplicitLod,
+    SpvOpImageSparseSampleExplicitLod,
+    SpvOpImageSparseSampleDrefImplicitLod,
+    SpvOpImageSparseSampleDrefExplicitLod,
+    SpvOpImageSparseSampleProjImplicitLod,
+    SpvOpImageSparseSampleProjExplicitLod,
+    SpvOpImageSparseSampleProjDrefImplicitLod,
+    SpvOpImageSparseSampleProjDrefExplicitLod,
+    SpvOpImageSparseFetch,
+    SpvOpImageSparseGather,
+    SpvOpImageSparseDrefGather,
+    SpvOpImageSparseTexelsResident,
+    SpvOpImageSparseRead,
+    SpvOpSizeOf
+  };
 }
 
 }  // namespace opt

@@ -94,6 +94,10 @@ class AggressiveDCEPass : public Pass {
 
   // Dead instructions. Use for debug cleanup.
   std::unordered_set<const ir::Instruction*> dead_insts_;
+
+  // Opcodes of combinator instructions ie executable instructions
+  // without side-effect
+  std::unordered_set<uint32_t> combinator_ops_;
 };
 
 }  // namespace opt
