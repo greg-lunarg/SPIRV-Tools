@@ -240,9 +240,9 @@ uint32_t LocalSSAElimPass::MergeBlockIdIfAny(const ir::BasicBlock& blk) {
   if (merge_ii != blk.cbegin()) {
     --merge_ii;
     if (merge_ii->opcode() == SpvOpLoopMerge)
-      mbid = merge_ii->GetSingleWordOperand(kLoopMergeMergeBlockIdInIdx);
+      mbid = merge_ii->GetSingleWordInOperand(kLoopMergeMergeBlockIdInIdx);
     else if (merge_ii->opcode() == SpvOpSelectionMerge)
-      mbid = merge_ii->GetSingleWordOperand(kSelectionMergeMergeBlockIdInIdx);
+      mbid = merge_ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
   }
   return mbid;
 }
@@ -656,7 +656,7 @@ Pass::Status LocalSSAElimPass::ProcessImpl() {
   // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
-        id2function_[e.GetSingleWordOperand(kEntryPointFunctionIdInIdx)];
+        id2function_[e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx)];
     modified = LocalSSAElim(fn) || modified;
   }
   FinalizeNextId(module_);
