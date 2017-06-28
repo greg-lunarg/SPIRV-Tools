@@ -119,7 +119,7 @@ bool LocalSSAElimPass::HasLoads(uint32_t ptrId) const {
     }
     else {
       // Conservatively assume that calls will do a load
-      // TODO(): Improve analysis around function calls
+      // TODO(greg-lunarg): Improve analysis around function calls
       if (op == SpvOpLoad || op == SpvOpFunctionCall)
         return true;
     }
@@ -291,7 +291,7 @@ bool LocalSSAElimPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
   // For now, return very conservative result: true. This will result in
   // correct, but possibly usused, phi code to be generated. A subsequent
   // DCE pass should eliminate this code.
-  // TODO(): Return more accurate information
+  // TODO(greg-lunarg): Return more accurate information
   (void) var_id;
   (void) label;
   return true;
@@ -538,7 +538,7 @@ void LocalSSAElimPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
 
 bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
   // Assumes all control flow structured.
-  // TODO: Do SSA rewrite for non-structured control flow
+  // TODO(greg-lunarg): Do SSA rewrite for non-structured control flow
   if (!module_->HasCapability(SpvCapabilityShader))
     return false;
   InitSSARewrite(*func);
@@ -641,7 +641,7 @@ void LocalSSAElimPass::Initialize(ir::Module* module) {
   // Initialize set of variables only referenced by supported operations
   supported_ref_vars_.clear();
 
-  // TODO(): Reuse def/use from previous passes
+  // TODO(greg-lunarg): Reuse def/use from previous passes
   def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
 
   // Start new ids with next availablein module
