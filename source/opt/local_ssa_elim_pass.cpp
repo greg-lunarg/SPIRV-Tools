@@ -19,15 +19,15 @@
 #include "iterator.h"
 #include "cfa.h"
 
-static const int kSpvEntryPointFunctionId = 1;
-static const int kSpvStorePtrId = 0;
-static const int kSpvStoreValId = 1;
-static const int kSpvLoadPtrId = 0;
-static const int kSpvAccessChainPtrId = 0;
-static const int kSpvTypePointerStorageClass = 0;
-static const int kSpvTypePointerTypeId = 1;
-static const int kSpvSelectionMergeMergeBlockId = 0;
-static const int kSpvLoopMergeMergeBlockId = 0;
+static const int kEntryPointFunctionIdInIdx = 1;
+static const int kStorePtrIdInIdx = 0;
+static const int kStoreValIdInIdx = 1;
+static const int kLoadPtrIdInIdx = 0;
+static const int kAccessChainPtrIdInIdx = 0;
+static const int kTypePointerStorageClassInIdx = 0;
+static const int kTypePointerTypeIdInIdx = 1;
+static const int kSelectionMergeMergeBlockIdInIdx = 0;
+static const int kLoopMergeMergeBlockIdInIdx = 0;
 
 namespace spvtools {
 namespace opt {
@@ -72,11 +72,11 @@ bool LocalSSAElimPass::IsTargetType(
 ir::Instruction* LocalSSAElimPass::GetPtr(
       ir::Instruction* ip, uint32_t* varId) {
   *varId = ip->GetSingleWordInOperand(
-      ip->opcode() == SpvOpStore ?  kSpvStorePtrId : kSpvLoadPtrId);
+      ip->opcode() == SpvOpStore ?  kStorePtrIdInIdx : kLoadPtrIdInIdx);
   ir::Instruction* ptrInst = def_use_mgr_->GetDef(*varId);
   ir::Instruction* varInst = ptrInst;
   while (IsNonPtrAccessChain(varInst->opcode())) {
-    *varId = varInst->GetSingleWordInOperand(kSpvAccessChainPtrId);
+    *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
     varInst = def_use_mgr_->GetDef(*varId);
   }
   return ptrInst;
@@ -91,13 +91,13 @@ bool LocalSSAElimPass::IsTargetVar(uint32_t varId) {
   assert(varInst->opcode() == SpvOpVariable);
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
-  if (varTypeInst->GetSingleWordInOperand(kSpvTypePointerStorageClass) !=
+  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
     SpvStorageClassFunction) {
     seen_non_target_vars_.insert(varId);
     return false;
   }
   const uint32_t varPteTypeId =
-    varTypeInst->GetSingleWordInOperand(kSpvTypePointerTypeId);
+    varTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
   ir::Instruction* varPteTypeInst = def_use_mgr_->GetDef(varPteTypeId);
   if (!IsTargetType(varPteTypeInst)) {
     seen_non_target_vars_.insert(varId);
@@ -133,7 +133,7 @@ bool LocalSSAElimPass::IsLiveVar(uint32_t varId) const {
   assert(varInst->opcode() == SpvOpVariable);
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
-  if (varTypeInst->GetSingleWordInOperand(kSpvTypePointerStorageClass) !=
+  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
       SpvStorageClassFunction)
     return true;
   // test if variable is loaded from
@@ -240,9 +240,9 @@ uint32_t LocalSSAElimPass::MergeBlockIdIfAny(const ir::BasicBlock& blk) {
   if (merge_ii != blk.cbegin()) {
     --merge_ii;
     if (merge_ii->opcode() == SpvOpLoopMerge)
-      mbid = merge_ii->GetSingleWordOperand(kSpvLoopMergeMergeBlockId);
+      mbid = merge_ii->GetSingleWordOperand(kLoopMergeMergeBlockIdInIdx);
     else if (merge_ii->opcode() == SpvOpSelectionMerge)
-      mbid = merge_ii->GetSingleWordOperand(kSpvSelectionMergeMergeBlockId);
+      mbid = merge_ii->GetSingleWordOperand(kSelectionMergeMergeBlockIdInIdx);
   }
   return mbid;
 }
@@ -314,7 +314,7 @@ uint32_t LocalSSAElimPass::GetPointeeTypeId(
     const ir::Instruction* ptrInst) const {
   const uint32_t ptrTypeId = ptrInst->type_id();
   const ir::Instruction* ptrTypeInst = def_use_mgr_->GetDef(ptrTypeId);
-  return ptrTypeInst->GetSingleWordInOperand(kSpvTypePointerTypeId);
+  return ptrTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
 }
 
 void LocalSSAElimPass::SSABlockInitLoopHeader(
@@ -332,7 +332,7 @@ void LocalSSAElimPass::SSABlockInitLoopHeader(
   // Determine merge block.
   auto mergeInst = (*block_itr)->begin();
   uint32_t mergeLabel = mergeInst->GetSingleWordInOperand(
-      kSpvLoopMergeMergeBlockId);
+      kLoopMergeMergeBlockIdInIdx);
   // Collect all live variables and a default value for each across all
   // non-backedge predecesors.
   std::unordered_map<uint32_t, uint32_t> liveVars;
@@ -558,7 +558,7 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
         if (!IsTargetVar(varId))
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
-        uint32_t valId = ii->GetSingleWordInOperand(kSpvStoreValId);
+        uint32_t valId = ii->GetSingleWordInOperand(kStoreValIdInIdx);
         // Register new stored value for the variable
         label2ssa_map_[label][varId] = valId;
       } break;
@@ -656,7 +656,7 @@ Pass::Status LocalSSAElimPass::ProcessImpl() {
   // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
-        id2function_[e.GetSingleWordOperand(kSpvEntryPointFunctionId)];
+        id2function_[e.GetSingleWordOperand(kEntryPointFunctionIdInIdx)];
     modified = LocalSSAElim(fn) || modified;
   }
   FinalizeNextId(module_);
