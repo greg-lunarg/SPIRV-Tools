@@ -92,12 +92,12 @@ bool LocalSSAElimPass::IsTargetVar(uint32_t varId) {
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
   if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
-    SpvStorageClassFunction) {
+      SpvStorageClassFunction) {
     seen_non_target_vars_.insert(varId);
     return false;
   }
   const uint32_t varPteTypeId =
-    varTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
+      varTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
   ir::Instruction* varPteTypeInst = def_use_mgr_->GetDef(varPteTypeId);
   if (!IsTargetType(varPteTypeInst)) {
     seen_non_target_vars_.insert(varId);
