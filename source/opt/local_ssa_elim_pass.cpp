@@ -19,18 +19,22 @@
 #include "iterator.h"
 #include "cfa.h"
 
-static const int kEntryPointFunctionIdInIdx = 1;
-static const int kStorePtrIdInIdx = 0;
-static const int kStoreValIdInIdx = 1;
-static const int kLoadPtrIdInIdx = 0;
-static const int kAccessChainPtrIdInIdx = 0;
-static const int kTypePointerStorageClassInIdx = 0;
-static const int kTypePointerTypeIdInIdx = 1;
-static const int kSelectionMergeMergeBlockIdInIdx = 0;
-static const int kLoopMergeMergeBlockIdInIdx = 0;
-
 namespace spvtools {
 namespace opt {
+
+namespace {
+
+const uint32_t kEntryPointFunctionIdInIdx = 1;
+const uint32_t kStorePtrIdInIdx = 0;
+const uint32_t kStoreValIdInIdx = 1;
+const uint32_t kLoadPtrIdInIdx = 0;
+const uint32_t kAccessChainPtrIdInIdx = 0;
+const uint32_t kTypePointerStorageClassInIdx = 0;
+const uint32_t kTypePointerTypeIdInIdx = 1;
+const uint32_t kSelectionMergeMergeBlockIdInIdx = 0;
+const uint32_t kLoopMergeMergeBlockIdInIdx = 0;
+
+} // anonymous namespace
 
 bool LocalSSAElimPass::IsNonPtrAccessChain(
     const SpvOp opcode) const {
