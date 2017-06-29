@@ -129,19 +129,26 @@ class LocalSSAElimPass : public Pass {
   // Return true if loop header block
   bool IsLoopHeader(ir::BasicBlock* block_ptr) const;
 
-  // Copy SSA map from predecessor. No phis generated.
+  // Initialize SSA map for block with single predecessor
   void SSABlockInitSinglePred(ir::BasicBlock* block_ptr);
 
   // Return true if variable is loaded after the label
   bool IsLiveAfter(uint32_t var_id, uint32_t label) const;
 
+  // Initialize SSA map for loop header block by merging SSA maps 
+  // from all predecessors. If any value ids differ for any variable
+  // across predecessors, create a phi function and use that value id
+  // for the variable in the new SSA map. Assumes all predecessors have
+  // been visited by SSARewrite except the back edge. Use a dummy value
+  // in the phi for the back edge until the back edge block is visited
+  // and patch the phi value then.
   void SSABlockInitLoopHeader(std::list<ir::BasicBlock*>::iterator block_itr);
 
-  // Merge SSA Maps from all predecessors. If any variables are missing
-  // in any predecessors maps, remove that variable from the resulting map.
-  // If any value ids differ for any variable, create a phi function and
-  // use that value id for the variable in the resulting map. Assumes all
-  // predecessors have been visited by SSARewrite.
+  // Initialize SSA map for selection merge block by merging SSA Maps
+  // from all predecessors. If any value ids differ for any variable
+  // across predecessors, create a phi function and use that value id
+  // for the variable in the new SSA map. Assumes all predecessors have
+  // been visited by SSARewrite.
   void SSABlockInitSelectMerge(ir::BasicBlock* block_ptr);
 
   // Initialize the label2SSA map entry for a block. Insert phi instructions
