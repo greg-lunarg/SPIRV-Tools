@@ -119,16 +119,12 @@ class LocalSSAElimPass : public Pass {
   // if the merge block, they are safely ignored by DFS.
   void ComputeStructuredSuccessors(ir::Function* func);
 
-  // Return function to return ordered structure successors for a given block
-  // Assumes ComputeStructuredSuccessors() has been called.
-  GetBlocksFunction StructuredSuccessorsFunction();
-
   // Compute structured block order for |func| into |structuredOrder|. This
   // order has the property that dominators come before all blocks they
   // dominate and merge blocks come after all blocks that are in the control
   // constructs of their header.
   void ComputeStructuredOrder(ir::Function* func,
-      std::list<ir::BasicBlock*>* structuredOrder);
+      std::list<ir::BasicBlock*>* order);
 
   // Return true if loop header block
   bool IsLoopHeader(ir::BasicBlock* block_ptr);
