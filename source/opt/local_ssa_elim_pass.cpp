@@ -117,14 +117,14 @@ bool LocalSSAElimPass::HasLoads(uint32_t ptrId) const {
     return false;
   for (auto u : *uses) {
     SpvOp op = u.inst->opcode();
-    if (IsNonPtrAccessChain(op)) {
+    if (IsNonPtrAccessChain(op) || op == SpvOpCopyObject) {
       if (HasLoads(u.inst->result_id()))
         return true;
     }
     else {
-      // Conservatively assume that calls will do a load
-      // TODO(greg-lunarg): Improve analysis around function calls
-      if (op == SpvOpLoad || op == SpvOpFunctionCall)
+      // Conservatively assume that any non-store use is a load
+      // TODO(greg-lunarg): Improve analysis around function calls, etc
+      if (op != SpvOpStore && op != SpvOpName && !IsDecorate(op))
         return true;
     }
   }
