@@ -44,12 +44,24 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BC %fo
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %f "f"
 OpName %i "i"
 OpName %BC "BC"
 OpName %fo "fo"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BC "BC"
+OpName %fo "fo"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %8 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %_ptr_Function_float = OpTypePointer Function %float
@@ -106,8 +118,6 @@ OpFunctionEnd
   const std::string after =
       R"(%main = OpFunction %void None %8
 %22 = OpLabel
-%f = OpVariable %_ptr_Function_float Function
-%i = OpVariable %_ptr_Function_int Function
 OpBranch %23
 %23 = OpLabel
 %38 = OpPhi %float %float_0 %22 %34 %25
@@ -132,7 +142,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, ForLoopWithContinue) {
@@ -160,13 +172,25 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BC %fo
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %f "f"
 OpName %i "i"
 OpName %t "t"
 OpName %BC "BC"
 OpName %fo "fo"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BC "BC"
+OpName %fo "fo"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %9 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %_ptr_Function_float = OpTypePointer Function %float
@@ -234,9 +258,6 @@ OpFunctionEnd
       R"(%44 = OpUndef %float
 %main = OpFunction %void None %9
 %23 = OpLabel
-%f = OpVariable %_ptr_Function_float Function
-%i = OpVariable %_ptr_Function_int Function
-%t = OpVariable %_ptr_Function_float Function
 OpBranch %24
 %24 = OpLabel
 %45 = OpPhi %float %44 %23 %33 %26
@@ -269,7 +290,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, ForLoopWithBreak) {
@@ -297,13 +320,25 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BC %fo
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %f "f"
 OpName %i "i"
 OpName %t "t"
 OpName %BC "BC"
 OpName %fo "fo"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BC "BC"
+OpName %fo "fo"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %9 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %_ptr_Function_float = OpTypePointer Function %float
@@ -372,9 +407,6 @@ OpFunctionEnd
       R"(%45 = OpUndef %float
 %main = OpFunction %void None %9
 %24 = OpLabel
-%f = OpVariable %_ptr_Function_float Function
-%i = OpVariable %_ptr_Function_int Function
-%t = OpVariable %_ptr_Function_float Function
 OpBranch %25
 %25 = OpLabel
 %46 = OpPhi %float %45 %24 %36 %27
@@ -407,7 +439,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, SwapProblem) {
@@ -436,7 +470,10 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %fe %fo
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %f1 "f1"
 OpName %f2 "f2"
 OpName %ie "ie"
@@ -444,7 +481,16 @@ OpName %fe "fe"
 OpName %i "i"
 OpName %t "t"
 OpName %fo "fo"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %fe "fe"
+OpName %fo "fo"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %11 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %_ptr_Function_float = OpTypePointer Function %float
@@ -508,11 +554,6 @@ OpFunctionEnd
       R"(%40 = OpUndef %float
 %main = OpFunction %void None %11
 %23 = OpLabel
-%f1 = OpVariable %_ptr_Function_float Function
-%f2 = OpVariable %_ptr_Function_float Function
-%ie = OpVariable %_ptr_Function_int Function
-%i = OpVariable %_ptr_Function_int Function
-%t = OpVariable %_ptr_Function_float Function
 %24 = OpLoad %float %fe
 %25 = OpConvertFToS %int %24
 OpBranch %26
@@ -538,7 +579,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, LostCopyProblem) {
@@ -567,13 +610,25 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BC %fo
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %f "f"
 OpName %i "i"
 OpName %t "t"
 OpName %BC "BC"
 OpName %fo "fo"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BC "BC"
+OpName %fo "fo"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %9 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %_ptr_Function_float = OpTypePointer Function %float
@@ -642,9 +697,6 @@ OpFunctionEnd
       R"(%45 = OpUndef %float
 %main = OpFunction %void None %9
 %24 = OpLabel
-%f = OpVariable %_ptr_Function_float Function
-%i = OpVariable %_ptr_Function_int Function
-%t = OpVariable %_ptr_Function_float Function
 OpBranch %25
 %25 = OpLabel
 %46 = OpPhi %float %45 %24 %47 %27
@@ -678,7 +730,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, IfThenElse) {
@@ -704,12 +758,25 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %f %BaseColor %gl_FragColor
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %f "f"
 OpName %v "v"
 OpName %BaseColor "BaseColor"
 OpName %gl_FragColor "gl_FragColor"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %f "f"
+OpName %BaseColor "BaseColor"
+OpName %gl_FragColor "gl_FragColor"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %8 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %_ptr_Input_float = OpTypePointer Input %float
@@ -755,7 +822,6 @@ OpFunctionEnd
   const std::string after =
       R"(%main = OpFunction %void None %8
 %20 = OpLabel
-%v = OpVariable %_ptr_Function_v4float Function
 %21 = OpLoad %float %f
 %22 = OpFOrdGreaterThanEqual %bool %21 %float_0
 OpSelectionMerge %23 None
@@ -776,10 +842,24 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, IfThen) {
+  // #version 140
+  // 
+  // in vec4 BaseColor;
+  // in float f;
+  // 
+  // void main()
+  // {
+  //     vec4 v = BaseColor;
+  //     if (f <= 0)
+  //       v = v * 0.5;
+  //     gl_FragColor = v;
+  // }
 
   const std::string predefs =
       R"(OpCapability Shader
@@ -788,12 +868,25 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BaseColor %f %gl_FragColor
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %v "v"
 OpName %BaseColor "BaseColor"
 OpName %f "f"
 OpName %gl_FragColor "gl_FragColor"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BaseColor "BaseColor"
+OpName %f "f"
+OpName %gl_FragColor "gl_FragColor"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %8 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
@@ -834,7 +927,6 @@ OpFunctionEnd
   const std::string after =
       R"(%main = OpFunction %void None %8
 %18 = OpLabel
-%v = OpVariable %_ptr_Function_v4float Function
 %19 = OpLoad %v4float %BaseColor
 %20 = OpLoad %float %f
 %21 = OpFOrdLessThanEqual %bool %20 %float_0
@@ -851,7 +943,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, Switch) {
@@ -887,13 +981,26 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BaseColor %f %gl_FragColor
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %v "v"
 OpName %BaseColor "BaseColor"
 OpName %i "i"
 OpName %f "f"
 OpName %gl_FragColor "gl_FragColor"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BaseColor "BaseColor"
+OpName %f "f"
+OpName %gl_FragColor "gl_FragColor"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %9 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
@@ -951,8 +1058,6 @@ OpFunctionEnd
   const std::string after =
       R"(%main = OpFunction %void None %9
 %21 = OpLabel
-%v = OpVariable %_ptr_Function_v4float Function
-%i = OpVariable %_ptr_Function_int Function
 %22 = OpLoad %v4float %BaseColor
 %23 = OpLoad %float %f
 %24 = OpConvertFToS %int %23
@@ -977,7 +1082,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 TEST_F(LocalSSAElimTest, SwitchWithFallThrough) {
@@ -1012,13 +1119,26 @@ OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %main "main" %BaseColor %f %gl_FragColor
 OpExecutionMode %main OriginUpperLeft
 OpSource GLSL 140
-OpName %main "main"
+)";
+
+  const std::string names_before =
+      R"(OpName %main "main"
 OpName %v "v"
 OpName %BaseColor "BaseColor"
 OpName %i "i"
 OpName %f "f"
 OpName %gl_FragColor "gl_FragColor"
-%void = OpTypeVoid
+)";
+
+  const std::string names_after =
+      R"(OpName %main "main"
+OpName %BaseColor "BaseColor"
+OpName %f "f"
+OpName %gl_FragColor "gl_FragColor"
+)";
+
+  const std::string predefs2 =
+      R"(%void = OpTypeVoid
 %9 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %v4float = OpTypeVector %float 4
@@ -1076,8 +1196,6 @@ OpFunctionEnd
   const std::string after =
       R"(%main = OpFunction %void None %9
 %20 = OpLabel
-%v = OpVariable %_ptr_Function_v4float Function
-%i = OpVariable %_ptr_Function_int Function
 %21 = OpLoad %v4float %BaseColor
 %22 = OpLoad %float %f
 %23 = OpConvertFToS %int %22
@@ -1104,7 +1222,9 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::LocalSSAElimPass>(
-      predefs + before, predefs + after, true, true);
+      predefs + names_before + predefs2 + before,
+      predefs + names_after + predefs2 + after,
+      true, true);
 }
 
 // TODO(greg-lunarg): Add tests to verify handling of these cases:

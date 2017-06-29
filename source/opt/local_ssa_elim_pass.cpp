@@ -153,6 +153,44 @@ void LocalSSAElimPass::AddStores(
   }
 }
 
+bool LocalSSAElimPass::HasOnlyNamesAndDecorates(uint32_t id) {
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return true;
+  for (auto u : *uses) {
+    SpvOp op = u.inst->opcode();
+    if (op != SpvOpName && !IsDecorate(op))
+      return false;
+  }
+  return true;
+}
+
+void LocalSSAElimPass::KillNamesAndDecorates(uint32_t id) {
+  // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
+  // kill if no other operands.
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return;
+  std::list<ir::Instruction*> killList;
+  for (auto u : *uses) {
+    SpvOp op = u.inst->opcode();
+    if (op != SpvOpName && !IsDecorate(op))
+      continue;
+    killList.push_back(u.inst);
+  }
+  for (auto kip : killList)
+    def_use_mgr_->KillInst(kip);
+}
+
+void LocalSSAElimPass::KillNamesAndDecorates(ir::Instruction* inst) {
+  // TODO(greg-lunarg): Remove inst from any OpGroupDecorate and 
+  // kill if not other operands.
+  uint32_t rId = inst->result_id();
+  if (rId == 0)
+    return;
+  KillNamesAndDecorates(rId);
+}
+
 void LocalSSAElimPass::DCEInst(ir::Instruction* inst) {
   std::queue<ir::Instruction*> deadInsts;
   deadInsts.push(inst);
@@ -172,14 +210,13 @@ void LocalSSAElimPass::DCEInst(ir::Instruction* inst) {
     // Remember variable if dead load
     if (di->opcode() == SpvOpLoad)
       (void) GetPtr(di, &varId);
+    KillNamesAndDecorates(di);
     def_use_mgr_->KillInst(di);
     // For all operands with no remaining uses, add their instruction
     // to the dead instruction queue.
-    for (auto id : ids) {
-      analysis::UseList* uses = def_use_mgr_->GetUses(id);
-      if (uses == nullptr)
+    for (auto id : ids)
+      if (HasOnlyNamesAndDecorates(id))
         deadInsts.push(def_use_mgr_->GetDef(id));
-    }
     // if a load was deleted and it was the variable's
     // last load, add all its stores to dead queue
     if (varId != 0 && !IsLiveVar(varId)) 
@@ -195,7 +232,8 @@ bool LocalSSAElimPass::HasOnlySupportedRefs(uint32_t varId) {
   assert(uses != nullptr);
   for (auto u : *uses) {
     SpvOp op = u.inst->opcode();
-    if (op != SpvOpStore && op != SpvOpLoad && op != SpvOpName)
+    if (op != SpvOpStore && op != SpvOpLoad && op != SpvOpName &&
+        !IsDecorate(op))
       return false;
   }
   supported_ref_vars_.insert(varId);
@@ -537,16 +575,14 @@ void LocalSSAElimPass::PatchPhis(uint32_t header_id, uint32_t back_id) {
 }
 
 bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
-  // Assumes all control flow structured.
-  // TODO(greg-lunarg): Do SSA rewrite for non-structured control flow
-  if (!module_->HasCapability(SpvCapabilityShader))
-    return false;
   InitSSARewrite(*func);
+  // Process all blocks in structured order. 
   std::list<ir::BasicBlock*> structuredOrder;
   ComputeStructuredOrder(func, &structuredOrder);
   bool modified = false;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
-    // Initialize this block's SSA map using predecessor's maps.
+    // Initialize this block's SSA map using predecessor's maps. Then
+    // process all stores and loads of targeted variables.
     SSABlockInit(bi);
     ir::BasicBlock* bp = *bi;
     uint32_t label = bp->id();
@@ -568,7 +604,6 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
         if (!IsTargetVar(varId))
           break;
         assert(ptrInst->opcode() != SpvOpAccessChain);
-        // If variable is not defined, use undef
         uint32_t replId = 0;
         const auto ssaItr = label2ssa_map_.find(label);
         if (ssaItr != label2ssa_map_.end()) {
@@ -576,13 +611,16 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
           if (valItr != ssaItr->second.end())
             replId = valItr->second;
         }
+        // If variable is not defined, use undef
         if (replId == 0) {
           uint32_t typeId = GetPointeeTypeId(def_use_mgr_->GetDef(varId));
           replId = Type2Undef(typeId);
         }
-        // Replace load's id with the last stored value id
-        // and delete load.
+        // Replace load's id with the last stored value id for variable
+        // and delete load. Kill any names or decorates using id before
+        // replacing to prevent incorrect replacement in those instructions.
         const uint32_t loadId = ii->result_id();
+        KillNamesAndDecorates(loadId);
         (void)def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
         def_use_mgr_->KillInst(&*ii);
         modified = true;
@@ -649,11 +687,22 @@ void LocalSSAElimPass::Initialize(ir::Module* module) {
 };
 
 Pass::Status LocalSSAElimPass::ProcessImpl() {
+  // Assumes all control flow structured.
+  // TODO(greg-lunarg): Do SSA rewrite for non-structured control flow
+  if (!module_->HasCapability(SpvCapabilityShader))
+    return Status::SuccessWithoutChange;
   // Assumes logical addressing only
+  // TODO(greg-lunarg): Add support for physical addressing
   if (module_->HasCapability(SpvCapabilityAddresses))
     return Status::SuccessWithoutChange;
+  // Do not process if module contains OpGroupDecorate. Additional
+  // support required in KillNamesAndDecorates().
+  // TODO(greg-lunarg): Add support for OpGroupDecorate
+  for (auto& ai : module_->annotations()) 
+    if (ai.opcode() == SpvOpGroupDecorate)
+      return Status::SuccessWithoutChange;
+  // Process functions
   bool modified = false;
-  // Call Mem2Reg on all remaining functions.
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
         id2function_[e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx)];

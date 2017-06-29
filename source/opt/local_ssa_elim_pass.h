@@ -89,9 +89,18 @@ class LocalSSAElimPass : public Pass {
   // labels. 
   void DCEInst(ir::Instruction* inst);
 
-  // Return true if all uses of varId are only through supported reference
+  // Return true if all uses of |varId| are only through supported reference
   // operations ie. loads and store. Also cache in supported_ref_vars_;
   bool HasOnlySupportedRefs(uint32_t varId);
+
+  // Return true if all uses of |id| are only name or decorate ops.
+  bool HasOnlyNamesAndDecorates(uint32_t id);
+
+  // Kill all name and decorate ops using |inst|
+  void KillNamesAndDecorates(ir::Instruction* inst);
+
+  // Kill all name and decorate ops using |id|
+  void KillNamesAndDecorates(uint32_t id);
 
   // Initialize data structures used by LocalSSAElim for function |func|,
   // specifically block predecessors and target variables.
@@ -162,6 +171,12 @@ class LocalSSAElimPass : public Pass {
   // SingleBlockLocalElim and SingleStoreLocalElim beforehand will improve
   // the runtime and effectiveness of this function.
   bool LocalSSAElim(ir::Function* func);
+
+  // Return true if all uses of varId are only through supported reference
+  // operations ie. loads and store. Also cache in supported_ref_vars_;
+  inline bool IsDecorate(uint32_t op) {
+    return (op == SpvOpDecorate || op == SpvOpDecorateId);
+  }
 
   // Save next available id into |module|.
   inline void FinalizeNextId(ir::Module* module) {
