@@ -222,7 +222,9 @@ Optimizer::PassToken CreateLocalSingleBlockLoadStoreElimPass();
 // The presence of access chain references and function calls can inhibit
 // the above optimization.
 //
-// Only modules with logical addressing are currently processed. 
+// Only shader modules with logical addressing are currently processed.
+// Currently modules with any extensions enabled are not processed. This
+// is left for future work.
 //
 // This pass is most effective if preceeded by Inlining and 
 // LocalAccessChainConvert. LocalSingleStoreElim and LocalSingleBlockElim
