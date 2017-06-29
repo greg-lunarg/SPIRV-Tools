@@ -157,7 +157,7 @@ void LocalSSAElimPass::AddStores(
   }
 }
 
-bool LocalSSAElimPass::HasOnlyNamesAndDecorates(uint32_t id) {
+bool LocalSSAElimPass::HasOnlyNamesAndDecorates(uint32_t id) const {
   analysis::UseList* uses = def_use_mgr_->GetUses(id);
   if (uses == nullptr)
     return true;
@@ -321,13 +321,14 @@ void LocalSSAElimPass::ComputeStructuredOrder(
 }
 
 void LocalSSAElimPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
+  // Copy SSA map from single predecessor
   uint32_t label = block_ptr->id();
   uint32_t predLabel = label2preds_[label].front();
   assert(visitedBlocks_.find(predLabel) != visitedBlocks_.end());
   label2ssa_map_[label] = label2ssa_map_[predLabel];
 }
 
-bool LocalSSAElimPass::IsLiveAfter(uint32_t var_id, uint32_t label) {
+bool LocalSSAElimPass::IsLiveAfter(uint32_t var_id, uint32_t label) const {
   // For now, return very conservative result: true. This will result in
   // correct, but possibly usused, phi code to be generated. A subsequent
   // DCE pass should eliminate this code.
@@ -533,7 +534,7 @@ void LocalSSAElimPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
   }
 }
 
-bool LocalSSAElimPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
+bool LocalSSAElimPass::IsLoopHeader(ir::BasicBlock* block_ptr) const {
   auto iItr = block_ptr->end();
   --iItr;
   if (iItr == block_ptr->begin())

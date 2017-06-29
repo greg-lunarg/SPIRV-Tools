@@ -94,7 +94,7 @@ class LocalSSAElimPass : public Pass {
   bool HasOnlySupportedRefs(uint32_t varId);
 
   // Return true if all uses of |id| are only name or decorate ops.
-  bool HasOnlyNamesAndDecorates(uint32_t id);
+  bool HasOnlyNamesAndDecorates(uint32_t id) const;
 
   // Kill all name and decorate ops using |inst|
   void KillNamesAndDecorates(ir::Instruction* inst);
@@ -127,13 +127,13 @@ class LocalSSAElimPass : public Pass {
       std::list<ir::BasicBlock*>* order);
 
   // Return true if loop header block
-  bool IsLoopHeader(ir::BasicBlock* block_ptr);
+  bool IsLoopHeader(ir::BasicBlock* block_ptr) const;
 
   // Copy SSA map from predecessor. No phis generated.
   void SSABlockInitSinglePred(ir::BasicBlock* block_ptr);
 
   // Return true if variable is loaded after the label
-  bool IsLiveAfter(uint32_t var_id, uint32_t label);
+  bool IsLiveAfter(uint32_t var_id, uint32_t label) const;
 
   void SSABlockInitLoopHeader(std::list<ir::BasicBlock*>::iterator block_itr);
 
