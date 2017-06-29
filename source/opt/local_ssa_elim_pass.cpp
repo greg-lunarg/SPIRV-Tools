@@ -461,11 +461,9 @@ void LocalSSAElimPass::SSABlockInitLoopHeader(
           valId = var_val_itr->second;
       }
       phi_in_operands.push_back(
-        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-          std::initializer_list<uint32_t>{valId}));
+          {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {valId}});
       phi_in_operands.push_back(
-        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-          std::initializer_list<uint32_t>{predLabel}));
+          {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {predLabel}});
     }
     const uint32_t phiId = TakeNextId();
     std::unique_ptr<ir::Instruction> newPhi(
@@ -527,11 +525,9 @@ void LocalSSAElimPass::SSABlockInitSelectMerge(ir::BasicBlock* block_ptr) {
       const uint32_t valId = (var_val_itr != label2ssa_map_[predLabel].end()) ?
           var_val_itr->second : Type2Undef(typeId);
       phi_in_operands.push_back(
-          ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-          std::initializer_list<uint32_t>{valId}));
+          {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {valId}});
       phi_in_operands.push_back(
-        ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_ID,
-          std::initializer_list<uint32_t>{predLabel}));
+          {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {predLabel}});
     }
     const uint32_t phiId = TakeNextId();
     std::unique_ptr<ir::Instruction> newPhi(
@@ -593,7 +589,7 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
   ComputeStructuredOrder(func, &structuredOrder);
   bool modified = false;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
-    // Initialize this block's SSA map using predecessor's maps. Then
+    // Initialize this block's SSA map using predecessor maps. Then
     // process all stores and loads of targeted variables.
     SSABlockInit(bi);
     ir::BasicBlock* bp = *bi;
