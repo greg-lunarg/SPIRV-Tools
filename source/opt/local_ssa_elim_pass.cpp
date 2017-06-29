@@ -33,6 +33,7 @@ const uint32_t kTypePointerStorageClassInIdx = 0;
 const uint32_t kTypePointerTypeIdInIdx = 1;
 const uint32_t kSelectionMergeMergeBlockIdInIdx = 0;
 const uint32_t kLoopMergeMergeBlockIdInIdx = 0;
+const uint32_t kCopyObjectOperandInIdx = 0;
 
 } // anonymous namespace
 
@@ -67,7 +68,7 @@ bool LocalSSAElimPass::IsTargetType(
   // All struct members must be math type
   int nonMathComp = 0;
   typeInst->ForEachInId([&nonMathComp,this](const uint32_t* tid) {
-    ir::Instruction* compTypeInst = def_use_mgr_->GetDef(*tid);
+    const ir::Instruction* compTypeInst = def_use_mgr_->GetDef(*tid);
     if (!IsMathType(compTypeInst)) ++nonMathComp;
   });
   return nonMathComp == 0;
@@ -75,12 +76,20 @@ bool LocalSSAElimPass::IsTargetType(
 
 ir::Instruction* LocalSSAElimPass::GetPtr(
       ir::Instruction* ip, uint32_t* varId) {
+  const SpvOp op = ip->opcode();
+  assert(op == SpvOpStore || op == SpvOpLoad);
   *varId = ip->GetSingleWordInOperand(
-      ip->opcode() == SpvOpStore ?  kStorePtrIdInIdx : kLoadPtrIdInIdx);
+      op == SpvOpStore ? kStorePtrIdInIdx : kLoadPtrIdInIdx);
   ir::Instruction* ptrInst = def_use_mgr_->GetDef(*varId);
   ir::Instruction* varInst = ptrInst;
-  while (IsNonPtrAccessChain(varInst->opcode())) {
-    *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
+  while (varInst->opcode() != SpvOpVariable) {
+    if (IsNonPtrAccessChain(varInst->opcode())) {
+      *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
+    }
+    else {
+      assert(varInst->opcode() == SpvOpCopyObject);
+      *varId = varInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
+    }
     varInst = def_use_mgr_->GetDef(*varId);
   }
   return ptrInst;
