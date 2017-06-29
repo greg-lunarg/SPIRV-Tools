@@ -44,14 +44,14 @@ bool LocalSSAElimPass::IsNonPtrAccessChain(
 bool LocalSSAElimPass::IsMathType(
     const ir::Instruction* typeInst) const {
   switch (typeInst->opcode()) {
-  case SpvOpTypeInt:
-  case SpvOpTypeFloat:
-  case SpvOpTypeBool:
-  case SpvOpTypeVector:
-  case SpvOpTypeMatrix:
-    return true;
-  default:
-    break;
+    case SpvOpTypeInt:
+    case SpvOpTypeFloat:
+    case SpvOpTypeBool:
+    case SpvOpTypeVector:
+    case SpvOpTypeMatrix:
+      return true;
+    default:
+      break;
   }
   return false;
 }
@@ -257,19 +257,19 @@ void LocalSSAElimPass::InitSSARewrite(ir::Function& func) {
   for (auto& blk : func) {
     for (auto& inst : blk) {
       switch (inst.opcode()) {
-      case SpvOpStore:
-      case SpvOpLoad: {
-        uint32_t varId;
-        (void) GetPtr(&inst, &varId);
-        if (!IsTargetVar(varId))
+        case SpvOpStore:
+        case SpvOpLoad: {
+          uint32_t varId;
+          (void) GetPtr(&inst, &varId);
+          if (!IsTargetVar(varId))
+            break;
+          if (HasOnlySupportedRefs(varId))
+            break;
+          seen_non_target_vars_.insert(varId);
+          seen_target_vars_.erase(varId);
+        } break;
+        default:
           break;
-        if (HasOnlySupportedRefs(varId))
-          break;
-        seen_non_target_vars_.insert(varId);
-        seen_target_vars_.erase(varId);
-      } break;
-      default:
-        break;
       }
     }
   }
@@ -592,45 +592,45 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
     uint32_t label = bp->id();
     for (auto ii = bp->begin(); ii != bp->end(); ++ii) {
       switch (ii->opcode()) {
-      case SpvOpStore: {
-        uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
-        if (!IsTargetVar(varId))
-          break;
-        assert(ptrInst->opcode() != SpvOpAccessChain);
-        uint32_t valId = ii->GetSingleWordInOperand(kStoreValIdInIdx);
-        // Register new stored value for the variable
-        label2ssa_map_[label][varId] = valId;
-      } break;
-      case SpvOpLoad: {
-        uint32_t varId;
-        ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
-        if (!IsTargetVar(varId))
-          break;
-        assert(ptrInst->opcode() != SpvOpAccessChain);
-        uint32_t replId = 0;
-        const auto ssaItr = label2ssa_map_.find(label);
-        if (ssaItr != label2ssa_map_.end()) {
-          const auto valItr = ssaItr->second.find(varId);
-          if (valItr != ssaItr->second.end())
-            replId = valItr->second;
-        }
-        // If variable is not defined, use undef
-        if (replId == 0) {
-          uint32_t typeId = GetPointeeTypeId(def_use_mgr_->GetDef(varId));
-          replId = Type2Undef(typeId);
-        }
-        // Replace load's id with the last stored value id for variable
-        // and delete load. Kill any names or decorates using id before
-        // replacing to prevent incorrect replacement in those instructions.
-        const uint32_t loadId = ii->result_id();
-        KillNamesAndDecorates(loadId);
-        (void)def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
-        def_use_mgr_->KillInst(&*ii);
-        modified = true;
-      } break;
-      default: {
-      } break;
+        case SpvOpStore: {
+          uint32_t varId;
+          ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
+          if (!IsTargetVar(varId))
+            break;
+          assert(ptrInst->opcode() != SpvOpAccessChain);
+          uint32_t valId = ii->GetSingleWordInOperand(kStoreValIdInIdx);
+          // Register new stored value for the variable
+          label2ssa_map_[label][varId] = valId;
+        } break;
+        case SpvOpLoad: {
+          uint32_t varId;
+          ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
+          if (!IsTargetVar(varId))
+            break;
+          assert(ptrInst->opcode() != SpvOpAccessChain);
+          uint32_t replId = 0;
+          const auto ssaItr = label2ssa_map_.find(label);
+          if (ssaItr != label2ssa_map_.end()) {
+            const auto valItr = ssaItr->second.find(varId);
+            if (valItr != ssaItr->second.end())
+              replId = valItr->second;
+          }
+          // If variable is not defined, use undef
+          if (replId == 0) {
+            uint32_t typeId = GetPointeeTypeId(def_use_mgr_->GetDef(varId));
+            replId = Type2Undef(typeId);
+          }
+          // Replace load's id with the last stored value id for variable
+          // and delete load. Kill any names or decorates using id before
+          // replacing to prevent incorrect replacement in those instructions.
+          const uint32_t loadId = ii->result_id();
+          KillNamesAndDecorates(loadId);
+          (void)def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
+          def_use_mgr_->KillInst(&*ii);
+          modified = true;
+        } break;
+        default: {
+        } break;
       }
     }
     visitedBlocks_.insert(label);
