@@ -688,6 +688,20 @@ void LocalSSAElimPass::Initialize(ir::Module* module) {
   next_id_ = module_->id_bound();
 };
 
+bool LocalSSAElimPass::AllExtensionsAllowed() const {
+  // Currently disallows all extensions. This is just super conservative
+  // to allow this to go public and many can likely be allowed with little
+  // to no additional coding. One exception is SPV_KHR_variable_pointers
+  // which will require some additional work around HasLoads, AddStores
+  // and generally DCEInst.
+  // TODO(greg-lunarg): Enable more extensions.
+  for (auto& ei : module_->extensions()) {
+    (void) ei;
+    return false;
+  }
+  return true;
+}
+
 Pass::Status LocalSSAElimPass::ProcessImpl() {
   // Assumes all control flow structured.
   // TODO(greg-lunarg): Do SSA rewrite for non-structured control flow
@@ -702,6 +716,9 @@ Pass::Status LocalSSAElimPass::ProcessImpl() {
   // TODO(greg-lunarg): Add support for OpGroupDecorate
   for (auto& ai : module_->annotations()) 
     if (ai.opcode() == SpvOpGroupDecorate)
+      return Status::SuccessWithoutChange;
+  // Do not process if any disallowed extensions are enabled
+  if (!AllExtensionsAllowed())
       return Status::SuccessWithoutChange;
   // Process functions
   bool modified = false;

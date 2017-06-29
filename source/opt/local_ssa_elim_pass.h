@@ -161,6 +161,11 @@ class LocalSSAElimPass : public Pass {
   // which corresponds to that variable in the predecessor map.
   void PatchPhis(uint32_t header_id, uint32_t back_id);
 
+  // Return true if all extensions in this module are allowed by this pass.
+  // Currently, no extensions are allowed. glsl_std_450 extended instructions
+  // are allowed.
+  bool AllExtensionsAllowed() const;
+
   // Remove remaining loads and stores of function scope variables only
   // referenced with non-access-chain loads and stores from function |func|.
   // Insert Phi functions where necessary. Running LocalAccessChainRemoval,
