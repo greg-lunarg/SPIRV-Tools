@@ -239,6 +239,10 @@ class LocalSSAElimPass : public Pass {
   std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>>
       label2ssa_map_;
 
+  // Extra block whose successors are all blocks with no predecessors
+  // in function.
+  ir::BasicBlock pseudo_entry_block_;
+
   // Next unused ID
   uint32_t next_id_;
 };

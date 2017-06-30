@@ -299,8 +299,11 @@ uint32_t LocalSSAElimPass::MergeBlockIdIfAny(const ir::BasicBlock& blk) {
 }
 
 void LocalSSAElimPass::ComputeStructuredSuccessors(ir::Function* func) {
-  // If header, make merge block first successor.
   for (auto& blk : *func) {
+    // If no predecessors in function, make successor to pseudo entry
+    if (label2preds_[blk.id()].size() == 0)
+      block2structured_succs_[&pseudo_entry_block_].push_back(&blk);
+    // If header, make merge block first successor.
     const uint32_t mbid = MergeBlockIdIfAny(blk);
     if (mbid != 0)
       block2structured_succs_[&blk].push_back(id2block_[mbid]);
@@ -325,8 +328,8 @@ void LocalSSAElimPass::ComputeStructuredOrder(
       order->push_front(const_cast<ir::BasicBlock*>(b)); };
   
   spvtools::CFA<ir::BasicBlock>::DepthFirstTraversal(
-      &*func->begin(), get_structured_successors, ignore_block, post_order,
-      ignore_edge);
+      &pseudo_entry_block_, get_structured_successors, ignore_block,
+      post_order, ignore_edge);
 }
 
 void LocalSSAElimPass::SSABlockInitSinglePred(ir::BasicBlock* block_ptr) {
@@ -589,6 +592,9 @@ bool LocalSSAElimPass::LocalSSAElim(ir::Function* func) {
   ComputeStructuredOrder(func, &structuredOrder);
   bool modified = false;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    // Skip pseudo entry block
+    if (*bi == &pseudo_entry_block_)
+      continue;
     // Initialize this block's SSA map using predecessor maps. Then
     // process all stores and loads of targeted variables.
     SSABlockInit(bi);
@@ -737,7 +743,10 @@ Pass::Status LocalSSAElimPass::ProcessImpl() {
 }
 
 LocalSSAElimPass::LocalSSAElimPass()
-    : module_(nullptr), def_use_mgr_(nullptr), next_id_(0) {}
+    : module_(nullptr), def_use_mgr_(nullptr),
+      pseudo_entry_block_(std::unique_ptr<ir::Instruction>(
+          new ir::Instruction(SpvOpLabel, 0, 0, {}))),
+      next_id_(0) {}
 
 Pass::Status LocalSSAElimPass::Process(ir::Module* module) {
   Initialize(module);
