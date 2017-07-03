@@ -129,7 +129,7 @@ void DeadBranchElimPass::AddSelectionMerge(uint32_t labelId,
 void DeadBranchElimPass::AddBranchConditional(uint32_t condId,
     uint32_t trueLabId, uint32_t falseLabId, ir::BasicBlock* bp) {
   std::unique_ptr<ir::Instruction> newBranchCond(
-    new ir::Instruction(SpvOpBranch, 0, 0,
+    new ir::Instruction(SpvOpBranchConditional, 0, 0,
         {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {condId}},
          {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {trueLabId}},
          {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {falseLabId}}}));
