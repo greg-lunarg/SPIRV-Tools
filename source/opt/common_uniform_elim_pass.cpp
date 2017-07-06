@@ -48,12 +48,12 @@ namespace opt {
 
 ir::Instruction* SSAMemPass::GetPtr(ir::Instruction* ip, uint32_t* varId) {
   const uint32_t ptrId = ip->opcode() == SpvOpStore ?
-      ip->GetInOperand(kSpvStorePtrId).words[0] :
-      ip->GetInOperand(kSpvLoadPtrId).words[0];
+      ip->GetSingleWordInOperand(kSpvStorePtrId) :
+      ip->GetSingleWordInOperand(kSpvLoadPtrId);
   ir::Instruction* ptrInst =
     def_use_mgr_->id_to_defs().find(ptrId)->second;
   *varId = ptrInst->opcode() == SpvOpAccessChain ?
-    ptrInst->GetInOperand(kSpvAccessChainPtrId).words[0] :
+    ptrInst->GetSingleWordInOperand(kSpvAccessChainPtrId) :
     ptrId;
   return ptrInst;
 }
@@ -65,9 +65,9 @@ bool SSAMemPass::IsUniformVar(uint32_t varId) {
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst =
     def_use_mgr_->id_to_defs().find(varTypeId)->second;
-  return varTypeInst->GetInOperand(kSpvTypePointerStorageClass).words[0] ==
+  return varTypeInst->GetSingleWordInOperand(kSpvTypePointerStorageClass) ==
     SpvStorageClassUniform ||
-    varTypeInst->GetInOperand(kSpvTypePointerStorageClass).words[0] ==
+    varTypeInst->GetSingleWordInOperand(kSpvTypePointerStorageClass) ==
     SpvStorageClassUniformConstant;
 }
 
@@ -95,7 +95,7 @@ void SSAMemPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
 uint32_t SSAMemPass::GetPointeeTypeId(const ir::Instruction* ptrInst) {
   const uint32_t ptrTypeId = ptrInst->type_id();
   const ir::Instruction* ptrTypeInst = def_use_mgr_->GetDef(ptrTypeId);
-  return ptrTypeInst->GetInOperand(kSpvTypePointerTypeId).words[0];
+  return ptrTypeInst->GetSingleWordInOperand(kSpvTypePointerTypeId);
 }
 
 void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
@@ -105,7 +105,7 @@ void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
   // Build and append Load
   const uint32_t ldResultId = TakeNextId();
   const uint32_t varId =
-    ptrInst->GetInOperand(kSpvAccessChainPtrId).words[0];
+    ptrInst->GetSingleWordInOperand(kSpvAccessChainPtrId);
   const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
   assert(varInst->opcode() == SpvOpVariable);
   const uint32_t varPteTypeId = GetPointeeTypeId(varInst);
@@ -129,7 +129,7 @@ void SSAMemPass::GenACLoadRepl(const ir::Instruction* ptrInst,
   ptrInst->ForEachInId([&iidIdx, &ext_in_opnds, this](const uint32_t *iid) {
     if (iidIdx > 0) {
       const ir::Instruction* cInst = def_use_mgr_->GetDef(*iid);
-      uint32_t val = cInst->GetInOperand(kSpvConstantValue).words[0];
+      uint32_t val = cInst->GetSingleWordInOperand(kSpvConstantValue);
       ext_in_opnds.push_back(
         ir::Operand(spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
           std::initializer_list<uint32_t>{val}));
@@ -317,7 +317,7 @@ Pass::Status SSAMemPass::ProcessImpl() {
   bool modified = false;
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
-        id2function_[e.GetOperand(kSpvEntryPointFunctionId).words[0]];
+        id2function_[e.GetSingleWordInOperand(kSpvEntryPointFunctionId);
     modified = EliminateCommonUniform(fn) || modified;
   }
   FinalizeNextId(module_);
