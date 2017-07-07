@@ -115,9 +115,8 @@ void CommonUniformElimPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
   // remove load instruction
   def_use_mgr_->KillInst(loadInst);
   // if access chain, see if it can be removed as well
-  if (ptrInst->opcode() == SpvOpAccessChain) {
+  if (IsNonPtrAccessChain(ptrInst->opcode()))
     DeleteIfUseless(ptrInst);
-  }
 }
 
 uint32_t CommonUniformElimPass::GetPointeeTypeId(const ir::Instruction* ptrInst) {
@@ -192,7 +191,13 @@ bool CommonUniformElimPass::UniformAccessChainConvert(ir::Function* func) {
         continue;
       uint32_t varId;
       ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
-      if (ptrInst->opcode() != SpvOpAccessChain)
+      if (!IsNonPtrAccessChain(ptrInst->opcode()))
+        continue;
+      // Do not convert nested access chains
+      if (ptrInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx) != varId)
+        continue;
+      // Only convert single index access chain
+      if (ptrInst->NumInOperands() > 2)
         continue;
       if (!IsUniformVar(varId))
         continue;
@@ -233,7 +238,7 @@ bool CommonUniformElimPass::CommonUniformLoadElimination(ir::Function* func) {
         continue;
       uint32_t varId;
       ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
-      if (ptrInst->opcode() == SpvOpAccessChain)
+      if (ptrInst->opcode() != SpvOpVariable)
         continue;
       if (!IsUniformVar(varId))
         continue;
