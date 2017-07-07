@@ -106,6 +106,11 @@ class CommonUniformElimPass : public Pass {
   // is not enabled. It also currently does not support any extensions.
   bool EliminateCommonUniform(ir::Function* func);
 
+  // Return true if all extensions in this module are allowed by this pass.
+  // Currently, no extensions are supported.
+  // TODO(greg-lunarg): Add extensions to supported list.
+  bool AllExtensionsSupported() const;
+
   inline void FinalizeNextId(ir::Module* module) {
     module->SetIdBound(next_id_);
   }

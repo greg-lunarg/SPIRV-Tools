@@ -330,7 +330,39 @@ void CommonUniformElimPass::Initialize(ir::Module* module) {
   next_id_ = module->id_bound();
 };
 
+bool CommonUniformElimPass::AllExtensionsSupported() const {
+  // Currently disallows all extensions. This is just super conservative
+  // to allow this to go public and many can likely be allowed with little
+  // to no additional coding. One exception is SPV_KHR_variable_pointers
+  // which will require some additional work around HasLoads, AddStores
+  // and generally DCEInst.
+  // TODO(greg-lunarg): Enable more extensions.
+  for (auto& ei : module_->extensions()) {
+    (void) ei;
+    return false;
+  }
+  return true;
+}
+
 Pass::Status CommonUniformElimPass::ProcessImpl() {
+  // Assumes all control flow structured.
+  // TODO(greg-lunarg): Do SSA rewrite for non-structured control flow
+  if (!module_->HasCapability(SpvCapabilityShader))
+    return Status::SuccessWithoutChange;
+  // Assumes logical addressing only
+  // TODO(greg-lunarg): Add support for physical addressing
+  if (module_->HasCapability(SpvCapabilityAddresses))
+    return Status::SuccessWithoutChange;
+  // Do not process if module contains OpGroupDecorate. Additional
+  // support required in KillNamesAndDecorates().
+  // TODO(greg-lunarg): Add support for OpGroupDecorate
+  for (auto& ai : module_->annotations()) 
+    if (ai.opcode() == SpvOpGroupDecorate)
+      return Status::SuccessWithoutChange;
+  // Do not process if any disallowed extensions are enabled
+  if (!AllExtensionsSupported())
+      return Status::SuccessWithoutChange;
+  // Process entry point functions
   bool modified = false;
   for (auto& e : module_->entry_points()) {
     ir::Function* fn =
