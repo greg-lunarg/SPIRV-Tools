@@ -99,6 +99,18 @@ bool CommonUniformElimPass::IsUniformVar(uint32_t varId) {
     SpvStorageClassUniformConstant;
 }
 
+bool CommonUniformElimPass::HasDecorates(uint32_t id) const {
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return false;
+  for (auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    if (IsDecorate(op))
+      return true;
+  }
+  return false;
+}
+
 bool CommonUniformElimPass::HasOnlyNamesAndDecorates(uint32_t id) const {
   analysis::UseList* uses = def_use_mgr_->GetUses(id);
   if (uses == nullptr)
@@ -243,6 +255,10 @@ bool CommonUniformElimPass::UniformAccessChainConvert(ir::Function* func) {
         continue;
       if (!IsConstantIndexAccessChain(ptrInst))
         continue;
+      if (HasDecorates(ii->result_id()))
+        continue;
+      if (HasDecorates(ptrInst->result_id()))
+        continue;
       std::vector<std::unique_ptr<ir::Instruction>> newInsts;
       uint32_t replId;
       GenACLoadRepl(ptrInst, newInsts, replId);
@@ -282,6 +298,8 @@ bool CommonUniformElimPass::CommonUniformLoadElimination(ir::Function* func) {
         continue;
       if (!IsUniformVar(varId))
         continue;
+      if (HasDecorates(ii->result_id()))
+        continue;
       uint32_t replId;
       const auto uItr = uniform2load_id_.find(varId);
       if (uItr != uniform2load_id_.end()) {
@@ -318,6 +336,8 @@ bool CommonUniformElimPass::CommonExtractElimination(ir::Function* func) {
       if (ii->opcode() != SpvOpCompositeExtract)
         continue;
       if (ii->NumInOperands() > 2)
+        continue;
+      if (HasDecorates(ii->result_id()))
         continue;
       uint32_t compId = ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
       uint32_t idx = ii->GetSingleWordInOperand(kExtractIdx0InIdx);

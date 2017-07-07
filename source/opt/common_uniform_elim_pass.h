@@ -57,6 +57,9 @@ class CommonUniformElimPass : public Pass {
   // Return true if variable is uniform
   bool IsUniformVar(uint32_t varId);
 
+  // Return true if any uses of |id| are decorate ops.
+  bool HasDecorates(uint32_t id) const;
+
   // Return true if all uses of |id| are only name or decorate ops.
   bool HasOnlyNamesAndDecorates(uint32_t id) const;
 
