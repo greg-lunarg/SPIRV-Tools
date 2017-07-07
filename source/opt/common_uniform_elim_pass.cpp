@@ -99,18 +99,58 @@ bool CommonUniformElimPass::IsUniformVar(uint32_t varId) {
     SpvStorageClassUniformConstant;
 }
 
+bool CommonUniformElimPass::HasOnlyNamesAndDecorates(uint32_t id) const {
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return true;
+  for (auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    if (op != SpvOpName && !IsDecorate(op))
+      return false;
+  }
+  return true;
+}
+
+void CommonUniformElimPass::KillNamesAndDecorates(uint32_t id) {
+  // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
+  // kill if no other operands.
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return;
+  std::list<ir::Instruction*> killList;
+  for (auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    if (op != SpvOpName && !IsDecorate(op))
+      continue;
+    killList.push_back(u.inst);
+  }
+  for (auto kip : killList)
+    def_use_mgr_->KillInst(kip);
+}
+
+void CommonUniformElimPass::KillNamesAndDecorates(ir::Instruction* inst) {
+  // TODO(greg-lunarg): Remove inst from any OpGroupDecorate and 
+  // kill if not other operands.
+  const uint32_t rId = inst->result_id();
+  if (rId == 0)
+    return;
+  KillNamesAndDecorates(rId);
+}
+
 void CommonUniformElimPass::DeleteIfUseless(ir::Instruction* inst) {
   const uint32_t resId = inst->result_id();
   assert(resId != 0);
-  analysis::UseList* uses = def_use_mgr_->GetUses(resId);
-  if (uses == nullptr)
+  if (HasOnlyNamesAndDecorates(resId)) {
+    KillNamesAndDecorates(resId);
     def_use_mgr_->KillInst(inst);
+  }
 }
 
 void CommonUniformElimPass::ReplaceAndDeleteLoad(ir::Instruction* loadInst,
                                       uint32_t replId,
                                       ir::Instruction* ptrInst) {
   const uint32_t loadId = loadInst->result_id();
+  KillNamesAndDecorates(loadId);
   (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
   // remove load instruction
   def_use_mgr_->KillInst(loadInst);
@@ -302,7 +342,9 @@ bool CommonUniformElimPass::CommonExtractElimination(ir::Function* func) {
         ++ii;
         ii = ii.InsertBefore(std::move(newExtract));
         for (auto instItr : idxItr.second) {
-          (void)def_use_mgr_->ReplaceAllUsesWith(instItr->result_id(), replId);
+          uint32_t resId = instItr->result_id();
+          KillNamesAndDecorates(resId);
+          (void)def_use_mgr_->ReplaceAllUsesWith(resId, replId);
           def_use_mgr_->KillInst(instItr);
         }
         modified = true;

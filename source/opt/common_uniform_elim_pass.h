@@ -57,6 +57,15 @@ class CommonUniformElimPass : public Pass {
   // Return true if variable is uniform
   bool IsUniformVar(uint32_t varId);
 
+  // Return true if all uses of |id| are only name or decorate ops.
+  bool HasOnlyNamesAndDecorates(uint32_t id) const;
+
+  // Kill all name and decorate ops using |inst|
+  void KillNamesAndDecorates(ir::Instruction* inst);
+
+  // Kill all name and decorate ops using |id|
+  void KillNamesAndDecorates(uint32_t id);
+
   // Delete inst if it has no uses. Assumes inst has a resultId.
   void DeleteIfUseless(ir::Instruction* inst);
 
@@ -110,6 +119,12 @@ class CommonUniformElimPass : public Pass {
   // Currently, no extensions are supported.
   // TODO(greg-lunarg): Add extensions to supported list.
   bool AllExtensionsSupported() const;
+
+  // Return true if all uses of varId are only through supported reference
+  // operations ie. loads and store. Also cache in supported_ref_vars_;
+  inline bool IsDecorate(uint32_t op) const {
+    return (op == SpvOpDecorate || op == SpvOpDecorateId);
+  }
 
   inline void FinalizeNextId(ir::Module* module) {
     module->SetIdBound(next_id_);
