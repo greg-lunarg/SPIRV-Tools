@@ -34,7 +34,12 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class CommonUniformElimPass : public Pass {
+ using cbb_ptr = const ir::BasicBlock*;
+
  public:
+   using GetBlocksFunction =
+     std::function<std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
+
   CommonUniformElimPass();
   const char* name() const override { return "common-uniform-elim"; }
   Status Process(ir::Module*) override;
@@ -93,6 +98,26 @@ class CommonUniformElimPass : public Pass {
   // Convert all uniform access chain loads into load/extract.
   bool UniformAccessChainConvert(ir::Function* func);
 
+  // Returns the id of the merge block declared by a merge instruction in 
+  // this block, if any.  If none, returns zero.
+  uint32_t MergeBlockIdIfAny(const ir::BasicBlock& blk, uint32_t* cbid);
+
+  // Compute structured successors for function |func|.
+  // A block's structured successors are the blocks it branches to
+  // together with its declared merge block if it has one.
+  // When order matters, the merge block always appears first.
+  // This assures correct depth first search in the presence of early 
+  // returns and kills. If the successor vector contain duplicates
+  // if the merge block, they are safely ignored by DFS.
+  void ComputeStructuredSuccessors(ir::Function* func);
+
+  // Compute structured block order for |func| into |structuredOrder|. This
+  // order has the property that dominators come before all blocks they
+  // dominate and merge blocks come after all blocks that are in the control
+  // constructs of their header.
+  void ComputeStructuredOrder(ir::Function* func,
+      std::list<ir::BasicBlock*>* order);
+
   // Eliminate loads of uniform variables which have previously been loaded.
   // If first load is in control flow, move it to first block of function.
   // Most effective if preceded by UniformAccessChainRemoval().
@@ -149,6 +174,22 @@ class CommonUniformElimPass : public Pass {
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
+  // Map from block's label id to block.
+  std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
+
+  // Map from block to its structured successor blocks. See 
+  // ComputeStructuredSuccessors() for definition.
+  std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
+      block2structured_succs_;
+
+  // Map from block's label id to its predecessor blocks ids
+  std::unordered_map<uint32_t, std::vector<uint32_t>> label2preds_;
+
+  // Extra block whose successors are all blocks with no predecessors
+  // in function.
+  ir::BasicBlock pseudo_entry_block_;
+
+  // Map from uniform variable id to its common load id
   std::unordered_map<uint32_t, uint32_t> uniform2load_id_;
 
   // Map of extract composite ids to map of indices to insts

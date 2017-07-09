@@ -16,6 +16,7 @@
 
 #include "common_uniform_elim_pass.h"
 
+#include "cfa.h"
 #include "iterator.h"
 
 namespace spvtools {
@@ -32,6 +33,7 @@ const uint32_t kExtractCompositeIdInIdx = 0;
 const uint32_t kExtractIdx0InIdx = 1;
 const uint32_t kSelectionMergeMergeBlockIdInIdx = 0;
 const uint32_t kLoopMergeMergeBlockIdInIdx = 0;
+const uint32_t kLoopMergeContinueBlockIdInIdx = 1;
 const uint32_t kStorePtrIdInIdx = 0;
 const uint32_t kLoadPtrIdInIdx = 0;
 const uint32_t kCopyObjectOperandInIdx = 0;
@@ -50,17 +52,21 @@ bool CommonUniformElimPass::IsLoopHeader(ir::BasicBlock* block_ptr) {
   return iItr->opcode() == SpvOpLoopMerge;
 }
 
-uint32_t CommonUniformElimPass::MergeBlockIdIfAny(
-    const ir::BasicBlock& blk) const {
+uint32_t CommonUniformElimPass::MergeBlockIdIfAny(const ir::BasicBlock& blk,
+    uint32_t* cbid) {
   auto merge_ii = blk.cend();
   --merge_ii;
+  *cbid = 0;
   uint32_t mbid = 0;
   if (merge_ii != blk.cbegin()) {
     --merge_ii;
-    if (merge_ii->opcode() == SpvOpLoopMerge)
-      mbid = merge_ii->GetSingleWordOperand(kLoopMergeMergeBlockIdInIdx);
-    else if (merge_ii->opcode() == SpvOpSelectionMerge)
-      mbid = merge_ii->GetSingleWordOperand(kSelectionMergeMergeBlockIdInIdx);
+    if (merge_ii->opcode() == SpvOpLoopMerge) {
+      mbid = merge_ii->GetSingleWordInOperand(kLoopMergeMergeBlockIdInIdx);
+      *cbid = merge_ii->GetSingleWordInOperand(kLoopMergeContinueBlockIdInIdx);
+    }
+    else if (merge_ii->opcode() == SpvOpSelectionMerge) {
+      mbid = merge_ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
+    }
   }
   return mbid;
 }
@@ -272,24 +278,74 @@ bool CommonUniformElimPass::UniformAccessChainConvert(ir::Function* func) {
   return modified;
 }
 
+void CommonUniformElimPass::ComputeStructuredSuccessors(ir::Function* func) {
+  for (auto& blk : *func) {
+    // If no predecessors in function, make successor to pseudo entry
+    if (label2preds_[blk.id()].size() == 0)
+      block2structured_succs_[&pseudo_entry_block_].push_back(&blk);
+    // If header, make merge block first successor.
+    uint32_t cbid;
+    const uint32_t mbid = MergeBlockIdIfAny(blk, &cbid);
+    if (mbid != 0) {
+      block2structured_succs_[&blk].push_back(id2block_[mbid]);
+      if (cbid != 0)
+        block2structured_succs_[&blk].push_back(id2block_[cbid]);
+    }
+    // add true successors
+    blk.ForEachSuccessorLabel([&blk, this](uint32_t sbid) {
+      block2structured_succs_[&blk].push_back(id2block_[sbid]);
+    });
+  }
+}
+
+void CommonUniformElimPass::ComputeStructuredOrder(
+    ir::Function* func, std::list<ir::BasicBlock*>* order) {
+  // Compute structured successors and do DFS
+  ComputeStructuredSuccessors(func);
+  auto ignore_block = [](cbb_ptr) {};
+  auto ignore_edge = [](cbb_ptr, cbb_ptr) {};
+  auto get_structured_successors = [this](const ir::BasicBlock* block) {
+      return &(block2structured_succs_[block]); };
+  // TODO(greg-lunarg): Get rid of const_cast by making moving const
+  // out of the cfa.h prototypes and into the invoking code.
+  auto post_order = [&](cbb_ptr b) {
+      order->push_front(const_cast<ir::BasicBlock*>(b)); };
+  
+  order->clear();
+  spvtools::CFA<ir::BasicBlock>::DepthFirstTraversal(
+      &pseudo_entry_block_, get_structured_successors, ignore_block,
+      post_order, ignore_edge);
+}
+
 bool CommonUniformElimPass::CommonUniformLoadElimination(ir::Function* func) {
+  // Process all blocks in structured order. This is just one way (the
+  // simplest?) to keep track of the most recent block outside of control
+  // flow, used to copy common instructions, guaranteed to dominate all
+  // following load sites.
+  std::list<ir::BasicBlock*> structuredOrder;
+  ComputeStructuredOrder(func, &structuredOrder);
   bool modified = false;
-  // Find insertion point in first block to copy all non-dominating
-  // loads.
+  // Find insertion point in first block to copy non-dominating loads.
   auto insertItr = func->begin()->begin();
   while (insertItr->opcode() == SpvOpVariable ||
       insertItr->opcode() == SpvOpNop)
     ++insertItr;
   uint32_t mergeBlockId = 0;
-  for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    // Check if we are exiting outermost control construct
-    if (mergeBlockId == bi->id())
+  for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    ir::BasicBlock* bp = *bi;
+    // Check if we are exiting outermost control construct. If so, remember
+    // new load insertion point.
+    if (mergeBlockId == bp->id()) {
       mergeBlockId = 0;
+      insertItr = bp->begin();
+    }
     // If we are outside of any control construct and entering one, remember
     // the id of the merge block
-    if (mergeBlockId == 0)
-      mergeBlockId = MergeBlockIdIfAny(*bi);
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
+    if (mergeBlockId == 0) {
+      uint32_t dummy;
+      mergeBlockId = MergeBlockIdIfAny(*bp, &dummy);
+    }
+    for (auto ii = bp->begin(); ii != bp->end(); ++ii) {
       if (ii->opcode() != SpvOpLoad)
         continue;
       uint32_t varId;
@@ -312,7 +368,7 @@ bool CommonUniformElimPass::CommonUniformLoadElimination(ir::Function* func) {
           continue;
         }
         else {
-          // Copy load into first block and remember it
+          // Copy load into most recent dominating block and remember it
           replId = TakeNextId();
           std::unique_ptr<ir::Instruction> newLoad(new ir::Instruction(SpvOpLoad,
             ii->type_id(), replId, {{spv_operand_type_t::SPV_OPERAND_TYPE_ID, {varId}}}));
@@ -387,9 +443,20 @@ void CommonUniformElimPass::Initialize(ir::Module* module) {
   module_ = module;
 
   // Initialize function and block maps
+  // Initialize function and block maps
   id2function_.clear();
-  for (auto& fn : *module_)
+  id2block_.clear();
+  for (auto& fn : *module_) {
     id2function_[fn.result_id()] = &fn;
+    for (auto& blk : fn)
+      id2block_[blk.id()] = &blk;
+  }
+
+  // Clear collections
+  block2structured_succs_.clear();
+  label2preds_.clear();
+  uniform2load_id_.clear();
+  comp2idx2inst_.clear();
 
   def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module_));
 
@@ -441,7 +508,10 @@ Pass::Status CommonUniformElimPass::ProcessImpl() {
 }
 
 CommonUniformElimPass::CommonUniformElimPass()
-    : module_(nullptr), def_use_mgr_(nullptr), next_id_(0) {}
+    : module_(nullptr), def_use_mgr_(nullptr),
+      pseudo_entry_block_(std::unique_ptr<ir::Instruction>(
+          new ir::Instruction(SpvOpLabel, 0, 0, {}))),
+      next_id_(0) {}
 
 Pass::Status CommonUniformElimPass::Process(ir::Module* module) {
   Initialize(module);
