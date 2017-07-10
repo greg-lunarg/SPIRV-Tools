@@ -452,6 +452,217 @@ OpFunctionEnd
       predefs + before, predefs + after, true, true);
 }
 
+TEST_F(BlockMergeTest, Loop) {
+  // Note: This test exemplifies the following:
+  // - Common extract (g_F) shared between two loops
+  // #version 140
+  // in vec4 BC;
+  // in vec4 BC2;
+  // 
+  // layout(std140) uniform U_t
+  // {
+  //     float g_F;
+  // } ;
+  // 
+  // void main()
+  // {
+  //     vec4 v = BC;
+  //     for (int i = 0; i < 4; i++)
+  //       v[i] = v[i] / g_F;
+  //     vec4 v2 = BC2;
+  //     for (int i = 0; i < 4; i++)
+  //       v2[i] = v2[i] * g_F;
+  //     gl_FragColor = v + v2;
+  // }
+
+  const std::string predefs =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BC %BC2 %gl_FragColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %v "v"
+OpName %BC "BC"
+OpName %i "i"
+OpName %U_t "U_t"
+OpMemberName %U_t 0 "g_F"
+OpName %_ ""
+OpName %v2 "v2"
+OpName %BC2 "BC2"
+OpName %i_0 "i"
+OpName %gl_FragColor "gl_FragColor"
+OpMemberDecorate %U_t 0 Offset 0
+OpDecorate %U_t Block
+OpDecorate %_ DescriptorSet 0
+%void = OpTypeVoid
+%13 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BC = OpVariable %_ptr_Input_v4float Input
+%int = OpTypeInt 32 1
+%_ptr_Function_int = OpTypePointer Function %int
+%int_0 = OpConstant %int 0
+%int_4 = OpConstant %int 4
+%bool = OpTypeBool
+%_ptr_Function_float = OpTypePointer Function %float
+%U_t = OpTypeStruct %float
+%_ptr_Uniform_U_t = OpTypePointer Uniform %U_t
+%_ = OpVariable %_ptr_Uniform_U_t Uniform
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+%int_1 = OpConstant %int 1
+%BC2 = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+)";
+
+  const std::string before =
+      R"(%main = OpFunction %void None %13
+%28 = OpLabel
+%v = OpVariable %_ptr_Function_v4float Function
+%i = OpVariable %_ptr_Function_int Function
+%v2 = OpVariable %_ptr_Function_v4float Function
+%i_0 = OpVariable %_ptr_Function_int Function
+%29 = OpLoad %v4float %BC
+OpStore %v %29
+OpStore %i %int_0
+OpBranch %30
+%30 = OpLabel
+OpLoopMerge %31 %32 None
+OpBranch %33
+%33 = OpLabel
+%34 = OpLoad %int %i
+%35 = OpSLessThan %bool %34 %int_4
+OpBranchConditional %35 %36 %31
+%36 = OpLabel
+%37 = OpLoad %int %i
+%38 = OpLoad %int %i
+%39 = OpAccessChain %_ptr_Function_float %v %38
+%40 = OpLoad %float %39
+%41 = OpAccessChain %_ptr_Uniform_float %_ %int_0
+%42 = OpLoad %float %41
+%43 = OpFDiv %float %40 %42
+%44 = OpAccessChain %_ptr_Function_float %v %37
+OpStore %44 %43
+OpBranch %32
+%32 = OpLabel
+%45 = OpLoad %int %i
+%46 = OpIAdd %int %45 %int_1
+OpStore %i %46
+OpBranch %30
+%31 = OpLabel
+%47 = OpLoad %v4float %BC2
+OpStore %v2 %47
+OpStore %i_0 %int_0
+OpBranch %48
+%48 = OpLabel
+OpLoopMerge %49 %50 None
+OpBranch %51
+%51 = OpLabel
+%52 = OpLoad %int %i_0
+%53 = OpSLessThan %bool %52 %int_4
+OpBranchConditional %53 %54 %49
+%54 = OpLabel
+%55 = OpLoad %int %i_0
+%56 = OpLoad %int %i_0
+%57 = OpAccessChain %_ptr_Function_float %v2 %56
+%58 = OpLoad %float %57
+%59 = OpAccessChain %_ptr_Uniform_float %_ %int_0
+%60 = OpLoad %float %59
+%61 = OpFMul %float %58 %60
+%62 = OpAccessChain %_ptr_Function_float %v2 %55
+OpStore %62 %61
+OpBranch %50
+%50 = OpLabel
+%63 = OpLoad %int %i_0
+%64 = OpIAdd %int %63 %int_1
+OpStore %i_0 %64
+OpBranch %48
+%49 = OpLabel
+%65 = OpLoad %v4float %v
+%66 = OpLoad %v4float %v2
+%67 = OpFAdd %v4float %65 %66
+OpStore %gl_FragColor %67
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(%main = OpFunction %void None %13
+%28 = OpLabel
+%v = OpVariable %_ptr_Function_v4float Function
+%i = OpVariable %_ptr_Function_int Function
+%v2 = OpVariable %_ptr_Function_v4float Function
+%i_0 = OpVariable %_ptr_Function_int Function
+%72 = OpLoad %U_t %_
+%73 = OpCompositeExtract %float %72 0
+%29 = OpLoad %v4float %BC
+OpStore %v %29
+OpStore %i %int_0
+OpBranch %30
+%30 = OpLabel
+OpLoopMerge %31 %32 None
+OpBranch %33
+%33 = OpLabel
+%34 = OpLoad %int %i
+%35 = OpSLessThan %bool %34 %int_4
+OpBranchConditional %35 %36 %31
+%36 = OpLabel
+%37 = OpLoad %int %i
+%38 = OpLoad %int %i
+%39 = OpAccessChain %_ptr_Function_float %v %38
+%40 = OpLoad %float %39
+%43 = OpFDiv %float %40 %73
+%44 = OpAccessChain %_ptr_Function_float %v %37
+OpStore %44 %43
+OpBranch %32
+%32 = OpLabel
+%45 = OpLoad %int %i
+%46 = OpIAdd %int %45 %int_1
+OpStore %i %46
+OpBranch %30
+%31 = OpLabel
+%47 = OpLoad %v4float %BC2
+OpStore %v2 %47
+OpStore %i_0 %int_0
+OpBranch %48
+%48 = OpLabel
+OpLoopMerge %49 %50 None
+OpBranch %51
+%51 = OpLabel
+%52 = OpLoad %int %i_0
+%53 = OpSLessThan %bool %52 %int_4
+OpBranchConditional %53 %54 %49
+%54 = OpLabel
+%55 = OpLoad %int %i_0
+%56 = OpLoad %int %i_0
+%57 = OpAccessChain %_ptr_Function_float %v2 %56
+%58 = OpLoad %float %57
+%61 = OpFMul %float %58 %73
+%62 = OpAccessChain %_ptr_Function_float %v2 %55
+OpStore %62 %61
+OpBranch %50
+%50 = OpLabel
+%63 = OpLoad %int %i_0
+%64 = OpIAdd %int %63 %int_1
+OpStore %i_0 %64
+OpBranch %48
+%49 = OpLabel
+%65 = OpLoad %v4float %v
+%66 = OpLoad %v4float %v2
+%67 = OpFAdd %v4float %65 %66
+OpStore %gl_FragColor %67
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndCheck<opt::CommonUniformElimPass>(
+      predefs + before, predefs + after, true, true);
+}
+
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
 //
 //    Disqualifying cases: extensions, decorations, non-logical addressing,
