@@ -176,6 +176,29 @@ TEST_F(BlockMergeTest, Basic2) {
   // - Common extract (g_F) floated to non-controlled block
   // - Non-common extract (g_F2) not floated, but common uniform load shared
   //
+  // #version 140
+  // in vec4 BaseColor;
+  // in float fi;
+  // 
+  // layout(std140) uniform U_t
+  // {
+  //     float g_F;
+  //     float g_F2;
+  // } ;
+  // 
+  // void main()
+  // {
+  //     vec4 v = BaseColor;
+  //     if (fi > 0) {
+  //       v = v * g_F;
+  //     }
+  //     else {
+  //       float f2 = g_F2 - g_F;
+  //       v = v * f2;
+  //     }
+  //     gl_FragColor = v;
+  // }
+
 
   const std::string predefs =
       R"(OpCapability Shader
@@ -302,6 +325,125 @@ OpBranch %35
 %48 = OpLoad %float %f
 %49 = OpVectorTimesScalar %v4float %47 %48
 OpStore %gl_FragColor %49
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndCheck<opt::CommonUniformElimPass>(
+      predefs + before, predefs + after, true, true);
+}
+
+TEST_F(BlockMergeTest, Basic3) {
+  // Note: This test exemplifies the following:
+  // - Existing common uniform (%_) load kept in place and shared
+  //
+  // #version 140
+  // in vec4 BaseColor;
+  // in float fi;
+  // 
+  // layout(std140) uniform U_t
+  // {
+  //     bool g_B;
+  //     float g_F;
+  // } ;
+  // 
+  // void main()
+  // {
+  //     vec4 v = BaseColor;
+  //     if (g_B)
+  //       v = v * g_F;
+  //     gl_FragColor = v;
+  // }
+
+  const std::string predefs =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %gl_FragColor %fi
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %v "v"
+OpName %BaseColor "BaseColor"
+OpName %U_t "U_t"
+OpMemberName %U_t 0 "g_B"
+OpMemberName %U_t 1 "g_F"
+OpName %_ ""
+OpName %gl_FragColor "gl_FragColor"
+OpName %fi "fi"
+OpMemberDecorate %U_t 0 Offset 0
+OpMemberDecorate %U_t 1 Offset 4
+OpDecorate %U_t Block
+OpDecorate %_ DescriptorSet 0
+%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%uint = OpTypeInt 32 0
+%U_t = OpTypeStruct %uint %float
+%_ptr_Uniform_U_t = OpTypePointer Uniform %U_t
+%_ = OpVariable %_ptr_Uniform_U_t Uniform
+%int = OpTypeInt 32 1
+%int_0 = OpConstant %int 0
+%_ptr_Uniform_uint = OpTypePointer Uniform %uint
+%bool = OpTypeBool
+%uint_0 = OpConstant %uint 0
+%int_1 = OpConstant %int 1
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+%_ptr_Input_float = OpTypePointer Input %float
+%fi = OpVariable %_ptr_Input_float Input
+)";
+
+  const std::string before =
+      R"(%main = OpFunction %void None %10
+%26 = OpLabel
+%v = OpVariable %_ptr_Function_v4float Function
+%27 = OpLoad %v4float %BaseColor
+OpStore %v %27
+%28 = OpAccessChain %_ptr_Uniform_uint %_ %int_0
+%29 = OpLoad %uint %28
+%30 = OpINotEqual %bool %29 %uint_0
+OpSelectionMerge %31 None
+OpBranchConditional %30 %32 %31
+%32 = OpLabel
+%33 = OpLoad %v4float %v
+%34 = OpAccessChain %_ptr_Uniform_float %_ %int_1
+%35 = OpLoad %float %34
+%36 = OpVectorTimesScalar %v4float %33 %35
+OpStore %v %36
+OpBranch %31
+%31 = OpLabel
+%37 = OpLoad %v4float %v
+OpStore %gl_FragColor %37
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(%main = OpFunction %void None %10
+%26 = OpLabel
+%v = OpVariable %_ptr_Function_v4float Function
+%27 = OpLoad %v4float %BaseColor
+OpStore %v %27
+%38 = OpLoad %U_t %_
+%39 = OpCompositeExtract %uint %38 0
+%30 = OpINotEqual %bool %39 %uint_0
+OpSelectionMerge %31 None
+OpBranchConditional %30 %32 %31
+%32 = OpLabel
+%33 = OpLoad %v4float %v
+%41 = OpCompositeExtract %float %38 1
+%36 = OpVectorTimesScalar %v4float %33 %41
+OpStore %v %36
+OpBranch %31
+%31 = OpLabel
+%37 = OpLoad %v4float %v
+OpStore %gl_FragColor %37
 OpReturn
 OpFunctionEnd
 )";
