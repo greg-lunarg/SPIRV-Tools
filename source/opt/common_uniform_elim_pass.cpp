@@ -254,9 +254,6 @@ bool CommonUniformElimPass::UniformAccessChainConvert(ir::Function* func) {
       // Do not convert nested access chains
       if (ptrInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx) != varId)
         continue;
-      // Only convert single index access chain
-      if (ptrInst->NumInOperands() > 2)
-        continue;
       if (!IsUniformVar(varId))
         continue;
       if (!IsConstantIndexAccessChain(ptrInst))
