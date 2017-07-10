@@ -332,18 +332,15 @@ bool CommonUniformElimPass::CommonUniformLoadElimination(ir::Function* func) {
     ++insertItr;
   uint32_t mergeBlockId = 0;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    // Skip pseudo entry block
+    if (*bi == &pseudo_entry_block_)
+      continue;
     ir::BasicBlock* bp = *bi;
     // Check if we are exiting outermost control construct. If so, remember
     // new load insertion point.
     if (mergeBlockId == bp->id()) {
       mergeBlockId = 0;
       insertItr = bp->begin();
-    }
-    // If we are outside of any control construct and entering one, remember
-    // the id of the merge block
-    if (mergeBlockId == 0) {
-      uint32_t dummy;
-      mergeBlockId = MergeBlockIdIfAny(*bp, &dummy);
     }
     for (auto ii = bp->begin(); ii != bp->end(); ++ii) {
       if (ii->opcode() != SpvOpLoad)
@@ -380,6 +377,12 @@ bool CommonUniformElimPass::CommonUniformLoadElimination(ir::Function* func) {
       }
       ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
       modified = true;
+    }
+    // If we are outside of any control construct and entering one, remember
+    // the id of the merge block
+    if (mergeBlockId == 0) {
+      uint32_t dummy;
+      mergeBlockId = MergeBlockIdIfAny(*bp, &dummy);
     }
   }
   return modified;
