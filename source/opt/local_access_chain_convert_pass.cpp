@@ -120,12 +120,55 @@ bool LocalAccessChainConvertPass::IsTargetVar(uint32_t varId) {
   return true;
 }
 
+bool LocalAccessChainConvertPass::HasUnsupportedDecorates(uint32_t id) const {
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return false;
+  for (auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    if (IsDecorate(op))
+      return true;
+  }
+  return false;
+}
+
+bool LocalAccessChainConvertPass::HasOnlyNamesAndDecorates(uint32_t id) const {
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return true;
+  for (auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    if (op != SpvOpName && !IsDecorate(op))
+      return false;
+  }
+  return true;
+}
+
+
+void LocalAccessChainConvertPass::KillNamesAndDecorates(uint32_t id) {
+  // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
+  // kill if no other operands.
+  analysis::UseList* uses = def_use_mgr_->GetUses(id);
+  if (uses == nullptr)
+    return;
+  std::list<ir::Instruction*> killList;
+  for (auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    if (op != SpvOpName && !IsDecorate(op))
+      continue;
+    killList.push_back(u.inst);
+  }
+  for (auto kip : killList)
+    def_use_mgr_->KillInst(kip);
+}
+
 void LocalAccessChainConvertPass::DeleteIfUseless(ir::Instruction* inst) {
   const uint32_t resId = inst->result_id();
   assert(resId != 0);
-  analysis::UseList* uses = def_use_mgr_->GetUses(resId);
-  if (uses == nullptr)
+  if (HasOnlyNamesAndDecorates(resId)) {
+    KillNamesAndDecorates(resId);
     def_use_mgr_->KillInst(inst);
+  }
 }
 
 void LocalAccessChainConvertPass::ReplaceAndDeleteLoad(
@@ -133,6 +176,7 @@ void LocalAccessChainConvertPass::ReplaceAndDeleteLoad(
     uint32_t replId,
     ir::Instruction* ptrInst) {
   const uint32_t loadId = loadInst->result_id();
+  KillNamesAndDecorates(loadId);
   (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
   // remove load instruction
   def_use_mgr_->KillInst(loadInst);
@@ -274,6 +318,14 @@ void LocalAccessChainConvertPass::FindTargetVars(ir::Function* func) {
         // TODO(): Convert nested access chains
         if (IsNonPtrAccessChain(op) &&
             ptrInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx) != varId) {
+          seen_non_target_vars_.insert(varId);
+          seen_target_vars_.erase(varId);
+          break;
+        }
+        // Rule vars with decorated refs
+        if (HasUnsupportedDecorates(ptrInst->result_id()) ||
+            (ii->result_id() != 0 && 
+             HasUnsupportedDecorates(ii->result_id()))) {
           seen_non_target_vars_.insert(varId);
           seen_target_vars_.erase(varId);
           break;
