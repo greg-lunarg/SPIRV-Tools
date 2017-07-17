@@ -420,6 +420,12 @@ Pass::Status LocalAccessChainConvertPass::ProcessImpl() {
     if (inst.opcode() == SpvOpTypeInt &&
         inst.GetSingleWordInOperand(kTypeIntWidthInIdx) != 32)
       return Status::SuccessWithoutChange;
+  // Do not process if module contains OpGroupDecorate. Additional
+  // support required in KillNamesAndDecorates().
+  // TODO(greg-lunarg): Add support for OpGroupDecorate
+  for (auto& ai : module_->annotations())
+    if (ai.opcode() == SpvOpGroupDecorate)
+      return Status::SuccessWithoutChange;
   // Process all entry point functions.
   bool modified = false;
   for (auto& e : module_->entry_points()) {
