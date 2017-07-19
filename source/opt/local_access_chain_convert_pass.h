@@ -75,11 +75,26 @@ class LocalAccessChainConvertPass : public Pass {
   // Return true if any uses of |id| are decorate ops.
   bool HasUnsupportedDecorates(uint32_t id) const;
 
+  // Return true if all uses of varId are only through supported reference
+  // operations ie. loads and store. Also cache in supported_ref_vars_;
+  inline bool IsDecorate(uint32_t op) const {
+    return (op == SpvOpDecorate || op == SpvOpDecorateId);
+  }
+
   // Return true if all uses of |id| are only name or decorate ops.
   bool HasOnlyNamesAndDecorates(uint32_t id) const;
 
   // Kill all name and decorate ops using |id|
   void KillNamesAndDecorates(uint32_t id);
+
+  // Kill all name and decorate ops using |inst|
+  void KillNamesAndDecorates(ir::Instruction* inst);
+
+  // Kill all name and decorate ops using |id|
+  void KillNamesAndDecorates(uint32_t id);
+
+  // Collect all named or decorated ids in module
+  void FindNamedOrDecoratedIds();
 
   // Delete |inst| if it has no uses. Assumes |inst| has a non-zero resultId.
   void DeleteIfUseless(ir::Instruction* inst);
@@ -170,6 +185,9 @@ class LocalAccessChainConvertPass : public Pass {
 
   // Cache of verified non-target vars
   std::unordered_set<uint32_t> seen_non_target_vars_;
+
+  // named or decorated ids
+  std::unordered_set<uint32_t> named_or_decorated_ids_;
 
   // Next unused ID
   uint32_t next_id_;
