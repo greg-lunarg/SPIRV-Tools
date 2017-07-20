@@ -149,6 +149,8 @@ bool LocalAccessChainConvertPass::HasOnlyNamesAndDecorates(uint32_t id) const {
 void LocalAccessChainConvertPass::KillNamesAndDecorates(uint32_t id) {
   // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
   // kill if no other operands.
+  if (named_or_decorated_ids_.find(id) == named_or_decorated_ids_.end())
+    return;
   analysis::UseList* uses = def_use_mgr_->GetUses(id);
   if (uses == nullptr)
     return;
@@ -185,32 +187,6 @@ void LocalAccessChainConvertPass::ReplaceAndDeleteLoad(
   if (IsNonPtrAccessChain(ptrInst->opcode())) {
     DeleteIfUseless(ptrInst);
   }
-}
-
-void LocalAccessChainConvertPass::KillNamesAndDecorates(uint32_t id) {
-  // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
-  // kill if no other operands.
-  if (named_or_decorated_ids_.find(id) == named_or_decorated_ids_.end())
-    return;
-  analysis::UseList* uses = def_use_mgr_->GetUses(id);
-  if (uses == nullptr)
-    return;
-  std::list<ir::Instruction*> killList;
-  for (auto u : *uses) {
-    const SpvOp op = u.inst->opcode();
-    if (op != SpvOpName && !IsDecorate(op))
-      continue;
-    killList.push_back(u.inst);
-  }
-  for (auto kip : killList)
-    def_use_mgr_->KillInst(kip);
-}
-
-void LocalAccessChainConvertPass::KillNamesAndDecorates(ir::Instruction* inst) {
-  const uint32_t rId = inst->result_id();
-  if (rId == 0)
-    return;
-  KillNamesAndDecorates(rId);
 }
 
 uint32_t LocalAccessChainConvertPass::GetPointeeTypeId(

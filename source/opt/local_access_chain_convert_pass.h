@@ -87,12 +87,6 @@ class LocalAccessChainConvertPass : public Pass {
   // Kill all name and decorate ops using |id|
   void KillNamesAndDecorates(uint32_t id);
 
-  // Kill all name and decorate ops using |inst|
-  void KillNamesAndDecorates(ir::Instruction* inst);
-
-  // Kill all name and decorate ops using |id|
-  void KillNamesAndDecorates(uint32_t id);
-
   // Collect all named or decorated ids in module
   void FindNamedOrDecoratedIds();
 
@@ -151,12 +145,6 @@ class LocalAccessChainConvertPass : public Pass {
   // Nested access chains and pointer access chains are not currently
   // converted.
   bool ConvertLocalAccessChains(ir::Function* func);
-
-  // Return true if all uses of varId are only through supported reference
-  // operations ie. loads and store. Also cache in supported_ref_vars_;
-  inline bool IsDecorate(uint32_t op) const {
-    return (op == SpvOpDecorate || op == SpvOpDecorateId);
-  }
 
   // Save next available id into |module|.
   inline void FinalizeNextId(ir::Module* module) {
