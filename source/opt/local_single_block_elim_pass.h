@@ -28,13 +28,13 @@
 #include "basic_block.h"
 #include "def_use_manager.h"
 #include "module.h"
-#include "pass.h"
+#include "mem_pass.h"
 
 namespace spvtools {
 namespace opt {
 
 // See optimizer.hpp for documentation.
-class LocalSingleBlockLoadStoreElimPass : public Pass {
+class LocalSingleBlockLoadStoreElimPass : public MemPass {
  public:
   LocalSingleBlockLoadStoreElimPass();
   const char* name() const override { return "eliminate-local-single-block"; }
@@ -43,14 +43,6 @@ class LocalSingleBlockLoadStoreElimPass : public Pass {
  private:
   // Returns true if |opcode| is a non-ptr access chain op
   bool IsNonPtrAccessChain(const SpvOp opcode) const;
-
-  // Returns true if |typeInst| is a scalar type
-  // or a vector or matrix
-  bool IsMathType(const ir::Instruction* typeInst) const;
-
-  // Returns true if |typeInst| is a math type or a struct or array
-  // of a math type.
-  bool IsTargetType(const ir::Instruction* typeInst) const;
 
   // Given a load or store |ip|, return the pointer instruction.
   // Also return the base variable's id in |varId|.
@@ -135,9 +127,6 @@ class LocalSingleBlockLoadStoreElimPass : public Pass {
 
   // Module this pass is processing
   ir::Module* module_;
-
-  // Def-Uses for the module we are processing
-  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
