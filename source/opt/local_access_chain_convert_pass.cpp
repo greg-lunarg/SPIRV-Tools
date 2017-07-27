@@ -41,38 +41,6 @@ bool LocalAccessChainConvertPass::IsNonPtrAccessChain(
   return opcode == SpvOpAccessChain || opcode == SpvOpInBoundsAccessChain;
 }
 
-bool LocalAccessChainConvertPass::IsMathType(
-    const ir::Instruction* typeInst) const {
-  switch (typeInst->opcode()) {
-  case SpvOpTypeInt:
-  case SpvOpTypeFloat:
-  case SpvOpTypeBool:
-  case SpvOpTypeVector:
-  case SpvOpTypeMatrix:
-    return true;
-  default:
-    break;
-  }
-  return false;
-}
-
-bool LocalAccessChainConvertPass::IsTargetType(
-    const ir::Instruction* typeInst) const {
-  if (IsMathType(typeInst))
-    return true;
-  if (typeInst->opcode() == SpvOpTypeArray)
-    return IsMathType(def_use_mgr_->GetDef(typeInst->GetSingleWordOperand(1)));
-  if (typeInst->opcode() != SpvOpTypeStruct)
-    return false;
-  // All struct members must be math type
-  int nonMathComp = 0;
-  typeInst->ForEachInId([&nonMathComp,this](const uint32_t* tid) {
-    ir::Instruction* compTypeInst = def_use_mgr_->GetDef(*tid);
-    if (!IsMathType(compTypeInst)) ++nonMathComp;
-  });
-  return nonMathComp == 0;
-}
-
 ir::Instruction* LocalAccessChainConvertPass::GetPtr(
       ir::Instruction* ip, uint32_t* varId) {
   const SpvOp op = ip->opcode();
@@ -462,7 +430,7 @@ Pass::Status LocalAccessChainConvertPass::ProcessImpl() {
 }
 
 LocalAccessChainConvertPass::LocalAccessChainConvertPass()
-    : module_(nullptr), def_use_mgr_(nullptr), next_id_(0) {}
+    : module_(nullptr), next_id_(0) {}
 
 Pass::Status LocalAccessChainConvertPass::Process(ir::Module* module) {
   Initialize(module);

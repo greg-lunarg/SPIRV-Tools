@@ -28,13 +28,13 @@
 #include "basic_block.h"
 #include "def_use_manager.h"
 #include "module.h"
-#include "pass.h"
+#include "mem_pass.h"
 
 namespace spvtools {
 namespace opt {
 
 // See optimizer.hpp for documentation.
-class LocalAccessChainConvertPass : public Pass {
+class LocalAccessChainConvertPass : public MemPass {
  public:
   LocalAccessChainConvertPass();
   const char* name() const override { return "convert-local-access-chains"; }
@@ -44,15 +44,6 @@ class LocalAccessChainConvertPass : public Pass {
   // Returns true if |opcode| is a non-pointer access chain op
   // TODO(): Support conversion of pointer access chains.
   bool IsNonPtrAccessChain(const SpvOp opcode) const;
-
-  // Returns true if |typeInst| is a scalar type
-  // or a vector or matrix
-  bool IsMathType(const ir::Instruction* typeInst) const;
-
-  // Returns true if |typeInst| is a math type or a struct or array
-  // of a math type.
-  // TODO(): Add more complex types to convert
-  bool IsTargetType(const ir::Instruction* typeInst) const;
 
   // Given a load or store |ip|, return the pointer instruction.
   // If the pointer is an access chain, |*varId| is its base id.
@@ -166,9 +157,6 @@ class LocalAccessChainConvertPass : public Pass {
 
   // Module this pass is processing
   ir::Module* module_;
-
-  // Def-Uses for the module we are processing
-  std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
