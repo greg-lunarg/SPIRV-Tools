@@ -21,6 +21,16 @@
 namespace spvtools {
 namespace opt {
 
+namespace {
+
+const uint32_t kStorePtrIdInIdx = 0;
+const uint32_t kLoadPtrIdInIdx = 0;
+const uint32_t kAccessChainPtrIdInIdx = 0;
+const uint32_t kCopyObjectOperandInIdx = 0;
+
+}  // namespace anonymous
+
+
 bool MemPass::IsMathType(
     const ir::Instruction* typeInst) const {
   switch (typeInst->opcode()) {
@@ -51,6 +61,35 @@ bool MemPass::IsTargetType(
     if (!IsMathType(compTypeInst)) ++nonMathComp;
   });
   return nonMathComp == 0;
+}
+
+bool MemPass::IsNonPtrAccessChain(const SpvOp opcode) const {
+  return opcode == SpvOpAccessChain || opcode == SpvOpInBoundsAccessChain;
+}
+
+ir::Instruction* MemPass::GetPtr(
+      ir::Instruction* ip, uint32_t* varId) {
+  const SpvOp op = ip->opcode();
+  assert(op == SpvOpStore || op == SpvOpLoad);
+  *varId = ip->GetSingleWordInOperand(
+      op == SpvOpStore ? kStorePtrIdInIdx : kLoadPtrIdInIdx);
+  ir::Instruction* ptrInst = def_use_mgr_->GetDef(*varId);
+  while (ptrInst->opcode() == SpvOpCopyObject) {
+    *varId = ptrInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
+    ptrInst = def_use_mgr_->GetDef(*varId);
+  }
+  ir::Instruction* varInst = ptrInst;
+  while (varInst->opcode() != SpvOpVariable) {
+    if (IsNonPtrAccessChain(varInst->opcode())) {
+      *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
+    }
+    else {
+      assert(varInst->opcode() == SpvOpCopyObject);
+      *varId = varInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
+    }
+    varInst = def_use_mgr_->GetDef(*varId);
+  }
+  return ptrInst;
 }
 
 MemPass::MemPass() : def_use_mgr_(nullptr) {}

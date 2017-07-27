@@ -49,6 +49,13 @@ class MemPass : public Pass {
   // TODO(): Add more complex types to convert
   bool IsTargetType(const ir::Instruction* typeInst) const;
 
+  // Returns true if |opcode| is a non-ptr access chain op
+  bool IsNonPtrAccessChain(const SpvOp opcode) const;
+
+  // Given a load or store |ip|, return the pointer instruction.
+  // Also return the base variable's id in |varId|.
+  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t* varId);
+
   // Def-Uses for the module we are processing
   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 };
