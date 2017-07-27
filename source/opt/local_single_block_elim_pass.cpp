@@ -24,45 +24,11 @@ namespace opt {
 namespace {
 
 const uint32_t kEntryPointFunctionIdInIdx = 1;
-const uint32_t kStorePtrIdInIdx = 0;
 const uint32_t kStoreValIdInIdx = 1;
-const uint32_t kLoadPtrIdInIdx = 0;
-const uint32_t kAccessChainPtrIdInIdx = 0;
 const uint32_t kTypePointerStorageClassInIdx = 0;
 const uint32_t kTypePointerTypeIdInIdx = 1;
-const uint32_t kCopyObjectOperandInIdx = 0;
 
 } // anonymous namespace
-
-bool LocalSingleBlockLoadStoreElimPass::IsNonPtrAccessChain(
-    const SpvOp opcode) const {
-  return opcode == SpvOpAccessChain || opcode == SpvOpInBoundsAccessChain;
-}
-
-ir::Instruction* LocalSingleBlockLoadStoreElimPass::GetPtr(
-      ir::Instruction* ip, uint32_t* varId) {
-  const SpvOp op = ip->opcode();
-  assert(op == SpvOpStore || op == SpvOpLoad);
-  *varId = ip->GetSingleWordInOperand(
-      op == SpvOpStore ? kStorePtrIdInIdx : kLoadPtrIdInIdx);
-  ir::Instruction* ptrInst = def_use_mgr_->GetDef(*varId);
-  while (ptrInst->opcode() == SpvOpCopyObject) {
-    *varId = ptrInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
-    ptrInst = def_use_mgr_->GetDef(*varId);
-  }
-  ir::Instruction* varInst = ptrInst;
-  while (varInst->opcode() != SpvOpVariable) {
-    if (IsNonPtrAccessChain(varInst->opcode())) {
-      *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
-    }
-    else {
-      assert(varInst->opcode() == SpvOpCopyObject);
-      *varId = varInst->GetSingleWordInOperand(kCopyObjectOperandInIdx);
-    }
-    varInst = def_use_mgr_->GetDef(*varId);
-  }
-  return ptrInst;
-}
 
 bool LocalSingleBlockLoadStoreElimPass::IsTargetVar(uint32_t varId) {
   if (seen_non_target_vars_.find(varId) != seen_non_target_vars_.end())

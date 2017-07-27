@@ -41,15 +41,6 @@ class LocalAccessChainConvertPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
-  // Returns true if |opcode| is a non-pointer access chain op
-  // TODO(): Support conversion of pointer access chains.
-  bool IsNonPtrAccessChain(const SpvOp opcode) const;
-
-  // Given a load or store |ip|, return the pointer instruction.
-  // If the pointer is an access chain, |*varId| is its base id.
-  // Otherwise it is the id of the pointer of the load/store.
-  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t* varId);
-
   // Search |func| and cache function scope variables of target type that are
   // not accessed with non-constant-index access chains. Also cache non-target
   // variables.

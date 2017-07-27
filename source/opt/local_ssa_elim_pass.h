@@ -46,13 +46,6 @@ class LocalMultiStoreElimPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
-  // Returns true if |opcode| is a non-ptr access chain op
-  bool IsNonPtrAccessChain(const SpvOp opcode) const;
-
-  // Given a load or store |ip|, return the pointer instruction.
-  // Also return the base variable's id in |varId|.
-  ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t* varId);
-
   // Return true if |varId| is a previously identified target variable.
   // Return false if |varId| is a previously identified non-target variable.
   // If variable is not cached, return true if variable is a function scope 
