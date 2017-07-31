@@ -27,6 +27,8 @@ const uint32_t kStorePtrIdInIdx = 0;
 const uint32_t kLoadPtrIdInIdx = 0;
 const uint32_t kAccessChainPtrIdInIdx = 0;
 const uint32_t kCopyObjectOperandInIdx = 0;
+const uint32_t kTypePointerStorageClassInIdx = 0;
+const uint32_t kTypePointerTypeIdInIdx = 1;
 
 }  // namespace anonymous
 
@@ -90,6 +92,32 @@ ir::Instruction* MemPass::GetPtr(
     varInst = def_use_mgr_->GetDef(*varId);
   }
   return ptrInst;
+}
+
+bool MemPass::IsTargetVar(uint32_t varId) {
+  if (seen_non_target_vars_.find(varId) != seen_non_target_vars_.end())
+    return false;
+  if (seen_target_vars_.find(varId) != seen_target_vars_.end())
+    return true;
+  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
+  if (varInst->opcode() != SpvOpVariable)
+    return false;;
+  const uint32_t varTypeId = varInst->type_id();
+  const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
+  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
+    SpvStorageClassFunction) {
+    seen_non_target_vars_.insert(varId);
+    return false;
+  }
+  const uint32_t varPteTypeId =
+    varTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
+  ir::Instruction* varPteTypeInst = def_use_mgr_->GetDef(varPteTypeId);
+  if (!IsTargetType(varPteTypeInst)) {
+    seen_non_target_vars_.insert(varId);
+    return false;
+  }
+  seen_target_vars_.insert(varId);
+  return true;
 }
 
 MemPass::MemPass() : def_use_mgr_(nullptr) {}

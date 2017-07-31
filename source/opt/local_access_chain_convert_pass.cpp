@@ -26,38 +26,11 @@ namespace {
 const uint32_t kEntryPointFunctionIdInIdx = 1;
 const uint32_t kStoreValIdInIdx = 1;
 const uint32_t kAccessChainPtrIdInIdx = 0;
-const uint32_t kTypePointerStorageClassInIdx = 0;
 const uint32_t kTypePointerTypeIdInIdx = 1;
 const uint32_t kConstantValueInIdx = 0;
 const uint32_t kTypeIntWidthInIdx = 0;
 
 } // anonymous namespace
-
-bool LocalAccessChainConvertPass::IsTargetVar(uint32_t varId) {
-  if (seen_non_target_vars_.find(varId) != seen_non_target_vars_.end())
-    return false;
-  if (seen_target_vars_.find(varId) != seen_target_vars_.end())
-    return true;
-  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
-  if (varInst->opcode() != SpvOpVariable)
-    return false;;
-  const uint32_t varTypeId = varInst->type_id();
-  const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
-  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
-    SpvStorageClassFunction) {
-    seen_non_target_vars_.insert(varId);
-    return false;
-  }
-  const uint32_t varPteTypeId =
-    varTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
-  ir::Instruction* varPteTypeInst = def_use_mgr_->GetDef(varPteTypeId);
-  if (!IsTargetType(varPteTypeInst)) {
-    seen_non_target_vars_.insert(varId);
-    return false;
-  }
-  seen_target_vars_.insert(varId);
-  return true;
-}
 
 bool LocalAccessChainConvertPass::HasOnlyNamesAndDecorates(uint32_t id) const {
   analysis::UseList* uses = def_use_mgr_->GetUses(id);

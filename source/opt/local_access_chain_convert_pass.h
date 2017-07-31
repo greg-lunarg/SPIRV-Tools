@@ -46,14 +46,6 @@ class LocalAccessChainConvertPass : public MemPass {
   // variables.
   void FindTargetVars(ir::Function* func);
 
-  // Return true if |varId| is a previously identified target variable.
-  // Return false if |varId| is a previously identified non-target variable.
-  // See FindTargetVars() for definition of target variable. If variable is
-  // not cached, return true if variable is a function scope variable of
-  // target type, false otherwise. Updates caches of target and non-target
-  // variables.
-  bool IsTargetVar(uint32_t varId);
-
   // Return true if |op| is supported decorate.
   inline bool IsDecorate(uint32_t op) const {
     return (op == SpvOpDecorate || op == SpvOpDecorateId);
@@ -151,12 +143,6 @@ class LocalAccessChainConvertPass : public MemPass {
 
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
-
-  // Cache of verified target vars
-  std::unordered_set<uint32_t> seen_target_vars_;
-
-  // Cache of verified non-target vars
-  std::unordered_set<uint32_t> seen_non_target_vars_;
 
   // named or decorated ids
   std::unordered_set<uint32_t> named_or_decorated_ids_;

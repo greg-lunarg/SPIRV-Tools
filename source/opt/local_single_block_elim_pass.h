@@ -41,13 +41,6 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
-  // Return true if |varId| is a previously identified target variable.
-  // Return false if |varId| is a previously identified non-target variable.
-  // If variable is not cached, return true if variable is a function scope 
-  // variable of target type, false otherwise. Updates caches of target 
-  // and non-target variables.
-  bool IsTargetVar(uint32_t varId);
-
   // Replace all instances of |loadInst|'s id with |replId| and delete
   // |loadInst|.
   void ReplaceAndDeleteLoad(ir::Instruction* loadInst, uint32_t replId);
@@ -123,12 +116,6 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
 
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
-
-  // Cache of previously seen target types
-  std::unordered_set<uint32_t> seen_target_vars_;
-
-  // Cache of previously seen non-target types
-  std::unordered_set<uint32_t> seen_non_target_vars_;
 
   // Map from function scope variable to a store of that variable in the
   // current block whose value is currently valid. This map is cleared

@@ -56,8 +56,22 @@ class MemPass : public Pass {
   // Also return the base variable's id in |varId|.
   ir::Instruction* GetPtr(ir::Instruction* ip, uint32_t* varId);
 
+  // Return true if |varId| is a previously identified target variable.
+  // Return false if |varId| is a previously identified non-target variable.
+  // See FindTargetVars() for definition of target variable. If variable is
+  // not cached, return true if variable is a function scope variable of
+  // target type, false otherwise. Updates caches of target and non-target
+  // variables.
+  bool IsTargetVar(uint32_t varId);
+
   // Def-Uses for the module we are processing
   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
+
+  // Cache of verified target vars
+  std::unordered_set<uint32_t> seen_target_vars_;
+
+  // Cache of verified non-target vars
+  std::unordered_set<uint32_t> seen_non_target_vars_;
 };
 
 }  // namespace opt

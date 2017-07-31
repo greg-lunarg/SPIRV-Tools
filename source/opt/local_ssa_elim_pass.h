@@ -46,13 +46,6 @@ class LocalMultiStoreElimPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
-  // Return true if |varId| is a previously identified target variable.
-  // Return false if |varId| is a previously identified non-target variable.
-  // If variable is not cached, return true if variable is a function scope 
-  // variable of target type, false otherwise. Updates caches of target 
-  // and non-target variables.
-  bool IsTargetVar(uint32_t varId);
-
   // Return type id for |ptrInst|'s pointee
   uint32_t GetPointeeTypeId(const ir::Instruction* ptrInst) const;
 
@@ -199,12 +192,6 @@ class LocalMultiStoreElimPass : public MemPass {
 
   // Map from block's label id to block.
   std::unordered_map<uint32_t, ir::BasicBlock*> id2block_;
-
-  // Cache of previously seen target types
-  std::unordered_set<uint32_t> seen_target_vars_;
-
-  // Cache of previously seen non-target types
-  std::unordered_set<uint32_t> seen_non_target_vars_;
 
   // Set of label ids of visited blocks
   std::unordered_set<uint32_t> visitedBlocks_;

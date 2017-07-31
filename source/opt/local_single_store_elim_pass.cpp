@@ -31,34 +31,8 @@ namespace {
 const uint32_t kEntryPointFunctionIdInIdx = 1;
 const uint32_t kStoreValIdInIdx = 1;
 const uint32_t kTypePointerStorageClassInIdx = 0;
-const uint32_t kTypePointerTypeIdInIdx = 1;
 
 } // anonymous namespace
-
-bool LocalSingleStoreElimPass::IsTargetVar(uint32_t varId) {
-  if (seen_non_target_vars_.find(varId) != seen_non_target_vars_.end())
-    return false;
-  if (seen_target_vars_.find(varId) != seen_target_vars_.end())
-    return true;
-  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
-  assert(varInst->opcode() == SpvOpVariable);
-  const uint32_t varTypeId = varInst->type_id();
-  const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
-  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
-    SpvStorageClassFunction) {
-    seen_non_target_vars_.insert(varId);
-    return false;
-  }
-  const uint32_t varPteTypeId =
-    varTypeInst->GetSingleWordInOperand(kTypePointerTypeIdInIdx);
-  ir::Instruction* varPteTypeInst = def_use_mgr_->GetDef(varPteTypeId);
-  if (!IsTargetType(varPteTypeInst)) {
-    seen_non_target_vars_.insert(varId);
-    return false;
-  }
-  seen_target_vars_.insert(varId);
-  return true;
-}
 
 bool LocalSingleStoreElimPass::HasOnlySupportedRefs(uint32_t ptrId) {
   if (supported_ref_ptrs_.find(ptrId) != supported_ref_ptrs_.end())

@@ -43,13 +43,6 @@ class LocalSingleStoreElimPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
-  // Return true if |varId| is a previously identified target variable.
-  // Return false if |varId| is a previously identified non-target variable.
-  // If variable is not cached, return true if variable is a function scope 
-  // variable of target type, false otherwise. Updates caches of target 
-  // and non-target variables.
-  bool IsTargetVar(uint32_t varId);
-
   // Return true if all refs through |ptrId| are only loads or stores and
   // cache ptrId in supported_ref_ptrs_.
   bool HasOnlySupportedRefs(uint32_t ptrId);
@@ -176,12 +169,6 @@ class LocalSingleStoreElimPass : public MemPass {
 
   // Set of non-SSA Variables
   std::unordered_set<uint32_t> non_ssa_vars_;
-
-  // Cache of previously seen target types
-  std::unordered_set<uint32_t> seen_target_vars_;
-
-  // Cache of previously seen non-target types
-  std::unordered_set<uint32_t> seen_non_target_vars_;
 
   // Variables with only supported references, ie. loads and stores using
   // variable directly or through non-ptr access chains.
