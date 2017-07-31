@@ -26,93 +26,12 @@ namespace {
 
 const uint32_t kEntryPointFunctionIdInIdx = 1;
 const uint32_t kStoreValIdInIdx = 1;
-const uint32_t kTypePointerStorageClassInIdx = 0;
 const uint32_t kTypePointerTypeIdInIdx = 1;
 const uint32_t kSelectionMergeMergeBlockIdInIdx = 0;
 const uint32_t kLoopMergeMergeBlockIdInIdx = 0;
 const uint32_t kLoopMergeContinueBlockIdInIdx = 1;
 
 } // anonymous namespace
-
-bool LocalMultiStoreElimPass::HasLoads(uint32_t ptrId) const {
-  analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
-  if (uses == nullptr)
-    return false;
-  for (auto u : *uses) {
-    const SpvOp op = u.inst->opcode();
-    if (IsNonPtrAccessChain(op) || op == SpvOpCopyObject) {
-      if (HasLoads(u.inst->result_id()))
-        return true;
-    }
-    else {
-      // Conservatively assume that any non-store use is a load
-      // TODO(greg-lunarg): Improve analysis around function calls, etc
-      if (op != SpvOpStore && op != SpvOpName && !IsDecorate(op))
-        return true;
-    }
-  }
-  return false;
-}
-
-bool LocalMultiStoreElimPass::IsLiveVar(uint32_t varId) const {
-  // non-function scope vars are live
-  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
-  assert(varInst->opcode() == SpvOpVariable);
-  const uint32_t varTypeId = varInst->type_id();
-  const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
-  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
-      SpvStorageClassFunction)
-    return true;
-  // test if variable is loaded from
-  return HasLoads(varId);
-}
-
-void LocalMultiStoreElimPass::AddStores(
-    uint32_t ptr_id, std::queue<ir::Instruction*>* insts) {
-  analysis::UseList* uses = def_use_mgr_->GetUses(ptr_id);
-  if (uses != nullptr) {
-    for (auto u : *uses) {
-      if (IsNonPtrAccessChain(u.inst->opcode()))
-        AddStores(u.inst->result_id(), insts);
-      else if (u.inst->opcode() == SpvOpStore)
-        insts->push(u.inst);
-    }
-  }
-}
-
-void LocalMultiStoreElimPass::DCEInst(ir::Instruction* inst) {
-  std::queue<ir::Instruction*> deadInsts;
-  deadInsts.push(inst);
-  while (!deadInsts.empty()) {
-    ir::Instruction* di = deadInsts.front();
-    // Don't delete labels
-    if (di->opcode() == SpvOpLabel) {
-      deadInsts.pop();
-      continue;
-    }
-    // Remember operands
-    std::vector<uint32_t> ids;
-    di->ForEachInId([&ids](uint32_t* iid) {
-      ids.push_back(*iid);
-    });
-    uint32_t varId = 0;
-    // Remember variable if dead load
-    if (di->opcode() == SpvOpLoad)
-      (void) GetPtr(di, &varId);
-    KillNamesAndDecorates(di);
-    def_use_mgr_->KillInst(di);
-    // For all operands with no remaining uses, add their instruction
-    // to the dead instruction queue.
-    for (auto id : ids)
-      if (HasOnlyNamesAndDecorates(id))
-        deadInsts.push(def_use_mgr_->GetDef(id));
-    // if a load was deleted and it was the variable's
-    // last load, add all its stores to dead queue
-    if (varId != 0 && !IsLiveVar(varId)) 
-      AddStores(varId, &deadInsts);
-    deadInsts.pop();
-  }
-}
 
 bool LocalMultiStoreElimPass::HasOnlySupportedRefs(uint32_t varId) {
   if (supported_ref_vars_.find(varId) != supported_ref_vars_.end())

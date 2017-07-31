@@ -76,6 +76,25 @@ class MemPass : public Pass {
   // Collect all named or decorated ids in module
   void FindNamedOrDecoratedIds();
 
+  // Return true if any instruction loads from |varId|
+  bool HasLoads(uint32_t varId) const;
+
+  // Return true if |varId| is not a function variable or if it has
+  // a load
+  bool IsLiveVar(uint32_t varId) const;
+
+  // Return true if |storeInst| is not a function variable or if its
+  // base variable has a load
+  bool IsLiveStore(ir::Instruction* storeInst);
+
+  // Add stores using |ptr_id| to |insts|
+  void AddStores(uint32_t ptr_id, std::queue<ir::Instruction*>* insts);
+
+  // Delete |inst| and iterate DCE on all its operands if they are now
+  // useless. If a load is deleted and its variable has no other loads,
+  // delete all its variable's stores.
+  void DCEInst(ir::Instruction* inst);
+
   // Return true if |op| is supported decorate.
   inline bool IsDecorate(uint32_t op) const {
     return (op == SpvOpDecorate || op == SpvOpDecorateId);

@@ -83,25 +83,6 @@ class LocalSingleStoreElimPass : public MemPass {
   // if any instructions are modified.
   bool SingleStoreProcess(ir::Function* func);
 
-  // Return true if any instruction loads from |varId|
-  bool HasLoads(uint32_t varId) const;
-
-  // Return true if |varId| is not a function variable or if it has
-  // a load
-  bool IsLiveVar(uint32_t varId) const;
-
-  // Return true if |storeInst| is not a function variable or if its
-  // base variable has a load
-  bool IsLiveStore(ir::Instruction* storeInst);
-
-  // Add stores using |ptr_id| to |insts|
-  void AddStores(uint32_t ptr_id, std::queue<ir::Instruction*>* insts);
-
-  // Delete |inst| and iterate DCE on all its operands if they are now
-  // useless. If a load is deleted and its variable has no other loads,
-  // delete all its variable's stores.
-  void DCEInst(ir::Instruction* inst);
-
   // Remove all stores to useless SSA variables. Remove useless
   // access chains and variables as well. Assumes SingleStoreAnalyze
   // and SingleStoreProcess has been run.

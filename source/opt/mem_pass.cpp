@@ -169,6 +169,91 @@ void MemPass::KillNamesAndDecorates(ir::Instruction* inst) {
   KillNamesAndDecorates(rId);
 }
 
+bool MemPass::HasLoads(uint32_t varId) const {
+  analysis::UseList* uses = def_use_mgr_->GetUses(varId);
+  if (uses == nullptr)
+    return false;
+  for (auto u : *uses) {
+    SpvOp op = u.inst->opcode();
+    // TODO(): The following is slightly conservative. Could be
+    // better handling of non-store/name.
+    if (IsNonPtrAccessChain(op) || op == SpvOpCopyObject) {
+      if (HasLoads(u.inst->result_id()))
+        return true;
+    }
+    else if (op != SpvOpStore && op != SpvOpName)
+      return true;
+  }
+  return false;
+}
+
+bool MemPass::IsLiveVar(uint32_t varId) const {
+  // non-function scope vars are live
+  const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
+  assert(varInst->opcode() == SpvOpVariable);
+  const uint32_t varTypeId = varInst->type_id();
+  const ir::Instruction* varTypeInst = def_use_mgr_->GetDef(varTypeId);
+  if (varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) !=
+      SpvStorageClassFunction)
+    return true;
+  // test if variable is loaded from
+  return HasLoads(varId);
+}
+
+bool MemPass::IsLiveStore(ir::Instruction* storeInst) {
+  // get store's variable
+  uint32_t varId;
+  (void) GetPtr(storeInst, &varId);
+  return IsLiveVar(varId);
+}
+
+void MemPass::AddStores(
+    uint32_t ptr_id, std::queue<ir::Instruction*>* insts) {
+  analysis::UseList* uses = def_use_mgr_->GetUses(ptr_id);
+  if (uses != nullptr) {
+    for (auto u : *uses) {
+      if (IsNonPtrAccessChain(u.inst->opcode()))
+        AddStores(u.inst->result_id(), insts);
+      else if (u.inst->opcode() == SpvOpStore)
+        insts->push(u.inst);
+    }
+  }
+}
+
+void MemPass::DCEInst(ir::Instruction* inst) {
+  std::queue<ir::Instruction*> deadInsts;
+  deadInsts.push(inst);
+  while (!deadInsts.empty()) {
+    ir::Instruction* di = deadInsts.front();
+    // Don't delete labels
+    if (di->opcode() == SpvOpLabel) {
+      deadInsts.pop();
+      continue;
+    }
+    // Remember operands
+    std::vector<uint32_t> ids;
+    di->ForEachInId([&ids](uint32_t* iid) {
+      ids.push_back(*iid);
+    });
+    uint32_t varId = 0;
+    // Remember variable if dead load
+    if (di->opcode() == SpvOpLoad)
+      (void) GetPtr(di, &varId);
+    KillNamesAndDecorates(di);
+    def_use_mgr_->KillInst(di);
+    // For all operands with no remaining uses, add their instruction
+    // to the dead instruction queue.
+    for (auto id : ids)
+      if (HasOnlyNamesAndDecorates(id))
+        deadInsts.push(def_use_mgr_->GetDef(id));
+    // if a load was deleted and it was the variable's
+    // last load, add all its stores to dead queue
+    if (varId != 0 && !IsLiveVar(varId))
+      AddStores(varId, &deadInsts);
+    deadInsts.pop();
+  }
+}
+
 MemPass::MemPass() : module_(nullptr), def_use_mgr_(nullptr) {}
 
 }  // namespace opt

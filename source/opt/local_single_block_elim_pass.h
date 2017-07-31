@@ -45,24 +45,6 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
   // |loadInst|.
   void ReplaceAndDeleteLoad(ir::Instruction* loadInst, uint32_t replId);
 
-  // Return true if any instruction loads from |ptrId|
-  bool HasLoads(uint32_t ptrId) const;
-
-  // Return true if |varId| is not a function variable or if it has
-  // a load
-  bool IsLiveVar(uint32_t varId) const;
-
-  // Return true if |storeInst| is not to function variable or if its
-  // base variable has a load
-  bool IsLiveStore(ir::Instruction* storeInst);
-
-  // Add stores using |ptr_id| to |insts|
-  void AddStores(uint32_t ptr_id, std::queue<ir::Instruction*>* insts);
-
-  // Delete |inst| and iterate DCE on all its operands. Won't delete
-  // labels. 
-  void DCEInst(ir::Instruction* inst);
-
   // Return true if all uses of |varId| are only through supported reference
   // operations ie. loads and store. Also cache in supported_ref_ptrs_;
   bool HasOnlySupportedRefs(uint32_t varId);
