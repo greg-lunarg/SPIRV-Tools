@@ -71,15 +71,6 @@ class LocalMultiStoreElimPass : public MemPass {
   // operations ie. loads and store. Also cache in supported_ref_vars_;
   bool HasOnlySupportedRefs(uint32_t varId);
 
-  // Return true if all uses of |id| are only name or decorate ops.
-  bool HasOnlyNamesAndDecorates(uint32_t id) const;
-
-  // Kill all name and decorate ops using |inst|
-  void KillNamesAndDecorates(ir::Instruction* inst);
-
-  // Kill all name and decorate ops using |id|
-  void KillNamesAndDecorates(uint32_t id);
-
   // Initialize data structures used by EliminateLocalMultiStore for
   // function |func|, specifically block predecessors and target variables.
   void InitSSARewrite(ir::Function& func);
@@ -156,9 +147,6 @@ class LocalMultiStoreElimPass : public MemPass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  // Collect all named or decorated ids in module
-  void FindNamedOrDecoratedIds();
-
   // Remove remaining loads and stores of function scope variables only
   // referenced with non-access-chain loads and stores from function |func|.
   // Insert Phi functions where necessary. Running LocalAccessChainRemoval,
@@ -184,9 +172,6 @@ class LocalMultiStoreElimPass : public MemPass {
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
-  // Module this pass is processing
-  ir::Module* module_;
-
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
 
@@ -202,9 +187,6 @@ class LocalMultiStoreElimPass : public MemPass {
   // Variables that are only referenced by supported operations for this
   // pass ie. loads and stores.
   std::unordered_set<uint32_t> supported_ref_vars_;
-
-  // named or decorated ids
-  std::unordered_set<uint32_t> named_or_decorated_ids_;
 
   // Map from block to its structured successor blocks. See 
   // ComputeStructuredSuccessors() for definition.

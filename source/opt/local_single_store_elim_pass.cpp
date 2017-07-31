@@ -269,47 +269,6 @@ void LocalSingleStoreElimPass::AddStores(
   }
 }
 
-bool LocalSingleStoreElimPass::HasOnlyNamesAndDecorates(
-    uint32_t id) const {
-  analysis::UseList* uses = def_use_mgr_->GetUses(id);
-  if (uses == nullptr)
-    return true;
-  if (named_or_decorated_ids_.find(id) == named_or_decorated_ids_.end())
-    return false;
-  for (auto u : *uses) {
-    const SpvOp op = u.inst->opcode();
-    if (op != SpvOpName && !IsDecorate(op))
-      return false;
-  }
-  return true;
-}
-
-void LocalSingleStoreElimPass::KillNamesAndDecorates(uint32_t id) {
-  // TODO(greg-lunarg): Remove id from any OpGroupDecorate and 
-  // kill if no other operands.
-  if (named_or_decorated_ids_.find(id) == named_or_decorated_ids_.end())
-    return;
-  analysis::UseList* uses = def_use_mgr_->GetUses(id);
-  if (uses == nullptr)
-    return;
-  std::list<ir::Instruction*> killList;
-  for (auto u : *uses) {
-    const SpvOp op = u.inst->opcode();
-    if (op == SpvOpName || IsDecorate(op))
-      killList.push_back(u.inst);
-  }
-  for (auto kip : killList)
-    def_use_mgr_->KillInst(kip);
-}
-
-void LocalSingleStoreElimPass::KillNamesAndDecorates(
-    ir::Instruction* inst) {
-  const uint32_t rId = inst->result_id();
-  if (rId == 0)
-    return;
-  KillNamesAndDecorates(rId);
-}
-
 void LocalSingleStoreElimPass::DCEInst(ir::Instruction* inst) {
   std::queue<ir::Instruction*> deadInsts;
   deadInsts.push(inst);
@@ -402,15 +361,6 @@ void LocalSingleStoreElimPass::Initialize(ir::Module* module) {
   InitExtensions();
 };
 
-void LocalSingleStoreElimPass::FindNamedOrDecoratedIds() {
-  for (auto& di : module_->debugs())
-    if (di.opcode() == SpvOpName)
-      named_or_decorated_ids_.insert(di.GetSingleWordInOperand(0));
-  for (auto& ai : module_->annotations())
-    if (ai.opcode() == SpvOpDecorate || ai.opcode() == SpvOpDecorateId)
-      named_or_decorated_ids_.insert(ai.GetSingleWordInOperand(0));
-}
-  
 bool LocalSingleStoreElimPass::AllExtensionsSupported() const {
   // If any extension not in whitelist, return false
   for (auto& ei : module_->extensions()) {
@@ -449,8 +399,7 @@ Pass::Status LocalSingleStoreElimPass::ProcessImpl() {
 }
 
 LocalSingleStoreElimPass::LocalSingleStoreElimPass()
-    : module_(nullptr), 
-      pseudo_entry_block_(std::unique_ptr<ir::Instruction>(
+    : pseudo_entry_block_(std::unique_ptr<ir::Instruction>(
           new ir::Instruction(SpvOpLabel, 0, 0, {}))),
       pseudo_exit_block_(std::unique_ptr<ir::Instruction>(
           new ir::Instruction(SpvOpLabel, 0, kInvalidId, {}))),

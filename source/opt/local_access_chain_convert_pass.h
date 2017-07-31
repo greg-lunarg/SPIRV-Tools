@@ -46,23 +46,6 @@ class LocalAccessChainConvertPass : public MemPass {
   // variables.
   void FindTargetVars(ir::Function* func);
 
-  // Return true if |op| is supported decorate.
-  inline bool IsDecorate(uint32_t op) const {
-    return (op == SpvOpDecorate || op == SpvOpDecorateId);
-  }
-
-  // Return true if all uses of |id| are only name or decorate ops.
-  bool HasOnlyNamesAndDecorates(uint32_t id) const;
-
-  // Kill all name and decorate ops using |inst|
-  void KillNamesAndDecorates(ir::Instruction* inst);
-
-  // Kill all name and decorate ops using |id|
-  void KillNamesAndDecorates(uint32_t id);
-
-  // Collect all named or decorated ids in module
-  void FindNamedOrDecoratedIds();
-
   // Delete |inst| if it has no uses. Assumes |inst| has a non-zero resultId.
   void DeleteIfUseless(ir::Instruction* inst);
 
@@ -138,14 +121,8 @@ class LocalAccessChainConvertPass : public MemPass {
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
-  // Module this pass is processing
-  ir::Module* module_;
-
   // Map from function's result id to function
   std::unordered_map<uint32_t, ir::Function*> id2function_;
-
-  // named or decorated ids
-  std::unordered_set<uint32_t> named_or_decorated_ids_;
 
   // Extensions supported by this pass.
   std::unordered_set<std::string> extensions_whitelist_;

@@ -246,8 +246,7 @@ Pass::Status AggressiveDCEPass::ProcessImpl() {
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
-AggressiveDCEPass::AggressiveDCEPass()
-    : module_(nullptr) {}
+AggressiveDCEPass::AggressiveDCEPass() {}
 
 Pass::Status AggressiveDCEPass::Process(ir::Module* module) {
   Initialize(module);

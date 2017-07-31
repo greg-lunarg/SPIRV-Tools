@@ -64,6 +64,26 @@ class MemPass : public Pass {
   // variables.
   bool IsTargetVar(uint32_t varId);
 
+  // Return true if all uses of |id| are only name or decorate ops.
+  bool HasOnlyNamesAndDecorates(uint32_t id) const;
+
+  // Kill all name and decorate ops using |inst|
+  void KillNamesAndDecorates(ir::Instruction* inst);
+
+  // Kill all name and decorate ops using |id|
+  void KillNamesAndDecorates(uint32_t id);
+
+  // Collect all named or decorated ids in module
+  void FindNamedOrDecoratedIds();
+
+  // Return true if |op| is supported decorate.
+  inline bool IsDecorate(uint32_t op) const {
+    return (op == SpvOpDecorate || op == SpvOpDecorateId);
+  }
+
+  // Module this pass is processing
+  ir::Module* module_;
+
   // Def-Uses for the module we are processing
   std::unique_ptr<analysis::DefUseManager> def_use_mgr_;
 
@@ -72,6 +92,9 @@ class MemPass : public Pass {
 
   // Cache of verified non-target vars
   std::unordered_set<uint32_t> seen_non_target_vars_;
+
+  // named or decorated ids
+  std::unordered_set<uint32_t> named_or_decorated_ids_;
 };
 
 }  // namespace opt
