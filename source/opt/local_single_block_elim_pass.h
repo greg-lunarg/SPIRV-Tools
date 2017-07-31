@@ -41,10 +41,6 @@ class LocalSingleBlockLoadStoreElimPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
-  // Replace all instances of |loadInst|'s id with |replId| and delete
-  // |loadInst|.
-  void ReplaceAndDeleteLoad(ir::Instruction* loadInst, uint32_t replId);
-
   // Return true if all uses of |varId| are only through supported reference
   // operations ie. loads and store. Also cache in supported_ref_ptrs_;
   bool HasOnlySupportedRefs(uint32_t varId);

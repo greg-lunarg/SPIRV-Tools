@@ -41,21 +41,6 @@ void LocalAccessChainConvertPass::DeleteIfUseless(ir::Instruction* inst) {
   }
 }
 
-void LocalAccessChainConvertPass::ReplaceAndDeleteLoad(
-    ir::Instruction* loadInst,
-    uint32_t replId,
-    ir::Instruction* ptrInst) {
-  const uint32_t loadId = loadInst->result_id();
-  KillNamesAndDecorates(loadId);
-  (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
-  // remove load instruction
-  def_use_mgr_->KillInst(loadInst);
-  // if access chain, see if it can be removed as well
-  if (IsNonPtrAccessChain(ptrInst->opcode())) {
-    DeleteIfUseless(ptrInst);
-  }
-}
-
 uint32_t LocalAccessChainConvertPass::GetPointeeTypeId(
     const ir::Instruction* ptrInst) const {
   const uint32_t ptrTypeId = ptrInst->type_id();
@@ -224,7 +209,7 @@ bool LocalAccessChainConvertPass::ConvertLocalAccessChains(ir::Function* func) {
         std::vector<std::unique_ptr<ir::Instruction>> newInsts;
         uint32_t replId =
             GenAccessChainLoadReplacement(ptrInst, &newInsts);
-        ReplaceAndDeleteLoad(&*ii, replId, ptrInst);
+        ReplaceAndDeleteLoad(&*ii, replId);
         ++ii;
         ii = ii.InsertBefore(&newInsts);
         ++ii;

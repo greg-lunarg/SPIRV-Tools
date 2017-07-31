@@ -95,6 +95,10 @@ class MemPass : public Pass {
   // delete all its variable's stores.
   void DCEInst(ir::Instruction* inst);
 
+  // Replace all instances of |loadInst|'s id with |replId| and delete
+  // |loadInst|.
+  void ReplaceAndDeleteLoad(ir::Instruction* loadInst, uint32_t replId);
+
   // Return true if |op| is supported decorate.
   inline bool IsDecorate(uint32_t op) const {
     return (op == SpvOpDecorate || op == SpvOpDecorateId);

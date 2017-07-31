@@ -55,10 +55,6 @@ class LocalSingleStoreElimPass : public MemPass {
   // analysis in the presence of function calls.
   void SingleStoreAnalyze(ir::Function* func);
 
-  // Replace all instances of |loadInst|'s id with |replId| and delete
-  // |loadInst|.
-  void ReplaceAndDeleteLoad(ir::Instruction* loadInst, uint32_t replId);
-
   using GetBlocksFunction =
     std::function<const std::vector<ir::BasicBlock*>*(const ir::BasicBlock*)>;
 

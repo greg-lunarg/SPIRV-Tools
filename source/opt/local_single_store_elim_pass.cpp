@@ -97,14 +97,6 @@ void LocalSingleStoreElimPass::SingleStoreAnalyze(ir::Function* func) {
   }
 }
 
-void LocalSingleStoreElimPass::ReplaceAndDeleteLoad(
-    ir::Instruction* loadInst, uint32_t replId) {
-  const uint32_t loadId = loadInst->result_id();
-  KillNamesAndDecorates(loadId);
-  (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
-  DCEInst(loadInst);
-}
-
 LocalSingleStoreElimPass::GetBlocksFunction
 LocalSingleStoreElimPass::AugmentedCFGSuccessorsFunction() const {
   return [this](const ir::BasicBlock* block) {

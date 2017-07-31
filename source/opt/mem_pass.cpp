@@ -254,6 +254,14 @@ void MemPass::DCEInst(ir::Instruction* inst) {
   }
 }
 
+void MemPass::ReplaceAndDeleteLoad(
+    ir::Instruction* loadInst, uint32_t replId) {
+  const uint32_t loadId = loadInst->result_id();
+  KillNamesAndDecorates(loadId);
+  (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
+  DCEInst(loadInst);
+}
+
 MemPass::MemPass() : module_(nullptr), def_use_mgr_(nullptr) {}
 
 }  // namespace opt

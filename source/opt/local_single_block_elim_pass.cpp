@@ -28,15 +28,6 @@ const uint32_t kStoreValIdInIdx = 1;
 
 } // anonymous namespace
 
-void LocalSingleBlockLoadStoreElimPass::ReplaceAndDeleteLoad(
-    ir::Instruction* loadInst, uint32_t replId) {
-  const uint32_t loadId = loadInst->result_id();
-  KillNamesAndDecorates(loadId);
-  (void) def_use_mgr_->ReplaceAllUsesWith(loadId, replId);
-  // TODO(greg-lunarg): Consider moving DCE into separate pass
-  DCEInst(loadInst);
-}
-
 bool LocalSingleBlockLoadStoreElimPass::HasOnlySupportedRefs(uint32_t ptrId) {
   if (supported_ref_ptrs_.find(ptrId) != supported_ref_ptrs_.end())
     return true;

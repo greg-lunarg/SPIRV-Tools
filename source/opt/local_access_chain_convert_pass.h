@@ -49,12 +49,6 @@ class LocalAccessChainConvertPass : public MemPass {
   // Delete |inst| if it has no uses. Assumes |inst| has a non-zero resultId.
   void DeleteIfUseless(ir::Instruction* inst);
 
-  // Replace all instances of |loadInst|'s id with |replId| and delete
-  // |loadInst| and its pointer |ptrInst| if it is a useless access chain.
-  void ReplaceAndDeleteLoad(ir::Instruction* loadInst,
-    uint32_t replId,
-    ir::Instruction* ptrInst);
-
   // Return type id for |ptrInst|'s pointee
   uint32_t GetPointeeTypeId(const ir::Instruction* ptrInst) const;
 
