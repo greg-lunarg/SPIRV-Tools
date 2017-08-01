@@ -170,6 +170,10 @@ class InlinePass : public Pass {
   // Return true if |func| is a function that can be inlined.
   bool IsInlinableFunction(ir::Function* func);
 
+  // Update phis in succeeding blocks to point to new last block
+  void UpdateSucceedingPhis(
+      std::vector<std::unique_ptr<ir::BasicBlock>>& new_blocks);
+
   // Exhaustively inline all function calls in func as well as in
   // all code that is inlined into func. Return true if func is modified.
   bool Inline(ir::Function* func);

@@ -429,6 +429,23 @@ bool InlinePass::IsInlinableFunctionCall(const ir::Instruction* inst) {
   return ci != inlinable_.cend();
 }
 
+void InlinePass::UpdateSucceedingPhis(
+    std::vector<std::unique_ptr<ir::BasicBlock>>& new_blocks) {
+  const auto firstBlk = new_blocks.begin();
+  const auto lastBlk = new_blocks.end() - 1;
+  const uint32_t firstId = (*firstBlk)->id();
+  const uint32_t lastId = (*lastBlk)->id();
+  (*lastBlk)->ForEachSuccessorLabel(
+      [&firstId, &lastId, this](uint32_t succ) {
+        ir::BasicBlock* sbp = this->id2block_[succ];
+        sbp->ForEachPhiInst([&firstId, &lastId](ir::Instruction* phi) {
+          phi->ForEachInId([&firstId, &lastId](uint32_t* id) {
+            if (*id == firstId) *id = lastId;
+          });
+        });
+      });
+}
+
 bool InlinePass::Inline(ir::Function* func) {
   bool modified = false;
   // Using block iterators here because of block erasures and insertions.
@@ -439,23 +456,10 @@ bool InlinePass::Inline(ir::Function* func) {
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
         std::vector<std::unique_ptr<ir::Instruction>> newVars;
         GenInlineCode(&newBlocks, &newVars, ii, bi);
-        // Update phi functions in successor blocks if call block
-        // is replaced with more than one block.
-        if (newBlocks.size() > 1) {
-          const auto firstBlk = newBlocks.begin();
-          const auto lastBlk = newBlocks.end() - 1;
-          const uint32_t firstId = (*firstBlk)->id();
-          const uint32_t lastId = (*lastBlk)->id();
-          (*lastBlk)->ForEachSuccessorLabel(
-              [&firstId, &lastId, this](uint32_t succ) {
-                ir::BasicBlock* sbp = this->id2block_[succ];
-                sbp->ForEachPhiInst([&firstId, &lastId](ir::Instruction* phi) {
-                  phi->ForEachInId([&firstId, &lastId](uint32_t* id) {
-                    if (*id == firstId) *id = lastId;
-                  });
-                });
-              });
-        }
+        // If call block is replaced with more than one block, point
+        // succeeding phis at new last block.
+        if (newBlocks.size() > 1)
+          UpdateSucceedingPhis(newBlocks);
         // Replace old calling block with new block(s).
         bi = bi.Erase();
         bi = bi.InsertBefore(&newBlocks);
