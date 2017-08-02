@@ -15,11 +15,11 @@
 // limitations under the License.
 
 #include "inline_pass.h"
+
 #include "cfa.h"
 
 // Indices of operands in SPIR-V instructions
 
-static const int kSpvEntryPointFunctionId = 1;
 static const int kSpvFunctionCallFunctionId = 2;
 static const int kSpvFunctionCallArgumentId = 3;
 static const int kSpvReturnValueId = 0;
@@ -446,36 +446,6 @@ void InlinePass::UpdateSucceedingPhis(
       });
 }
 
-bool InlinePass::Inline(ir::Function* func) {
-  bool modified = false;
-  // Using block iterators here because of block erasures and insertions.
-  for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    for (auto ii = bi->begin(); ii != bi->end();) {
-      if (IsInlinableFunctionCall(&*ii)) {
-        // Inline call.
-        std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
-        std::vector<std::unique_ptr<ir::Instruction>> newVars;
-        GenInlineCode(&newBlocks, &newVars, ii, bi);
-        // If call block is replaced with more than one block, point
-        // succeeding phis at new last block.
-        if (newBlocks.size() > 1)
-          UpdateSucceedingPhis(newBlocks);
-        // Replace old calling block with new block(s).
-        bi = bi.Erase();
-        bi = bi.InsertBefore(&newBlocks);
-        // Insert new function variables.
-        if (newVars.size() > 0) func->begin()->begin().InsertBefore(&newVars);
-        // Restart inlining at beginning of calling block.
-        ii = bi->begin();
-        modified = true;
-      } else {
-        ++ii;
-      }
-    }
-  }
-  return modified;
-}
-
 bool InlinePass::HasMultipleReturns(ir::Function* func) {
   bool seenReturn = false;
   bool multipleReturns = false;
@@ -593,58 +563,12 @@ bool InlinePass::IsInlinableFunction(ir::Function* func) {
   // done validly if the return was not in a loop in the original function.
   // Also remember functions with multiple (early) returns.
   AnalyzeReturns(func);
-  const auto ci = no_return_in_loop_.find(func->result_id());
-  return ci != no_return_in_loop_.cend();
-}
-
-void InlinePass::Initialize(ir::Module* module) {
-  def_use_mgr_.reset(new analysis::DefUseManager(consumer(), module));
-
-  // Initialize next unused Id.
-  next_id_ = module->id_bound();
-
-  // Save module.
-  module_ = module;
-
-  false_id_ = 0;
-
-  id2function_.clear();
-  id2block_.clear();
-  block2structured_succs_.clear();
-  inlinable_.clear();
-  for (auto& fn : *module_) {
-    // Initialize function and block maps.
-    id2function_[fn.result_id()] = &fn;
-    for (auto& blk : fn) {
-      id2block_[blk.id()] = &blk;
-    }
-    // Compute inlinability
-    if (IsInlinableFunction(&fn))
-      inlinable_.insert(fn.result_id());
-  }
-};
-
-Pass::Status InlinePass::ProcessImpl() {
-  // Do exhaustive inlining on each entry point function in module
-  bool modified = false;
-  for (auto& e : module_->entry_points()) {
-    ir::Function* fn =
-        id2function_[e.GetSingleWordOperand(kSpvEntryPointFunctionId)];
-    modified = Inline(fn) || modified;
-  }
-
-  FinalizeNextId(module_);
-
-  return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
+  return no_return_in_loop_.find(func->result_id()) != 
+      no_return_in_loop_.cend();
 }
 
 InlinePass::InlinePass()
     : module_(nullptr), def_use_mgr_(nullptr), next_id_(0) {}
-
-Pass::Status InlinePass::Process(ir::Module* module) {
-  Initialize(module);
-  return ProcessImpl();
-}
 
 }  // namespace opt
 }  // namespace spvtools
