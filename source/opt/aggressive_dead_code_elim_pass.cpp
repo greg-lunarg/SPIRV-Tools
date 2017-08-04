@@ -161,6 +161,20 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
         }
       }
     }
+    // If function call, treat as if it loads from all pointer arguments
+    else if (liveInst->opcode() == SpvOpFunctionCall) {
+      liveInst->ForEachInId([this](const uint32_t* iid) {
+        if !IsPtr(*iid) return;
+        uint32_t varId;
+        (void) GetPtr(*iid, &varId);
+        if (IsLocalVar(varId)) {
+          if (live_local_vars_.find(varId) == live_local_vars_.end()) {
+            AddStores(varId);
+            live_local_vars_.insert(varId);
+          }
+        }
+      });
+    }
     worklist_.pop();
   }
   // Mark all non-live instructions dead
