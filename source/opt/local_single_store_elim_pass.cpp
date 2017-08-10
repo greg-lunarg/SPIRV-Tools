@@ -65,10 +65,6 @@ void LocalSingleStoreElimPass::SingleStoreAnalyze(ir::Function* func) {
         ir::Instruction* ptrInst = GetPtr(&*ii, &varId);
         if (non_ssa_vars_.find(varId) != non_ssa_vars_.end())
           continue;
-        if (!HasOnlySupportedRefs(varId)) {
-          non_ssa_vars_.insert(varId);
-          continue;
-        }
         if (ptrInst->opcode() != SpvOpVariable) {
           non_ssa_vars_.insert(varId);
           ssa_var2store_.erase(varId);
@@ -76,6 +72,10 @@ void LocalSingleStoreElimPass::SingleStoreAnalyze(ir::Function* func) {
         }
         // Verify target type and function storage class
         if (!IsTargetVar(varId)) {
+          non_ssa_vars_.insert(varId);
+          continue;
+        }
+        if (!HasOnlySupportedRefs(varId)) {
           non_ssa_vars_.insert(varId);
           continue;
         }

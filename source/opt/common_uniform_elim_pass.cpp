@@ -117,7 +117,8 @@ ir::Instruction* CommonUniformElimPass::GetPtr(
     ptrInst = def_use_mgr_->GetDef(*varId);
   }
   ir::Instruction* varInst = ptrInst;
-  while (varInst->opcode() != SpvOpVariable) {
+  while (varInst->opcode() != SpvOpVariable &&
+      varInst->opcode() != SpvOpFunctionParameter) {
     if (IsNonPtrAccessChain(varInst->opcode())) {
       *varId = varInst->GetSingleWordInOperand(kAccessChainPtrIdInIdx);
     }
@@ -133,7 +134,8 @@ ir::Instruction* CommonUniformElimPass::GetPtr(
 bool CommonUniformElimPass::IsUniformVar(uint32_t varId) {
   const ir::Instruction* varInst =
     def_use_mgr_->id_to_defs().find(varId)->second;
-  assert(varInst->opcode() == SpvOpVariable);
+  if (varInst->opcode() != SpvOpVariable)
+    return false;
   const uint32_t varTypeId = varInst->type_id();
   const ir::Instruction* varTypeInst =
     def_use_mgr_->id_to_defs().find(varTypeId)->second;
