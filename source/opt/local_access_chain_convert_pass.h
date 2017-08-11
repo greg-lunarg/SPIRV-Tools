@@ -40,6 +40,8 @@ class LocalAccessChainConvertPass : public MemPass {
   const char* name() const override { return "convert-local-access-chains"; }
   Status Process(ir::Module*) override;
 
+  using ProcessFunction = std::function<bool(ir::Function*)>;
+
  private:
   // Return true if all refs through |ptrId| are only loads or stores and
   // cache ptrId in supported_ref_ptrs_.
@@ -108,6 +110,9 @@ class LocalAccessChainConvertPass : public MemPass {
 
   // Add to |next| all ids of functions called in |func|.
   void AddCalls(ir::Function* func, std::unordered_set<uint32_t>* next);
+
+  // 
+  bool ProcessEntryPointCallTree(ProcessFunction pfn, ir::Module* module);
 
   // Save next available id into |module|.
   inline void FinalizeNextId(ir::Module* module) {
