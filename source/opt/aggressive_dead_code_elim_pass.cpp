@@ -226,11 +226,6 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
 void AggressiveDCEPass::Initialize(ir::Module* module) {
   module_ = module;
 
-  // Initialize id-to-function map
-  id2function_.clear();
-  for (auto& fn : *module_)
-    id2function_[fn.result_id()] = &fn;
-
   // Clear collections
   worklist_ = std::queue<ir::Instruction*>{};
   live_insts_.clear();
@@ -262,12 +257,10 @@ Pass::Status AggressiveDCEPass::ProcessImpl() {
   // Initialize combinator whitelists
   InitCombinatorSets();
   // Process all entry point functions
-  bool modified = false;
-  for (auto& e : module_->entry_points()) {
-    ir::Function* fn =
-        id2function_[e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx)];
-    modified = AggressiveDCE(fn) || modified;
-  }
+  ProcessFunction pfn = [this](ir::Function* fp) {
+    return AggressiveDCE(fp);
+  };
+  bool modified = ProcessEntryPointCallTree(pfn, module_);
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 

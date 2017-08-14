@@ -516,13 +516,10 @@ void CommonUniformElimPass::Initialize(ir::Module* module) {
   module_ = module;
 
   // Initialize function and block maps
-  id2function_.clear();
   id2block_.clear();
-  for (auto& fn : *module_) {
-    id2function_[fn.result_id()] = &fn;
+  for (auto& fn : *module_)
     for (auto& blk : fn)
       id2block_[blk.id()] = &blk;
-  }
 
   // Clear collections
   block2structured_succs_.clear();
@@ -576,12 +573,10 @@ Pass::Status CommonUniformElimPass::ProcessImpl() {
         inst.GetSingleWordInOperand(kTypeIntWidthInIdx) != 32)
       return Status::SuccessWithoutChange;
   // Process entry point functions
-  bool modified = false;
-  for (auto& e : module_->entry_points()) {
-    ir::Function* fn =
-        id2function_[e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx)];
-    modified = EliminateCommonUniform(fn) || modified;
-  }
+  ProcessFunction pfn = [this](ir::Function* fp) {
+    return EliminateCommonUniform(fp);
+  };
+  bool modified = ProcessEntryPointCallTree(pfn, module_);
   FinalizeNextId(module_);
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
