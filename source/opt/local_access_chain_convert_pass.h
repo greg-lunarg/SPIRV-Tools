@@ -121,9 +121,6 @@ class LocalAccessChainConvertPass : public MemPass {
   void Initialize(ir::Module* module);
   Pass::Status ProcessImpl();
 
-  // Map from function's result id to function
-  std::unordered_map<uint32_t, ir::Function*> id2function_;
-
   // Variables with only supported references, ie. loads and stores using
   // variable directly or through non-ptr access chains.
   std::unordered_set<uint32_t> supported_ref_ptrs_;

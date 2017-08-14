@@ -36,7 +36,13 @@ void Pass::AddCalls(ir::Function* func,
 }
 
 bool Pass::ProcessEntryPointCallTree(
-    ProcessFunction pfn, ir::Module* module) {
+    ProcessFunction& pfn, ir::Module* module) {
+  // Map from function's result id to function
+  std::unordered_map<uint32_t, ir::Function*> id2function;
+  id2function.clear();
+  for (auto& fn : *module)
+    id2function[fn.result_id()] = &fn;
+  // Process call tree
   bool modified = false;
   std::unordered_set<uint32_t> todo;
   std::unordered_set<uint32_t> next;
@@ -47,7 +53,7 @@ bool Pass::ProcessEntryPointCallTree(
     for (auto& fi : todo) {
       if (done.find(fi) != done.end())
         continue;
-      ir::Function* fn = id2function_[fi];
+      ir::Function* fn = id2function[fi];
       modified = pfn(fn) || modified;
       done.insert(fi);
       AddCalls(fn, &next);

@@ -68,7 +68,7 @@ class Pass {
   void AddCalls(ir::Function* func, std::unordered_set<uint32_t>* next);
 
   // 
-  bool ProcessEntryPointCallTree(ProcessFunction pfn, ir::Module* module);
+  bool ProcessEntryPointCallTree(ProcessFunction& pfn, ir::Module* module);
 
   // Processes the given |module|. Returns Status::Failure if errors occur when
   // processing. Returns the corresponding Status::Success if processing is
