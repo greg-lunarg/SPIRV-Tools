@@ -294,38 +294,6 @@ bool LocalAccessChainConvertPass::AllExtensionsSupported() const {
   return true;
 }
 
-void LocalAccessChainConvertPass::AddCalls(ir::Function* func,
-    std::unordered_set<uint32_t>* next) {
-  for (auto bi = func->begin(); bi != func->end(); ++bi)
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii)
-      if (ii->opcode() == SpvOpFunctionCall)
-        next->insert(ii->GetSingleWordInOperand(0));
-}
-
-bool LocalAccessChainConvertPass::ProcessEntryPointCallTree(
-    ProcessFunction pfn, ir::Module* module) {
-  bool modified = false;
-  std::unordered_set<uint32_t> todo;
-  std::unordered_set<uint32_t> next;
-  std::unordered_set<uint32_t> done;
-  for (auto& e : module->entry_points())
-    todo.insert(e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx));
-  while (!todo.empty()) {
-    for (auto& fi : todo) {
-      if (done.find(fi) != done.end())
-        continue;
-      ir::Function* fn = id2function_[fi];
-      modified = pfn(fn) || modified;
-      done.insert(fi);
-      AddCalls(fn, &next);
-    }
-    todo.clear();
-    todo.insert(next.begin(), next.end());
-    next.clear();
-  }
-  return modified;
-}
-
 Pass::Status LocalAccessChainConvertPass::ProcessImpl() {
   // If non-32-bit integer type in module, terminate processing
   // TODO(): Handle non-32-bit integer constants in access chains
@@ -347,7 +315,7 @@ Pass::Status LocalAccessChainConvertPass::ProcessImpl() {
   FindNamedOrDecoratedIds();
   // Process all entry point functions.
 #if 1
-  bool modified = ProcessEntryPointCallTree(ConvertLocalAccessChains, module_);
+  bool modified = Pass::ProcessEntryPointCallTree(&spvtools::opt::LocalAccessChainConvertPass::ConvertLocalAccessChains, module_);
 #else
   bool modified = false;
   for (auto& e : module_->entry_points()) {

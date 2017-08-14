@@ -108,12 +108,6 @@ class LocalAccessChainConvertPass : public MemPass {
   // Return true if all extensions in this module are allowed by this pass.
   bool AllExtensionsSupported() const;
 
-  // Add to |next| all ids of functions called in |func|.
-  void AddCalls(ir::Function* func, std::unordered_set<uint32_t>* next);
-
-  // 
-  bool ProcessEntryPointCallTree(ProcessFunction pfn, ir::Module* module);
-
   // Save next available id into |module|.
   inline void FinalizeNextId(ir::Module* module) {
     module->SetIdBound(next_id_);
