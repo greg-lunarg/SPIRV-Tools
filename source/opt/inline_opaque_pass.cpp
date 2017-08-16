@@ -19,11 +19,9 @@
 namespace spvtools {
 namespace opt {
 
-namespace {
-
-const int kEntryPointFunctionIdInIdx = 1;
-
-} // anonymous namespace
+bool InlinePass::HasOpaqueParamOrReturn(const ir::Instruction* inst) {
+  // Check return type
+}
 
 bool InlineOpaquePass::InlineOpaque(ir::Function* func) {
   bool modified = false;
@@ -60,16 +58,12 @@ void InlineOpaquePass::Initialize(ir::Module* module) {
 };
 
 Pass::Status InlineOpaquePass::ProcessImpl() {
-  // Do exhaustive inlining on each entry point function in module
-  bool modified = false;
-  for (auto& e : module_->entry_points()) {
-    ir::Function* fn =
-        id2function_[e.GetSingleWordOperand(kEntryPointFunctionIdInIdx)];
-    modified = InlineOpaque(fn) || modified;
-  }
-
+  // Do opaque inlining on each function in entry point call tree
+  ProcessFunction pfn = [this](ir::Function* fp) {
+    return InlineOpaque(fp);
+  };
+  bool modified = ProcessEntryPointCallTree(pfn, module_);
   FinalizeNextId(module_);
-
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
