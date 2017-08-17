@@ -110,7 +110,7 @@ OpReturn
 OpFunctionEnd
 )";
 
-  const std::string remains =
+  const std::string post_defs =
       R"(%foo_struct_S_t_vf2_vf21_ = OpFunction %void None %20
 %s = OpFunctionParameter %_ptr_Function_S_t
 %35 = OpLabel
@@ -125,8 +125,8 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::InlineOpaquePass>(
-      predefs + before + remains,
-      predefs + after + remains, true, true);
+      predefs + before + post_defs,
+      predefs + after + post_defs, true, true);
 }
 
 TEST_F(InlineOpaqueTest, InlineOpaqueReturn) {
@@ -204,7 +204,7 @@ OpReturn
 OpFunctionEnd
 )";
 
-  const std::string remains =
+  const std::string post_defs =
       R"(%foo_ = OpFunction %20 None %21
 %30 = OpLabel
 %31 = OpVariable %_ptr_Function_20 Function
@@ -216,8 +216,197 @@ OpFunctionEnd
 )";
 
   SinglePassRunAndCheck<opt::InlineOpaquePass>(
-      predefs + before + remains,
-      predefs + after + remains, true, true);
+      predefs + before + post_defs,
+      predefs + after + post_defs, true, true);
+}
+
+TEST_F(InlineOpaqueTest, InlineInNonEntryPointFunction) {
+  // This demonstrates opaque inlining in a function that is not
+  // an entry point function (main2) but is in the call tree of an
+  // entry point function (main).
+  // TODO(greg-lunarg): Add HLSL code
+
+  const std::string predefs =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %outColor %texCoords
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %main2 "main2"
+OpName %S_t "S_t"
+OpMemberName %S_t 0 "v0"
+OpMemberName %S_t 1 "v1"
+OpMemberName %S_t 2 "smp"
+OpName %foo_struct_S_t_vf2_vf21_ "foo(struct-S_t-vf2-vf21;"
+OpName %s "s"
+OpName %outColor "outColor"
+OpName %sampler15 "sampler15"
+OpName %s0 "s0"
+OpName %texCoords "texCoords"
+OpName %param "param"
+OpDecorate %sampler15 DescriptorSet 0
+%void = OpTypeVoid
+%13 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v2float = OpTypeVector %float 2
+%v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%outColor = OpVariable %_ptr_Output_v4float Output
+%18 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%19 = OpTypeSampledImage %18
+%S_t = OpTypeStruct %v2float %v2float %19
+%_ptr_Function_S_t = OpTypePointer Function %S_t
+%21 = OpTypeFunction %void %_ptr_Function_S_t
+%_ptr_UniformConstant_19 = OpTypePointer UniformConstant %19
+%_ptr_Function_19 = OpTypePointer Function %19
+%sampler15 = OpVariable %_ptr_UniformConstant_19 UniformConstant
+%int = OpTypeInt 32 1
+%int_0 = OpConstant %int 0
+%int_2 = OpConstant %int 2
+%_ptr_Function_v2float = OpTypePointer Function %v2float
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%texCoords = OpVariable %_ptr_Input_v2float Input
+)";
+
+  const std::string before =
+      R"(%main2 = OpFunction %void None %13
+%29 = OpLabel
+%s0 = OpVariable %_ptr_Function_S_t Function 
+%param = OpVariable %_ptr_Function_S_t Function
+%30 = OpLoad %v2float %texCoords
+%31 = OpAccessChain %_ptr_Function_v2float %s0 %int_0
+OpStore %31 %30
+%32 = OpLoad %19 %sampler15
+%33 = OpAccessChain %_ptr_Function_19 %s0 %int_2
+OpStore %33 %32
+%34 = OpLoad %S_t %s0 
+OpStore %param %34
+%35 = OpFunctionCall %void %foo_struct_S_t_vf2_vf21_ %param
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string after =
+      R"(%main2 = OpFunction %void None %13
+%29 = OpLabel
+%s0 = OpVariable %_ptr_Function_S_t Function
+%param = OpVariable %_ptr_Function_S_t Function
+%30 = OpLoad %v2float %texCoords
+%31 = OpAccessChain %_ptr_Function_v2float %s0 %int_0
+OpStore %31 %30
+%32 = OpLoad %19 %sampler15
+%33 = OpAccessChain %_ptr_Function_19 %s0 %int_2
+OpStore %33 %32
+%34 = OpLoad %S_t %s0
+OpStore %param %34
+%44 = OpAccessChain %_ptr_Function_19 %param %int_2
+%45 = OpLoad %19 %44
+%46 = OpAccessChain %_ptr_Function_v2float %param %int_0
+%47 = OpLoad %v2float %46
+%48 = OpImageSampleImplicitLod %v4float %45 %47
+OpStore %outColor %48
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string post_defs =
+      R"(%main = OpFunction %void None %13
+%36 = OpLabel
+%37 = OpFunctionCall %void %main2
+OpReturn
+OpFunctionEnd
+%foo_struct_S_t_vf2_vf21_ = OpFunction %void None %21
+%s = OpFunctionParameter %_ptr_Function_S_t
+%38 = OpLabel
+%39 = OpAccessChain %_ptr_Function_19 %s %int_2
+%40 = OpLoad %19 %39
+%41 = OpAccessChain %_ptr_Function_v2float %s %int_0
+%42 = OpLoad %v2float %41
+%43 = OpImageSampleImplicitLod %v4float %40 %42
+OpStore %outColor %43
+OpReturn
+OpFunctionEnd
+)";
+
+  SinglePassRunAndCheck<opt::InlineOpaquePass>(
+      predefs + before + post_defs,
+      predefs + after + post_defs, true, true);
+}
+
+TEST_F(InlineOpaqueTest, NoInlineNoOpaque) {
+  // Function without opaque interface is not inlined.
+  // #version 140
+  // 
+  // in vec4 BaseColor;
+  // 
+  // float foo(vec4 bar)
+  // {
+  //     return bar.x + bar.y;
+  // }
+  // 
+  // void main()
+  // {
+  //     vec4 color = vec4(foo(BaseColor));
+  //     gl_FragColor = color;
+  // }
+
+  const std::string assembly =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %BaseColor %gl_FragColor
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 140
+OpName %main "main"
+OpName %foo_vf4_ "foo(vf4;"
+OpName %bar "bar"
+OpName %color "color"
+OpName %BaseColor "BaseColor"
+OpName %param "param"
+OpName %gl_FragColor "gl_FragColor"
+%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v4float = OpTypeVector %float 4
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%14 = OpTypeFunction %float %_ptr_Function_v4float
+%uint = OpTypeInt 32 0
+%uint_0 = OpConstant %uint 0
+%_ptr_Function_float = OpTypePointer Function %float
+%uint_1 = OpConstant %uint 1
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%BaseColor = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%gl_FragColor = OpVariable %_ptr_Output_v4float Output
+%main = OpFunction %void None %10
+%21 = OpLabel
+%color = OpVariable %_ptr_Function_v4float Function
+%param = OpVariable %_ptr_Function_v4float Function
+%22 = OpLoad %v4float %BaseColor
+OpStore %param %22
+%23 = OpFunctionCall %float %foo_vf4_ %param
+%24 = OpCompositeConstruct %v4float %23 %23 %23 %23
+OpStore %color %24
+%25 = OpLoad %v4float %color
+OpStore %gl_FragColor %25
+OpReturn
+OpFunctionEnd
+%foo_vf4_ = OpFunction %float None %14
+%bar = OpFunctionParameter %_ptr_Function_v4float
+%26 = OpLabel
+%27 = OpAccessChain %_ptr_Function_float %bar %uint_0
+%28 = OpLoad %float %27
+%29 = OpAccessChain %_ptr_Function_float %bar %uint_1
+%30 = OpLoad %float %29
+%31 = OpFAdd %float %28 %30
+OpReturnValue %31
+OpFunctionEnd
+)";
+
+  SinglePassRunAndCheck<opt::InlineOpaquePass>(
+      assembly, assembly, true, true);
 }
 
 }  // anonymous namespace

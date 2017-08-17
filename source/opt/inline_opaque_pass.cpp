@@ -71,7 +71,7 @@ bool InlineOpaquePass::InlineOpaque(ir::Function* func) {
   // Using block iterators here because of block erasures and insertions.
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     for (auto ii = bi->begin(); ii != bi->end();) {
-      if (IsInlinableFunctionCall(&*ii)) {
+      if (IsInlinableFunctionCall(&*ii) && HasOpaqueArgsOrReturn(&*ii)) {
         // Inline call.
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
         std::vector<std::unique_ptr<ir::Instruction>> newVars;
