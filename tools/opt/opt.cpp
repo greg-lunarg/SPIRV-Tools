@@ -76,6 +76,13 @@ Options:
                where the callee has opaque type parameters or return value.
                Currently will not inline calls to functions with early return
                in a loop.
+  --inline-entry-points-no-growth
+               Inline all function calls in entry point call tree functions
+               where inlining will not cause the code size to grow. This
+               is true when the callee only contains a couple non-memory
+               operations or when the callee is only called once in the module.
+               Currently will not inline calls to functions with early return
+               in a loop.
   --convert-local-access-chains
                Convert constant index access chain loads/stores into
                equivalent load/stores with inserts and extracts. Performed
@@ -182,6 +189,8 @@ int main(int argc, char** argv) {
       } else if (0 == strcmp(cur_arg, "--inline-entry-points-exhaustive")) {
         optimizer.RegisterPass(CreateInlineExhaustivePass());
       } else if (0 == strcmp(cur_arg, "--inline-entry-points-opaque")) {
+        optimizer.RegisterPass(CreateInlineOpaquePass());
+      } else if (0 == strcmp(cur_arg, "--inline-entry-points-no-growth")) {
         optimizer.RegisterPass(CreateInlineOpaquePass());
       } else if (0 == strcmp(cur_arg, "--convert-local-access-chains")) {
         optimizer.RegisterPass(CreateLocalAccessChainConvertPass());

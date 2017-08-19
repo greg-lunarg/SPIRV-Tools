@@ -146,7 +146,12 @@ Optimizer::PassToken CreateInlineOpaquePass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::InlineOpaquePass>());
 }
-  
+ 
+Optimizer::PassToken CreateInlineNoGrowthPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::InlineNoGrowthPass>());
+}
+ 
 Optimizer::PassToken CreateLocalAccessChainConvertPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::LocalAccessChainConvertPass>());
