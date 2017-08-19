@@ -28,6 +28,7 @@ add_library(SPIRV-Tools-opt
   freeze_spec_constant_value_pass.h
   inline_pass.h
   inline_exhaustive_pass.h
+  inline_no_growth_pass.h
   inline_opaque_pass.h
   insert_extract_elim.h
   instruction.h
@@ -67,6 +68,7 @@ add_library(SPIRV-Tools-opt
   freeze_spec_constant_value_pass.cpp
   inline_pass.cpp
   inline_exhaustive_pass.cpp
+  inline_no_growth_pass.cpp
   inline_opaque_pass.cpp
   insert_extract_elim.cpp
   instruction.cpp

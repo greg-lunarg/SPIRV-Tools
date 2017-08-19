@@ -232,7 +232,15 @@ Optimizer::PassToken CreateInlineExhaustivePass();
 // not legal in Vulkan. Functions that are not in the call tree of an entry
 // point are not changed.
 Optimizer::PassToken CreateInlineOpaquePass();
-
+ 
+// Creates a no-growth inline pass.
+// A no-growth inline pass inlines all function calls in all functions in an
+// entry point call tree where the inlining will not cause the total size of
+// the module to grow. This is true for callee functions with only a couple
+// non-memory instructions, or are only called once in the module. Functions
+// that are not in the call tree of an entry point are not changed.
+Optimizer::PassToken CreateInlineNoGrowthPass();
+ 
 // Creates a single-block local variable load/store elimination pass.
 // For every entry point function, do single block memory optimization of
 // function variables referenced only with non-access-chain loads and stores.
