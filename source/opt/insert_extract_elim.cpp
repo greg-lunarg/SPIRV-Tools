@@ -74,6 +74,22 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
             cid = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
             cinst = def_use_mgr_->GetDef(cid);
           }
+          // If search ended with CompositeConstruct and the extract has
+          // one index, return the appropriate component if it has the
+          // same type as the extract (not a special vector composite).
+          // TODO(greg-lunarg): Handle multiple-indices, ConstantComposites,
+          // ConstantNull, special vector composite, arbitrary nesting with
+          // CompositeInsert.
+          if (cinst->opcode() == SpvOpCompositeConstruct &&
+              (*ii).NumInOperands() == 2) {
+            uint32_t compIdx = (*ii).GetSingleWordInOperand(1);
+            if (compIdx < cinst->NumInOperands()) {
+              replId = cinst->GetSingleWordInOperand(compIdx);
+              ir::Instruction* replInst = def_use_mgr_->GetDef(replId);
+              if (replInst->type_id() != (*ii).type_id())
+                replId = 0;
+            }
+          }
           if (replId != 0) {
             const uint32_t extId = ii->result_id();
             (void)def_use_mgr_->ReplaceAllUsesWith(extId, replId);
