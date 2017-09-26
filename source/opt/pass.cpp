@@ -59,21 +59,9 @@ bool Pass::ProcessReachableCallTree(ProcessFunction& pfn, ir::Module* module) {
 
   // Add all exported functions since they can be reached from outside the
   // module.
-  for (auto& a : module->annotations()) {
-    // TODO: Handle group decorations as well.  Currently not generate by any
-    // front-end, but could be coming.
-    if (a.opcode() == SpvOp::SpvOpDecorate) {
-      if (a.GetSingleWordOperand(1) ==
-          SpvDecoration::SpvDecorationLinkageAttributes) {
-        uint32_t lastOperand = a.NumOperands() - 1;
-        if (a.GetSingleWordOperand(lastOperand) ==
-            SpvLinkageType::SpvLinkageTypeExport) {
-          uint32_t id = a.GetSingleWordOperand(0);
-          if (id2function.count(id) != 0) roots.push(id);
-        }
-      }
-    }
-  }
+  module->ForEachExportedId([&id2function,&roots,this](uint32_t eId) {
+    if (id2function.count(eId) != 0) roots.push(eId);
+  });
 
   return ProcessCallTreeFromRoots(pfn, id2function, &roots);
 }

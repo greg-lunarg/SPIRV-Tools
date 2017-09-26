@@ -74,6 +74,24 @@ void Module::AddGlobalValue(SpvOp opcode, uint32_t result_id,
   AddGlobalValue(std::move(newGlobal));
 }
 
+void Module::ForEachExportedId(const std::function<void(uint32_t)>& f) {
+  for (auto& a : annotations()) {
+    // TODO: Handle group decorations as well.  Currently not generate by any
+    // front-end, but could be coming.
+    if (a.opcode() == SpvOp::SpvOpDecorate) {
+      if (a.GetSingleWordOperand(1) ==
+          SpvDecoration::SpvDecorationLinkageAttributes) {
+        uint32_t lastOperand = a.NumOperands() - 1;
+        if (a.GetSingleWordOperand(lastOperand) ==
+            SpvLinkageType::SpvLinkageTypeExport) {
+          uint32_t id = a.GetSingleWordOperand(0);
+          f(id);
+        }
+      }
+    }
+  }
+}
+
 void Module::ForEachInst(const std::function<void(Instruction*)>& f,
                          bool run_on_debug_line_insts) {
 #define DELEGATE(i) i->ForEachInst(f, run_on_debug_line_insts)

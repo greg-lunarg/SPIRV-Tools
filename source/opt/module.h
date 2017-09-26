@@ -135,6 +135,9 @@ class Module {
   void ForEachInst(const std::function<void(const Instruction*)>& f,
                    bool run_on_debug_line_insts = false) const;
 
+  // Invokes function |f| on all exported ids in this module
+  void ForEachExportedId(const std::function<void(uint32_t)>& f);
+
   // Pushes the binary segments for this instruction into the back of *|binary|.
   // If |skip_nop| is true and this is a OpNop, do nothing.
   void ToBinary(std::vector<uint32_t>* binary, bool skip_nop) const;

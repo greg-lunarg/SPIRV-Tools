@@ -595,10 +595,10 @@ InlinePass::GetBlocksFunction InlinePass::StructuredSuccessorsFunction() {
   };
 }
 
-void InlinePass::CollectCallData(ir::Function* func) {
-  func->ForEachInst([this](ir::Instruction* inst){
+void InlinePass::ComputeCallData(ir::Function* func) {
+  const uint32_t callerFnId = func->result_id();
+  func->ForEachInst([callerFnId,this](ir::Instruction* inst){
     if (inst->opcode() != SpvOpFunctionCall) return;
-    const uint32_t callerFnId = result_id();
     const uint32_t calleeFnId =
         inst->GetSingleWordOperand(kSpvFunctionCallFunctionId);
     funcId2callCount_[callerFnId] = funcId2callCount_[callerFnId] + 1;
@@ -695,7 +695,7 @@ void InlinePass::InitializeInline(ir::Module* module) {
   no_return_in_loop_.clear();
   multi_return_funcs_.clear();
   funcId2callCount_.clear();
-  funcId2calleeId_.clear();
+  funcId2calleeIds_.clear();
 
   // Initialize function and block maps.
   for (auto& fn : *module_) {
@@ -704,12 +704,19 @@ void InlinePass::InitializeInline(ir::Module* module) {
       id2block_[blk.id()] = &blk;
     }
   }
-  // Collect call counts and callees
+
+  // Compute call counts and callees
   ProcessFunction pfn = [this](ir::Function* fp) {
-    CollectCallData(fp);
+    ComputeCallData(fp);
     return true;
   };
-  (void)ProcessEntryPointCallTree(pfn, module_);
+  (void)ProcessReachableCallTree(pfn, module_);
+  // Increment counts for all exported functions
+  module_->ForEachExportedId([this](uint32_t eId) {
+    if (id2function_.count(eId) == 0) return;
+    funcId2callCount_[eId] = funcId2callCount_[eId] + 1;
+  });
+
   // Compute inlinability
   for (auto& fn : *module_) {
     if (IsInlinableFunction(&fn))

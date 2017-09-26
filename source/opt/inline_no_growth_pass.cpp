@@ -35,7 +35,7 @@ bool InlineNoGrowthPass::InlineNoGrowth(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end();) {
       if (IsInlinableFunctionCall(&*ii) && IsNoGrowthCall(&*ii)) {
         // Save callee id for call count update
-        uint32_t callee_id = ii->GetSingleWordInOperand(0);
+        uint32_t calleeId = ii->GetSingleWordInOperand(0);
         // Inline call.
         std::vector<std::unique_ptr<ir::BasicBlock>> newBlocks;
         std::vector<std::unique_ptr<ir::Instruction>> newVars;
@@ -49,6 +49,8 @@ bool InlineNoGrowthPass::InlineNoGrowth(ir::Function* func) {
         bi = bi.InsertBefore(&newBlocks);
         // Insert new function variables.
         if (newVars.size() > 0) func->begin()->begin().InsertBefore(&newVars);
+        // Update call data
+        (void) calleeId;
         // Restart inlining at beginning of calling block.
         ii = bi->begin();
         modified = true;
