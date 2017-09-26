@@ -595,6 +595,17 @@ InlinePass::GetBlocksFunction InlinePass::StructuredSuccessorsFunction() {
   };
 }
 
+void InlinePass::CollectCallData(ir::Function* func) {
+  func->ForEachInst([this](ir::Instruction* inst){
+    if (inst->opcode() != SpvOpFunctionCall) return;
+    const uint32_t callerFnId = result_id();
+    const uint32_t calleeFnId =
+        inst->GetSingleWordOperand(kSpvFunctionCallFunctionId);
+    funcId2callCount_[callerFnId] = funcId2callCount_[callerFnId] + 1;
+    funcId2calleeIds_[callerFnId].insert(calleeFnId);
+  });
+}
+
 bool InlinePass::HasNoReturnInLoop(ir::Function* func) {
   // If control not structured, do not do loop/return analysis
   // TODO: Analyze returns in non-structured control flow
@@ -683,14 +694,24 @@ void InlinePass::InitializeInline(ir::Module* module) {
   inlinable_.clear();
   no_return_in_loop_.clear();
   multi_return_funcs_.clear();
+  funcId2callCount_.clear();
+  funcId2calleeId_.clear();
 
+  // Initialize function and block maps.
   for (auto& fn : *module_) {
-    // Initialize function and block maps.
     id2function_[fn.result_id()] = &fn;
     for (auto& blk : fn) {
       id2block_[blk.id()] = &blk;
     }
-    // Compute inlinability
+  }
+  // Collect call counts and callees
+  ProcessFunction pfn = [this](ir::Function* fp) {
+    CollectCallData(fp);
+    return true;
+  };
+  (void)ProcessEntryPointCallTree(pfn, module_);
+  // Compute inlinability
+  for (auto& fn : *module_) {
     if (IsInlinableFunction(&fn))
       inlinable_.insert(fn.result_id());
   }

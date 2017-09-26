@@ -201,6 +201,13 @@ class InlinePass : public Pass {
   std::unordered_map<const ir::BasicBlock*, std::vector<ir::BasicBlock*>>
       block2structured_succs_;
 
+  // Map from function id to the count of calls to that function in module
+  std::unordered_map<uint32_t, uint32_t> funcId2callCount_;
+
+  // Map from function id to vector of its callee ids
+  std::unordered_map<uint32_t, std::unordered_multiset<uint32_t>>
+      funcId2calleeIds_;
+
   // result id for OpConstantFalse
   uint32_t false_id_;
 
