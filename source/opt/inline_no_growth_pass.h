@@ -40,6 +40,21 @@ class InlineNoGrowthPass : public InlinePass {
   const char* name() const override { return "inline-no-growth"; }
 
  private:
+  // Map from function id to inlined size, defined as count of instructions
+  // that will likely not be eliminated by inlining or memory optimizations.
+  std::unordered_map<uint32_t, uint32_t> funcId2inlinedSize_;
+
+  // Map from function id to call size, defined as the number of stores to
+  // parameters plus the size of the call instruction.
+  std::unordered_map<uint32_t, uint32_t> funcId2callSize_;
+
+  // Compute funcId2callSize_ for all functions in module_.
+  void ComputeCallSize();
+
+  // Compute funcId2inlinedSize_ for all functions in module_. Depends on
+  // ComputeCallSize().
+  void ComputeInlinedSize();
+
   // Return true if inlining function call |callInst| will not cause
   // code size to grow.
   bool IsNoGrowthCall(const ir::Instruction* callInst);

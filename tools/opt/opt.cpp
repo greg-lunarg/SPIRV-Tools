@@ -191,7 +191,7 @@ int main(int argc, char** argv) {
       } else if (0 == strcmp(cur_arg, "--inline-entry-points-opaque")) {
         optimizer.RegisterPass(CreateInlineOpaquePass());
       } else if (0 == strcmp(cur_arg, "--inline-entry-points-no-growth")) {
-        optimizer.RegisterPass(CreateInlineOpaquePass());
+        optimizer.RegisterPass(CreateInlineNoGrowthPass());
       } else if (0 == strcmp(cur_arg, "--convert-local-access-chains")) {
         optimizer.RegisterPass(CreateLocalAccessChainConvertPass());
       } else if (0 == strcmp(cur_arg, "--eliminate-dead-code-aggressive")) {

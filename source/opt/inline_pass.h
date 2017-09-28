@@ -154,8 +154,11 @@ class InlinePass : public Pass {
   // Assumes ComputeStructuredSuccessors() has been called.
   GetBlocksFunction StructuredSuccessorsFunction();
 
-  // Populate funcId2callCount_ and funcId2calleeCount_ for |func|.
+  // Populate funcId2callCount_ and funcId2calleeIds_ for |func|.
   void ComputeCallData(ir::Function* func);
+
+  // Update funcId2callCount_ after inlining |calleeId|.
+  void UpdateCallDataAfterInlining(uint32_t calleeId);
 
   // Return true if |func| has multiple returns
   bool HasMultipleReturns(ir::Function* func);

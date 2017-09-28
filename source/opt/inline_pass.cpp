@@ -606,6 +606,18 @@ void InlinePass::ComputeCallData(ir::Function* func) {
   });
 }
 
+void InlinePass::UpdateCallDataAfterInlining(uint32_t inlineeId) {
+  // Decrement call count for inlinee
+  uint32_t callCnt = funcId2callCount_[inlineeId];
+  funcId2callCount_[inlineeId] = callCnt - 1;
+  // If callee only had one call, we are done
+  if (callCnt == 1) return;
+  // Increment call count for all functions called by inlinee
+  for (auto calleeId : funcId2calleeIds_[inlineeId]) {
+    funcId2callCount_[calleeId] = funcId2callCount_[calleeId] + 1;
+  }
+}
+
 bool InlinePass::HasNoReturnInLoop(ir::Function* func) {
   // If control not structured, do not do loop/return analysis
   // TODO: Analyze returns in non-structured control flow
