@@ -601,7 +601,7 @@ void InlinePass::ComputeCallData(ir::Function* func) {
     if (inst->opcode() != SpvOpFunctionCall) return;
     const uint32_t calleeFnId =
         inst->GetSingleWordOperand(kSpvFunctionCallFunctionId);
-    funcId2callCount_[callerFnId] = funcId2callCount_[callerFnId] + 1;
+    funcId2callCount_[calleeFnId] = funcId2callCount_[calleeFnId] + 1;
     funcId2calleeIds_[callerFnId].insert(calleeFnId);
   });
 }

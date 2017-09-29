@@ -26,7 +26,8 @@ namespace {
 void InlineNoGrowthPass::ComputeCallSize() {
   funcId2callSize_.clear();
   for (auto& fn : *module_) {
-    uint32_t icnt = 0;
+    // Size is call plus one store for every param
+    uint32_t icnt = 1;
     fn.ForEachParam([&icnt, this](const ir::Instruction* inst) {
       (void) inst;
       ++icnt;
@@ -82,8 +83,8 @@ bool InlineNoGrowthPass::IsNoGrowthCall(const ir::Instruction* callInst) {
   // Functions with only one call are no-growth because the original will
   // be DCE'd.
   if (funcId2callCount_[calleeId] == 1) return true;
-  // Functions whose inlined size is smaller than the call size are no-growth
-  return funcId2inlinedSize_[calleeId] < funcId2callSize_[calleeId];
+  // Functions whose inlined size is no larger than the call size are no-growth
+  return funcId2inlinedSize_[calleeId] <= funcId2callSize_[calleeId];
 }
 
 bool InlineNoGrowthPass::InlineNoGrowth(ir::Function* func) {
