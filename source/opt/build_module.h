@@ -31,12 +31,14 @@ std::unique_ptr<ir::Module> BuildModule(
     spv_target_env env, MessageConsumer consumer, const uint32_t* binary,
     size_t size);
 
+#ifndef SPIRV_OPT_ONLY
 // Builds and returns an ir::Module from the given SPIR-V assembly |text|.
 // The |text| will be encoded according to the given target |env|. Returns
 // nullptr if erors occur and sends the errors to |consumer|.
 std::unique_ptr<ir::Module> BuildModule(
     spv_target_env env, MessageConsumer consumer, const std::string& text,
     uint32_t assemble_options = SpirvTools::kDefaultAssembleOption);
+#endif
 
 }  // namespace spvtools
 

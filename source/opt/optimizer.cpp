@@ -102,6 +102,7 @@ Optimizer::PassToken CreateEliminateDeadFunctionsPass() {
 }
 
 
+#ifndef SPIRV_OPT_ONLY
 Optimizer::PassToken CreateSetSpecConstantDefaultValuePass(
     const std::unordered_map<uint32_t, std::string>& id_value_map) {
   return MakeUnique<Optimizer::PassToken::Impl>(
@@ -113,6 +114,7 @@ Optimizer::PassToken CreateSetSpecConstantDefaultValuePass(
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::SetSpecConstantDefaultValuePass>(id_value_map));
 }
+#endif
 
 Optimizer::PassToken CreateFlattenDecorationPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(

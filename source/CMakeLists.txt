@@ -188,6 +188,10 @@ add_custom_target(spirv-tools-build-version
    DEPENDS ${SPIRV_TOOLS_BUILD_VERSION_INC})
 set_property(TARGET spirv-tools-build-version PROPERTY FOLDER "SPIRV-Tools build")
 
+if(SPIRV_OPT_ONLY)
+  add_definitions(-DSPIRV_OPT_ONLY)
+endif(SPIRV_OPT_ONLY)
+
 add_subdirectory(comp)
 add_subdirectory(opt)
 
@@ -197,7 +201,6 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/util/bitutils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/util/bit_stream.h
   ${CMAKE_CURRENT_SOURCE_DIR}/util/hex_float.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/util/parse_number.h
   ${CMAKE_CURRENT_SOURCE_DIR}/util/string_utils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/assembly_grammar.h
   ${CMAKE_CURRENT_SOURCE_DIR}/binary.h
@@ -213,7 +216,6 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/name_mapper.h
   ${CMAKE_CURRENT_SOURCE_DIR}/opcode.h
   ${CMAKE_CURRENT_SOURCE_DIR}/operand.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/parsed_operand.h
   ${CMAKE_CURRENT_SOURCE_DIR}/print.h
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_constant.h
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_definition.h
@@ -221,17 +223,13 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_target_env.h
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_validator_options.h
   ${CMAKE_CURRENT_SOURCE_DIR}/table.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/text.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/text_handler.h
   ${CMAKE_CURRENT_SOURCE_DIR}/validate.h
 
   ${CMAKE_CURRENT_SOURCE_DIR}/util/bit_stream.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/util/parse_number.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/util/string_utils.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/assembly_grammar.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/binary.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/diagnostic.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/disassemble.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/enum_string_mapping.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/ext_inst.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/extensions.cpp
@@ -241,7 +239,6 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/name_mapper.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/opcode.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/operand.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/parsed_operand.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/print.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/software_version.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_endian.cpp
@@ -249,8 +246,6 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_target_env.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/spirv_validator_options.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/table.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/text.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/text_handler.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/validate.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/validate_arithmetics.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/validate_bitwise.cpp
@@ -269,6 +264,19 @@ set(SPIRV_SOURCES
   ${CMAKE_CURRENT_SOURCE_DIR}/val/function.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/val/instruction.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/val/validation_state.cpp)
+
+if(NOT SPIRV_OPT_ONLY)
+  set(SPIRV_SOURCES ${SPIRV_SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/util/parse_number.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/parsed_operand.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/util/parse_number.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/parsed_operand.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/text.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/text_handler.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/text.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/text_handler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/disassemble.cpp)
+endif(NOT SPIRV_OPT_ONLY)
 
 # The software_version.cpp file includes build-version.inc.
 # Rebuild the software_version.cpp object file if it is older than

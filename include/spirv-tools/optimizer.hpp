@@ -108,6 +108,7 @@ Optimizer::PassToken CreateStripDebugInfoPass();
 // are not needed because they will never be called.
 Optimizer::PassToken CreateEliminateDeadFunctionsPass();
 
+#ifndef SPIRV_OPT_ONLY
 // Creates a set-spec-constant-default-value pass from a mapping from spec-ids
 // to the default values in the form of string.
 // A set-spec-constant-default-value pass sets the default values for the
@@ -123,6 +124,7 @@ Optimizer::PassToken CreateSetSpecConstantDefaultValuePass(
 // OpSpecConstant{|True|False} instructions).
 Optimizer::PassToken CreateSetSpecConstantDefaultValuePass(
     const std::unordered_map<uint32_t, std::vector<uint32_t>>& id_value_map);
+#endif
 
 // Creates a flatten-decoration pass.
 // A flatten-decoration pass replaces grouped decorations with equivalent

@@ -62,6 +62,7 @@ std::unique_ptr<ir::Module> BuildModule(spv_target_env env,
   return status == SPV_SUCCESS ? std::move(module) : nullptr;
 }
 
+#ifndef SPIRV_OPT_ONLY
 std::unique_ptr<ir::Module> BuildModule(spv_target_env env,
                                         MessageConsumer consumer,
                                         const std::string& text,
@@ -72,5 +73,6 @@ std::unique_ptr<ir::Module> BuildModule(spv_target_env env,
   if (!t.Assemble(text, &binary, assemble_options)) return nullptr;
   return BuildModule(env, consumer, binary.data(), binary.size());
 }
+#endif
 
 }  // namespace spvtools

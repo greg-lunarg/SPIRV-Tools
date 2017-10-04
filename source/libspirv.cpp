@@ -38,6 +38,7 @@ void SpirvTools::SetMessageConsumer(MessageConsumer consumer) {
   SetContextMessageConsumer(impl_->context, std::move(consumer));
 }
 
+#ifndef SPIRV_OPT_ONLY
 bool SpirvTools::Assemble(const std::string& text,
                           std::vector<uint32_t>* binary,
                           uint32_t options) const {
@@ -73,6 +74,7 @@ bool SpirvTools::Disassemble(const uint32_t* binary, const size_t binary_size,
   spvTextDestroy(spvtext);
   return status == SPV_SUCCESS;
 }
+#endif
 
 bool SpirvTools::Validate(const std::vector<uint32_t>& binary) const {
   return Validate(binary.data(), binary.size());

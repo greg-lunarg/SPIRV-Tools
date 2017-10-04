@@ -86,6 +86,7 @@ class SpirvTools {
   // invoked once for each message communicated from the library.
   void SetMessageConsumer(MessageConsumer consumer);
 
+#ifndef SPIRV_OPT_ONLY
   // Assembles the given assembly |text| and writes the result to |binary|.
   // Returns true on successful assembling. |binary| will be kept untouched if
   // assembling is unsuccessful.
@@ -106,6 +107,7 @@ class SpirvTools {
   bool Disassemble(const uint32_t* binary, size_t binary_size,
                    std::string* text,
                    uint32_t options = kDefaultDisassembleOption) const;
+#endif
 
   // Validates the given SPIR-V |binary|. Returns true if no issues are found.
   // Otherwise, returns false and communicates issues via the message consumer

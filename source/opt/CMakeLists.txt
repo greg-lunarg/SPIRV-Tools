@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-add_library(SPIRV-Tools-opt
+
+set(SPIRV_OPT_SOURCES 
   aggressive_dead_code_elim_pass.h
   basic_block.h
   block_merge_pass.h
@@ -45,7 +46,6 @@ add_library(SPIRV-Tools-opt
   passes.h
   pass_manager.h
   eliminate_dead_functions_pass.h
-  set_spec_constant_default_value_pass.h
   strength_reduction_pass.h
   strip_debug_info_pass.h
   types.h
@@ -77,7 +77,6 @@ add_library(SPIRV-Tools-opt
   local_ssa_elim_pass.cpp
   module.cpp
   eliminate_dead_functions_pass.cpp
-  set_spec_constant_default_value_pass.cpp
   optimizer.cpp
   mem_pass.cpp
   pass.cpp
@@ -87,6 +86,17 @@ add_library(SPIRV-Tools-opt
   types.cpp
   type_manager.cpp
   unify_const_pass.cpp
+)
+
+if(NOT SPIRV_OPT_ONLY)
+  set(SPIRV_OPT_SOURCES ${SPIRV_OPT_SOURCES}
+    set_spec_constant_default_value_pass.h
+    set_spec_constant_default_value_pass.cpp
+  )
+endif(NOT SPIRV_OPT_ONLY)
+
+add_library(SPIRV-Tools-opt
+  ${SPIRV_OPT_SOURCES}
 )
 
 spvtools_default_compile_options(SPIRV-Tools-opt)

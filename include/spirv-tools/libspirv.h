@@ -420,6 +420,7 @@ void spvValidatorOptionsSetUniversalLimit(spv_validator_options options,
                                           spv_validator_limit limit_type,
                                           uint32_t limit);
 
+#ifndef SPIRV_OPT_ONLY
 // Encodes the given SPIR-V assembly text to its binary representation. The
 // length parameter specifies the number of bytes for text. Encoded binary will
 // be stored into *binary. Any error will be written into *diagnostic if
@@ -435,11 +436,13 @@ spv_result_t spvTextToBinary(const spv_const_context context, const char* text,
 spv_result_t spvTextToBinaryWithOptions(
     const spv_const_context context, const char* text, const size_t length,
     const uint32_t options, spv_binary* binary, spv_diagnostic* diagnostic);
+#endif
 
 // Frees an allocated text stream. This is a no-op if the text parameter
 // is a null pointer.
 void spvTextDestroy(spv_text text);
 
+#ifndef SPIRV_OPT_ONLY
 // Decodes the given SPIR-V binary representation to its assembly text. The
 // word_count parameter specifies the number of words for binary. The options
 // parameter is a bit field of spv_binary_to_text_options_t. Decoded text will
@@ -449,6 +452,7 @@ spv_result_t spvBinaryToText(const spv_const_context context,
                              const uint32_t* binary, const size_t word_count,
                              const uint32_t options, spv_text* text,
                              spv_diagnostic* diagnostic);
+#endif
 
 // Frees a binary stream from memory. This is a no-op if binary is a null
 // pointer.
