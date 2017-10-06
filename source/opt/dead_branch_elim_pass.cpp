@@ -204,6 +204,8 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
         &condVal))
       continue;
 
+    modified = true;
+
     // Replace conditional branch with unconditional branch
     const uint32_t trueLabId =
         br->GetSingleWordInOperand(kBranchCondTrueLabIdInIdx);
@@ -320,8 +322,6 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       (void)def_use_mgr_->ReplaceAllUsesWith(phiId, replId);
       def_use_mgr_->KillInst(&*pii);
     }
-
-    modified = true;
   }
 
   // Erase dead blocks
