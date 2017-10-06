@@ -92,29 +92,48 @@ void DeadBranchElimPass::ComputeStructuredOrder(
       ignore_edge);
 }
 
-void DeadBranchElimPass::GetConstCondition(
-    uint32_t condId, bool* condVal, bool* condIsConst) {
+bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
+  bool condIsConst;
   ir::Instruction* cInst = def_use_mgr_->GetDef(condId);
   switch (cInst->opcode()) {
     case SpvOpConstantFalse: {
       *condVal = false;
-      *condIsConst = true;
+      condIsConst = true;
     } break;
     case SpvOpConstantTrue: {
       *condVal = true;
-      *condIsConst = true;
+      condIsConst = true;
     } break;
     case SpvOpLogicalNot: {
       bool negVal;
-      (void)GetConstCondition(cInst->GetSingleWordInOperand(0),
-          &negVal, condIsConst);
-      if (*condIsConst)
+      condIsConst = GetConstCondition(cInst->GetSingleWordInOperand(0),
+          &negVal);
+      if (condIsConst)
         *condVal = !negVal;
     } break;
     default: {
-      *condIsConst = false;
+      condIsConst = false;
     } break;
   }
+  return condIsConst;
+}
+
+bool DeadBranchElimPass::GetConstSelector(uint32_t selId, uint32_t* selVal) {
+  ir::Instruction* sInst = def_use_mgr_->GetDef(selId);
+  uint32_t typeId = sInst->type_id();
+  ir::Instruction* typeInst = def_use_mgr_->GetDef(typeId);
+  // TODO(greg-lunarg): Support non-32 bit ints
+  if (typeInst->GetSingleWordInOperand(0) != 32)
+    return false;
+  if (sInst->opcode() == SpvOpConstant) {
+    *selVal = sInst->GetSingleWordInOperand(0);
+    return true;
+  }
+  else if (sInst->opcode() == SpvOpConstantNull) {
+    *selVal = 0;
+    return true;
+  }
+  return false;
 }
 
 void DeadBranchElimPass::AddBranch(uint32_t labelId, ir::BasicBlock* bp) {
@@ -153,25 +172,21 @@ void DeadBranchElimPass::KillAllInsts(ir::BasicBlock* bp) {
   });
 }
 
-bool DeadBranchElimPass::GetConstConditionalSelectionBranch(ir::BasicBlock* bp,
+bool DeadBranchElimPass::GetSelectionBranch(ir::BasicBlock* bp,
     ir::Instruction** branchInst, ir::Instruction** mergeInst,
-    uint32_t *condId, bool *condVal) {
+    uint32_t *condId) {
   auto ii = bp->end();
   --ii;
   *branchInst = &*ii;
-  if ((*branchInst)->opcode() != SpvOpBranchConditional)
-    return false;
   if (ii == bp->begin())
     return false;
   --ii;
   *mergeInst = &*ii;
   if ((*mergeInst)->opcode() != SpvOpSelectionMerge)
     return false;
-  bool condIsConst;
   *condId = (*branchInst)->GetSingleWordInOperand(
       kBranchCondConditionalIdInIdx);
-  (void) GetConstCondition(*condId, condVal, &condIsConst);
-  return condIsConst;
+  return true;
 }
 
 bool DeadBranchElimPass::HasNonPhiRef(uint32_t labelId) {
@@ -194,29 +209,58 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     // Skip blocks that are already in the elimination set
     if (elimBlocks.find(*bi) != elimBlocks.end())
       continue;
-    // Skip blocks that don't have constant conditional branch preceded
+    // Skip blocks that don't have conditional branch preceded
     // by OpSelectionMerge
     ir::Instruction* br;
     ir::Instruction* mergeInst;
     uint32_t condId;
-    bool condVal;
-    if (!GetConstConditionalSelectionBranch(*bi, &br, &mergeInst, &condId,
-        &condVal))
+    if (!GetSelectionBranch(*bi, &br, &mergeInst, &condId))
       continue;
 
-    modified = true;
+    // If constant condition/selector, replace conditional branch/switch
+    // with unconditional branch and delete merge
+    uint32_t liveLabId;
+    if (br->opcode() == SpvOpBranchConditional) {
+      bool condVal;
+      if (!GetConstCondition(condId, &condVal))
+        continue;
+      liveLabId = (condVal == true) ? 
+          br->GetSingleWordInOperand(kBranchCondTrueLabIdInIdx) :
+          br->GetSingleWordInOperand(kBranchCondFalseLabIdInIdx);
+    }
+    else {
+      // Search switch operands for selector value, set liveLabId to
+      // corresponding label, use default if not found
+      uint32_t selVal;
+      if (!GetConstSelector(condId, &selVal))
+        continue;
+      uint32_t icnt = 0;
+      uint32_t caseVal;
+      br->ForEachInId([&icnt,&caseVal,&selVal,&liveLabId](uint32_t* idp) {
+        if (icnt == 1) {
+          // Start with default label
+          liveLabId = *idp;
+        }
+        else if (icnt > 1) {
+          if (icnt % 2 == 0) {
+            caseVal = *idp;
+          }
+          else {
+            if (caseVal == selVal)
+              liveLabId = *idp;
+          }
+        }
+        ++icnt;
+      });
+    }
 
-    // Replace conditional branch with unconditional branch
-    const uint32_t trueLabId =
-        br->GetSingleWordInOperand(kBranchCondTrueLabIdInIdx);
-    const uint32_t falseLabId =
-        br->GetSingleWordInOperand(kBranchCondFalseLabIdInIdx);
     const uint32_t mergeLabId =
         mergeInst->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
-    const uint32_t liveLabId = condVal == true ? trueLabId : falseLabId;
     AddBranch(liveLabId, *bi);
     def_use_mgr_->KillInst(br);
     def_use_mgr_->KillInst(mergeInst);
+
+    modified = true;
 
     // Initialize live block set to the live label
     std::unordered_set<uint32_t> liveLabIds;

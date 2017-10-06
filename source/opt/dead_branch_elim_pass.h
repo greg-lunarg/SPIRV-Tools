@@ -69,9 +69,13 @@ class DeadBranchElimPass : public MemPass {
   void ComputeStructuredOrder(
     ir::Function* func, std::list<ir::BasicBlock*>* order);
 
-  // If |condId| is boolean constant, return value in |condVal| and
-  // |condIsConst| as true, otherwise return |condIsConst| as false.
-  void GetConstCondition(uint32_t condId, bool* condVal, bool* condIsConst);
+  // If |condId| is boolean constant, return conditional value in |condVal| and
+  // return true, otherwise return false.
+  bool GetConstCondition(uint32_t condId, bool* condVal);
+
+  // If |condId| is an integer constant, return selector value in |sVal| and
+  // return true, otherwise return false.
+  bool GetConstSelector(uint32_t condId, uint32_t* sVal);
 
   // Add branch to |labelId| to end of block |bp|.
   void AddBranch(uint32_t labelId, ir::BasicBlock* bp);
@@ -87,12 +91,11 @@ class DeadBranchElimPass : public MemPass {
   // Kill all instructions in block |bp|.
   void KillAllInsts(ir::BasicBlock* bp);
 
-  // If block |bp| contains constant conditional branch preceeded by an
+  // If block |bp| contains conditional branch or switch preceeded by an
   // OpSelctionMerge, return true and return branch and merge instructions
-  // in |branchInst| and |mergeInst| and the boolean constant in |condVal|. 
-  bool GetConstConditionalSelectionBranch(ir::BasicBlock* bp,
-    ir::Instruction** branchInst, ir::Instruction** mergeInst,
-    uint32_t *condId, bool *condVal);
+  // in |branchInst| and |mergeInst| and the conditional id in |condId|. 
+  bool GetSelectionBranch(ir::BasicBlock* bp, ir::Instruction** branchInst,
+    ir::Instruction** mergeInst, uint32_t *condId);
 
   // Return true if |labelId| has any non-phi references
   bool HasNonPhiRef(uint32_t labelId);
