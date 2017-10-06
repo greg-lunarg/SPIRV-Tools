@@ -679,14 +679,9 @@ OpFunctionEnd
 %v = OpVariable %_ptr_Function_v4float Function
 %17 = OpLoad %v4float %BaseColor
 OpStore %v %17
-OpSelectionMerge %18 None
-OpBranchConditional %true %19 %18
+OpBranch %19
 %19 = OpLabel
 OpKill
-%18 = OpLabel
-%23 = OpLoad %v4float %v
-OpStore %gl_FragColor %23
-OpReturn
 OpFunctionEnd
 )";
 
@@ -746,13 +741,9 @@ OpFunctionEnd
   const std::string after =
       R"(%foo_ = OpFunction %v4float None %9
 %19 = OpLabel
-OpSelectionMerge %20 None
-OpBranchConditional %true %21 %20
+OpBranch %21
 %21 = OpLabel
 OpReturnValue %13
-%20 = OpLabel
-%23 = OpUndef %v4float
-OpReturnValue %23
 OpFunctionEnd
 )";
 
