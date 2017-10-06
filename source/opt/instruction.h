@@ -166,6 +166,11 @@ class Instruction {
   inline void ForEachInst(const std::function<void(const Instruction*)>& f,
                           bool run_on_debug_line_insts = false) const;
 
+  // Runs the given function |f| on all "in" operands
+  inline void ForEachInOpnd(const std::function<void(uint32_t*)>& f);
+  inline void ForEachInOpnd(const std::function<void(const uint32_t*)>& f)
+      const;
+
   // Runs the given function |f| on all "in" operand ids
   inline void ForEachInId(const std::function<void(uint32_t*)>& f);
   inline void ForEachInId(const std::function<void(const uint32_t*)>& f) const;
@@ -268,6 +273,34 @@ inline void Instruction::ForEachInId(
         break;
       default:
         if (spvIsIdType(opnd.type)) f(&opnd.words[0]);
+        break;
+    }
+  }
+}
+
+inline void Instruction::ForEachInOpnd(
+      const std::function<void(uint32_t*)>& f) {
+  for (auto& opnd : operands_) {
+    switch (opnd.type) {
+      case SPV_OPERAND_TYPE_RESULT_ID:
+      case SPV_OPERAND_TYPE_TYPE_ID:
+        break;
+      default:
+        f(&opnd.words[0]);
+        break;
+    }
+  }
+}
+
+inline void Instruction::ForEachInOpnd(
+    const std::function<void(const uint32_t*)>& f) const {
+  for (const auto& opnd : operands_) {
+    switch (opnd.type) {
+      case SPV_OPERAND_TYPE_RESULT_ID:
+      case SPV_OPERAND_TYPE_TYPE_ID:
+        break;
+      default:
+        f(&opnd.words[0]);
         break;
     }
   }

@@ -236,7 +236,8 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
         continue;
       uint32_t icnt = 0;
       uint32_t caseVal;
-      br->ForEachInId([&icnt,&caseVal,&selVal,&liveLabId](uint32_t* idp) {
+      br->ForEachInOpnd(
+            [&icnt,&caseVal,&selVal,&liveLabId](const uint32_t* idp) {
         if (icnt == 1) {
           // Start with default label
           liveLabId = *idp;
