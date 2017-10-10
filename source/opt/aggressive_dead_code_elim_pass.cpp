@@ -30,7 +30,8 @@ const uint32_t kExtInstInstructionInIndx = 1;
 
 }  // namespace anonymous
 
-bool AggressiveDCEPass::IsLocalVar(uint32_t varId) {
+bool AggressiveDCEPass::IsVarOfStorage(uint32_t varId, 
+      uint32_t storageClass) {
   const ir::Instruction* varInst = def_use_mgr_->GetDef(varId);
   const SpvOp op = varInst->opcode();
   if (op != SpvOpVariable) 
@@ -40,7 +41,40 @@ bool AggressiveDCEPass::IsLocalVar(uint32_t varId) {
   if (varTypeInst->opcode() != SpvOpTypePointer)
     return false;
   return varTypeInst->GetSingleWordInOperand(kTypePointerStorageClassInIdx) ==
-      SpvStorageClassFunction;
+      storageClass;
+}
+
+bool AggressiveDCEPass::HasNoLoads(uint32_t ptrId) {
+  const analysis::UseList* uses = def_use_mgr_->GetUses(ptrId);
+  if (uses == nullptr)
+    return true;
+  for (const auto u : *uses) {
+    const SpvOp op = u.inst->opcode();
+    switch (op) {
+      case SpvOpName:
+      case SpvOpDecorate:
+      case SpvOpDecorateId:
+      case SpvOpGroupDecorate:
+      case SpvOpStore:
+        break;
+      case SpvOpAccessChain:
+      case SpvOpInBoundsAccessChain:
+      case SpvOpCopyObject: 
+        if (!HasNoLoads(u.inst->result_id()))
+          return false;
+        break;
+      default:
+        // If default, assume it loads eg load, function call
+        return false;
+    }
+  }
+  return true;
+}
+
+bool AggressiveDCEPass::IsUnusedPrivateVar(uint32_t varId) {
+   if (!IsVarOfStorage(varId, SpvStorageClassPrivate))
+     return false;
+   return HasNoLoads(varId);
 }
 
 void AggressiveDCEPass::AddStores(uint32_t ptrId) {
@@ -105,7 +139,7 @@ bool AggressiveDCEPass::KillInstIfTargetDead(ir::Instruction* inst) {
 
 void AggressiveDCEPass::ProcessLoad(uint32_t varId) {
   // Only process locals
-  if (!IsLocalVar(varId))
+  if (!IsVarOfStorage(varId, SpvStorageClassFunction))
     return;
   // Return if already processed
   if (live_local_vars_.find(varId) != live_local_vars_.end()) 
@@ -128,8 +162,10 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
         case SpvOpStore: {
           uint32_t varId;
           (void) GetPtr(&inst, &varId);
-          // non-function-scope stores
-          if (!IsLocalVar(varId)) {
+          // Mark stores as live if their variable is not function scope
+          // and is not unused private scope
+          if (!IsVarOfStorage(varId, SpvStorageClassFunction) &&
+              !IsUnusedPrivateVar(varId)) {
             worklist_.push(&inst);
           }
         } break;

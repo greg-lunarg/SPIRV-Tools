@@ -46,13 +46,19 @@ class AggressiveDCEPass : public MemPass {
   Status Process(ir::Module*) override;
 
  private:
+  // Return true if |varId| is variable of |storageClass|.
+  bool IsVarOfStorage(uint32_t varId, uint32_t storageClass);
+
+  // Return true if |ptrId| has no loads in module_
+  bool HasNoLoads(uint32_t ptrId);
+
+  // Return true if |varId| is variable of private storage class and has no
+  // loads in module.
+  bool IsUnusedPrivateVar(uint32_t varId);
+
   // Add all store instruction which use |ptrId|, directly or indirectly,
   // to the live instruction worklist.
   void AddStores(uint32_t ptrId);
-
-  // Return true if object with |varId| is function scope variable or
-  // function parameter with pointer type.
-  bool IsLocalVar(uint32_t varId);
 
   // Initialize combinator data structures
   void InitCombinatorSets();
