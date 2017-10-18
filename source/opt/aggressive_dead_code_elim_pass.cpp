@@ -252,6 +252,7 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   func_is_entry_point_ = false;
   private_stores_.clear();
   for (auto& blk : *func) {
+    bool prev_selection_merge = false;
     for (auto& inst : blk) {
       uint32_t op = inst.opcode();
       switch (op) {
@@ -277,13 +278,15 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
           // branches live yet. Those will be marked live when an instruction
           // in their construct is marked live.
           // TODO(greg-lunarg): function calls live only if write to non-local
-          if (!IsCombinator(op) && op != SpvOpBranchConditional)
+          if (!IsCombinator(op) &&
+             (op != SpvOpBranchConditional || !prev_selection_merge))
             worklist_.push(&inst);
           // Remember function calls
           if (op == SpvOpFunctionCall)
             call_in_func_ = true;
         } break;
       }
+      prev_selection_merge = (op == SpvOpSelectionMerge);
     }
   }
   // See if current function is an entry point
@@ -378,7 +381,8 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
       // If dead instruction is structured conditional branch, also
       // kill selection merge and add unconditional branch to merge block.
       if (ii->opcode() == SpvOpBranchConditional) {
-        auto mi = --ii;
+        auto mi = ii;
+        --mi;
         mergeBlockId = 
             mi->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
         def_use_mgr_->KillInst(&*mi);
