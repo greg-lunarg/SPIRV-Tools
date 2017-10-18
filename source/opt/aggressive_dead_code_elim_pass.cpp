@@ -20,6 +20,8 @@
 #include "iterator.h"
 #include "spirv/1.0/GLSL.std.450.h"
 
+#include <stack>
+
 namespace spvtools {
 namespace opt {
 
@@ -202,16 +204,16 @@ bool AggressiveDCEPass::IsStructuredIfHeader(ir::BasicBlock* bp,
 void AggressiveDCEPass::ComputeBlock2BranchMap(
       std::list<ir::BasicBlock*>& structuredOrder) {
   block2branch_.clear();
-  std::queue<ir::Instruction*> currentBranchInst;
-  std::queue<uint32_t> currentMergeBlockId;
+  std::stack<ir::Instruction*> currentBranchInst;
+  std::stack<uint32_t> currentMergeBlockId;
   currentBranchInst.push(nullptr);
   currentMergeBlockId.push(0);
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
-    if ((*bi)->id() == currentMergeBlockId.front()) {
+    if ((*bi)->id() == currentMergeBlockId.top()) {
       currentMergeBlockId.pop();
       currentBranchInst.pop();
     }
-    block2branch_[*bi] = currentBranchInst.front();
+    block2branch_[*bi] = currentBranchInst.top();
     ir::Instruction* branchInst;
     uint32_t mergeBlockId;
     if (IsStructuredIfHeader(*bi, &branchInst, &mergeBlockId)) {
