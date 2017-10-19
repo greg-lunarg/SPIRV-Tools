@@ -73,8 +73,8 @@ void AggressiveDCEPass::AddStores(uint32_t ptrId) {
       // If default, assume it stores eg frexp, modf, function call
       case SpvOpStore:
       default: {
-        if (live_insts_.find(u.inst) == live_insts_.end())
-          worklist_.push(u.inst);
+        if (!IsLive(u.inst))
+          AddToWorklist(u.inst);
       } break;
     }
   }
@@ -253,42 +253,65 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   call_in_func_ = false;
   func_is_entry_point_ = false;
   private_stores_.clear();
-  for (auto& blk : *func) {
-    bool prev_selection_merge = false;
-    for (auto& inst : blk) {
-      uint32_t op = inst.opcode();
+  std::stack<bool> skip_control_flow;
+  std::stack<uint32_t> currentMergeBlockId;
+  skip_control_flow.push(false);
+  currentMergeBlockId.push(false);
+  for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    if ((*bi)->id() == currentMergeBlockId.top()) {
+      skip_control_flow.pop();
+      currentMergeBlockId.pop();
+    }
+    for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
+      SpvOp op = ii->opcode();
       switch (op) {
         case SpvOpStore: {
           uint32_t varId;
-          (void) GetPtr(&inst, &varId);
+          (void) GetPtr(&*ii, &varId);
           // Mark stores as live if their variable is not function scope
           // and is not private scope. Remember private stores for possible
           // later inclusion
           if (IsVarOfStorage(varId, SpvStorageClassPrivate))
-            private_stores_.push_back(&inst);
+            private_stores_.push_back(&*ii);
           else if (!IsVarOfStorage(varId, SpvStorageClassFunction))
-            worklist_.push(&inst);
+            AddToWorklist(&*ii);
         } break;
         case SpvOpExtInst: {
           // eg. GLSL frexp, modf
-          if (!IsCombinatorExt(&inst))
-            worklist_.push(&inst);
+          if (!IsCombinatorExt(&*ii))
+            AddToWorklist(&*ii);
+        } break;
+        case SpvOpLoopMerge: {
+          skip_control_flow.push(false);
+          currentMergeBlockId.push(
+              ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx));
+          AddToWorklist(&*ii);
+        } break;
+        case SpvOpSelectionMerge: {
+          auto bri = ii;
+          ++bri;
+          bool is_structured_if = bri->opcode() == SpvOpBranchConditional;
+          skip_control_flow.push(is_structured_if);
+          currentMergeBlockId.push(
+              ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx));
+          if (!is_structured_if)
+            AddToWorklist(&*ii);
+        } break;
+        case SpvOpBranch:
+        case SpvOpBranchConditional: {
+          if (!skip_control_flow.top())
+            AddToWorklist(&*ii);
         } break;
         default: {
-          // In general, control flow, function call, atomics, function param,
-          // function return are live. BUT don't mark structured conditional
-          // branches live yet. Those will be marked live when an instruction
-          // in their construct is marked live.
+          // Function calls, atomics, function params, function returns, etc.
           // TODO(greg-lunarg): function calls live only if write to non-local
-          if (!IsCombinator(op) &&
-             (op != SpvOpBranchConditional || !prev_selection_merge))
-            worklist_.push(&inst);
+          if (!IsCombinator(op))
+            AddToWorklist(&*ii);
           // Remember function calls
           if (op == SpvOpFunctionCall)
             call_in_func_ = true;
         } break;
       }
-      prev_selection_merge = (op == SpvOpSelectionMerge);
     }
   }
   // See if current function is an entry point
@@ -305,30 +328,28 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   // If privates are not like local, add their stores to worklist
   if (!private_like_local_)
     for (auto& ps : private_stores_)
-      worklist_.push(ps);
+      AddToWorklist(ps);
   // Add OpGroupDecorates to worklist because they are a pain to remove
   // ids from.
   // TODO(greg-lunarg): Handle dead ids in OpGroupDecorate
   for (auto& ai : module_->annotations()) {
     if (ai.opcode() == SpvOpGroupDecorate)
-      worklist_.push(&ai);
+      AddToWorklist(&ai);
   }
   // Perform closure on live instruction set. 
   while (!worklist_.empty()) {
     ir::Instruction* liveInst = worklist_.front();
-    live_insts_.insert(liveInst);
     // Add all operand instructions if not already live
     liveInst->ForEachInId([this](const uint32_t* iid) {
       ir::Instruction* inInst = def_use_mgr_->GetDef(*iid);
-      if (live_insts_.find(inInst) == live_insts_.end())
-        worklist_.push(inInst);
+      if (!IsLive(inInst))
+        AddToWorklist(inInst);
     });
     // If in a structured if construct, add the controlling conditional branch.
     ir::BasicBlock* blk = inst2block_[liveInst];
     ir::Instruction* branchInst = block2branch_[blk];
-    if (branchInst != nullptr && 
-        live_insts_.find(branchInst) == live_insts_.end())
-      worklist_.push(branchInst);
+    if (branchInst != nullptr && !IsLive(branchInst))
+      AddToWorklist(branchInst);
     // If local load, add all variable's stores if variable not already live
     if (liveInst->opcode() == SpvOpLoad) {
       uint32_t varId;
@@ -351,12 +372,27 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     }
     worklist_.pop();
   }
-  // Mark all non-live instructions dead
-  for (auto& blk : *func) {
-    for (auto& inst : blk) {
-      if (live_insts_.find(&inst) != live_insts_.end())
+  // Mark all non-live instructions dead, except non-if branches and merges
+  // with live branch
+  for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
+      if (IsLive(&*ii))
         continue;
-      dead_insts_.insert(&inst);
+      if (ii->opcode() == SpvOpSelectionMerge) {
+        auto bri = ii;
+        ++bri;
+        if (IsLive(&*bri))
+          continue;
+      }
+      if (IsBranch(ii->opcode())) {
+        if (ii == (*bi)->begin())
+          continue;
+        auto mi = ii;
+        --mi;
+        if (mi->opcode() != SpvOpSelectionMerge)
+          continue;
+      }
+      dead_insts_.insert(&*ii);
     }
   }
   // Remove debug and annotation statements referencing dead instructions.
@@ -380,14 +416,11 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     for (auto ii = blk.begin(); ii != blk.end(); ++ii) {
       if (dead_insts_.find(&*ii) == dead_insts_.end())
         continue;
-      // If dead instruction is structured conditional branch, also
-      // kill selection merge and add unconditional branch to merge block.
-      if (ii->opcode() == SpvOpBranchConditional) {
-        auto mi = ii;
-        --mi;
+      // If dead instruction is selection merge, remember merge block
+      // for new branch at end of block
+      if (ii->opcode() == SpvOpSelectionMerge) {
         mergeBlockId = 
-            mi->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
-        def_use_mgr_->KillInst(&*mi);
+            ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
       }
       def_use_mgr_->KillInst(&*ii);
       modified = true;

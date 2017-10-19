@@ -54,6 +54,22 @@ class AggressiveDCEPass : public MemPass {
   // privates_like_local_)
   bool IsLocalVar(uint32_t varId);
 
+  // Return true if |op| is branch instruction
+  bool IsBranch(SpvOp op) {
+    return op == SpvOpBranch || op == SpvOpBranchConditional;
+  }
+
+  // Return true if |inst| is marked live
+  bool IsLive(ir::Instruction* inst) {
+    return live_insts_.find(inst) != live_insts_.end();
+  }
+
+  // Add |inst| to worklist_ and live_insts_.
+  void AddToWorklist(ir::Instruction* inst) {
+    worklist_.push(inst);
+    live_insts_.insert(inst);
+  }
+
   // Add all store instruction which use |ptrId|, directly or indirectly,
   // to the live instruction worklist.
   void AddStores(uint32_t ptrId);
