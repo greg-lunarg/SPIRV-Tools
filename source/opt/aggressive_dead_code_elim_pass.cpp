@@ -410,24 +410,41 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     if (KillInstIfTargetDead(&ai))
       modified = true;
   }
-  // Kill dead instructions
-  for (auto& blk : *func) {
+  // Kill dead instructions and remember dead blocks
+  std::unordered_set<ir::BasicBlock*> dead_blocks;
+  for (auto bi = structuredOrder.begin(); bi != structuredOrder.end();) {
     uint32_t mergeBlockId = 0;
-    for (auto ii = blk.begin(); ii != blk.end(); ++ii) {
+    for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
       if (dead_insts_.find(&*ii) == dead_insts_.end())
         continue;
       // If dead instruction is selection merge, remember merge block
       // for new branch at end of block
-      if (ii->opcode() == SpvOpSelectionMerge) {
+      if (ii->opcode() == SpvOpSelectionMerge)
         mergeBlockId = 
             ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
-      }
       def_use_mgr_->KillInst(&*ii);
       modified = true;
     }
-    if (mergeBlockId != 0)
-      AddBranch(mergeBlockId, &blk);
+    // If a structured if was deleted, add a branch to its merge block,
+    // and traverse to the merge block killing all instructions on the way
+    // and remembering dead blocks for later deletion from function.
+    if (mergeBlockId != 0) {
+      AddBranch(mergeBlockId, *bi);
+      for (++bi; (*bi)->id() != mergeBlockId; ++bi) {
+        KillAllInsts(*bi);
+        dead_blocks.insert(*bi);
+      }
+    }
+    else {
+      ++bi;
+    }
   }
+  // Erase dead blocks from function
+  for (auto ebi = func->begin(); ebi != func->end(); )
+  if (dead_blocks.find(&*ebi) != dead_blocks.end())
+    ebi = ebi.Erase();
+  else
+    ++ebi;
   return modified;
 }
 
