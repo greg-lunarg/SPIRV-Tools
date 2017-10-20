@@ -125,10 +125,12 @@ class AggressiveDCEPass : public MemPass {
   // If |bp| is structured if header block, return true and set |branchInst|
   // to the conditional branch and |mergeBlockId| to the merge block.
   bool IsStructuredIfHeader(ir::BasicBlock* bp,
-      ir::Instruction** branchInst, uint32_t* mergeBlockId);
+    ir::Instruction** mergeInst, ir::Instruction** branchInst,
+    uint32_t* mergeBlockId);
 
-  // Initialize block2branch_ using |structuredOrder| to order blocks.
-  void ComputeBlock2BranchMap(std::list<ir::BasicBlock*>& structuredOrder);
+  // Initialize block2branch_ and block2merge_ using |structuredOrder| to
+  // order blocks.
+  void ComputeBlock2BranchMaps(std::list<ir::BasicBlock*>& structuredOrder);
 
   // Initialize inst2block_ for |func|.
   void ComputeInst2BlockMap(ir::Function* func);
@@ -166,8 +168,12 @@ class AggressiveDCEPass : public MemPass {
   // building up the live instructions set |live_insts_|.
   std::queue<ir::Instruction*> worklist_;
 
-  // Map from block to most immediate controlling conditional branch.
+  // Map from block to most immediate controlling structured conditional
+  // branch.
   std::unordered_map<ir::BasicBlock*, ir::Instruction*> block2branch_;
+
+  // Map from block to most immediate controlling conditional merge.
+  std::unordered_map<ir::BasicBlock*, ir::Instruction*> block2merge_;
 
   // Map from instruction containing block
   std::unordered_map<ir::Instruction*, ir::BasicBlock*> inst2block_;

@@ -186,7 +186,8 @@ void AggressiveDCEPass::ComputeStructuredOrder(
 }
 
 bool AggressiveDCEPass::IsStructuredIfHeader(ir::BasicBlock* bp,
-      ir::Instruction** branchInst, uint32_t* mergeBlockId) {
+      ir::Instruction** mergeInst, ir::Instruction** branchInst,
+      uint32_t* mergeBlockId) {
   auto ii = bp->end();
   --ii;
   if (ii->opcode() != SpvOpBranchConditional)
@@ -197,27 +198,35 @@ bool AggressiveDCEPass::IsStructuredIfHeader(ir::BasicBlock* bp,
   --ii;
   if (ii->opcode() != SpvOpSelectionMerge)
     return false;
+  *mergeInst = &*ii;
   *mergeBlockId = ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
   return true;
 }
 
-void AggressiveDCEPass::ComputeBlock2BranchMap(
+void AggressiveDCEPass::ComputeBlock2BranchMaps(
       std::list<ir::BasicBlock*>& structuredOrder) {
+  block2merge_.clear();
   block2branch_.clear();
+  std::stack<ir::Instruction*> currentMergeInst;
   std::stack<ir::Instruction*> currentBranchInst;
   std::stack<uint32_t> currentMergeBlockId;
+  currentMergeInst.push(nullptr);
   currentBranchInst.push(nullptr);
   currentMergeBlockId.push(0);
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
     if ((*bi)->id() == currentMergeBlockId.top()) {
       currentMergeBlockId.pop();
+      currentMergeInst.pop();
       currentBranchInst.pop();
     }
+    block2merge_[*bi] = currentMergeInst.top();
     block2branch_[*bi] = currentBranchInst.top();
+    ir::Instruction* mergeInst;
     ir::Instruction* branchInst;
     uint32_t mergeBlockId;
-    if (IsStructuredIfHeader(*bi, &branchInst, &mergeBlockId)) {
+    if (IsStructuredIfHeader(*bi, &mergeInst, &branchInst, &mergeBlockId)) {
       currentMergeBlockId.push(mergeBlockId);
+      currentMergeInst.push(mergeInst);
       currentBranchInst.push(branchInst);
     }
   }
@@ -245,7 +254,7 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   // Compute map from block to controlling conditional branch
   std::list<ir::BasicBlock*> structuredOrder;
   ComputeStructuredOrder(func, &structuredOrder);
-  ComputeBlock2BranchMap(structuredOrder);
+  ComputeBlock2BranchMaps(structuredOrder);
   bool modified = false;
   // Add all control flow and instructions with external side effects 
   // to worklist
@@ -345,11 +354,14 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
       if (!IsLive(inInst))
         AddToWorklist(inInst);
     });
-    // If in a structured if construct, add the controlling conditional branch.
+    // If in a structured if construct, add the controlling conditional branch
+    // and its merge
     ir::BasicBlock* blk = inst2block_[liveInst];
     ir::Instruction* branchInst = block2branch_[blk];
-    if (branchInst != nullptr && !IsLive(branchInst))
+    if (branchInst != nullptr && !IsLive(branchInst)) {
       AddToWorklist(branchInst);
+      AddToWorklist(block2merge_[blk]);
+    }
     // If local load, add all variable's stores if variable not already live
     if (liveInst->opcode() == SpvOpLoad) {
       uint32_t varId;
@@ -372,18 +384,11 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     }
     worklist_.pop();
   }
-  // Mark all non-live instructions dead, except non-if branches and merges
-  // with live branch
+  // Mark all non-live instructions dead, except non-if branches
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
     for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
       if (IsLive(&*ii))
         continue;
-      if (ii->opcode() == SpvOpSelectionMerge) {
-        auto bri = ii;
-        ++bri;
-        if (IsLive(&*bri))
-          continue;
-      }
       if (IsBranch(ii->opcode())) {
         if (ii == (*bi)->begin())
           continue;
