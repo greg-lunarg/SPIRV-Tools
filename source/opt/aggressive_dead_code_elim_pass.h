@@ -122,8 +122,16 @@ class AggressiveDCEPass : public MemPass {
   void ComputeStructuredOrder(
       ir::Function* func, std::list<ir::BasicBlock*>* order);
 
-  // If |bp| is structured if header block, return true and set |branchInst|
-  // to the conditional branch and |mergeBlockId| to the merge block.
+  // If |bp| is structured |mergeOp| header block, return true and set
+  // |branchInst| to the conditional branch and |mergeBlockId| to the merge
+  // block.
+  bool IsStructuredHeader(ir::BasicBlock* bp, SpvOp mergeOp,
+    ir::Instruction** mergeInst, ir::Instruction** branchInst,
+    uint32_t* mergeBlockId);
+
+  // If |bp| is structured if or loop header block, return true and set
+  // |branchInst|  to the conditional branch and |mergeBlockId| to the merge
+  // block.
   bool IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
     ir::Instruction** mergeInst, ir::Instruction** branchInst,
     uint32_t* mergeBlockId);

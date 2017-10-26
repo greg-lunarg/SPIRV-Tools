@@ -185,6 +185,14 @@ void AggressiveDCEPass::ComputeStructuredOrder(
       ignore_edge);
 }
 
+bool AggressiveDCEPass::IsStructuredHeader(ir::BasicBlock* bp,
+      SpvOp mergeOp, ir::Instruction** mergeInst,
+      ir::Instruction** branchInst, uint32_t* mergeBlockId) {
+  if (!IsStructuredIfOrLoopHeader(bp, mergeInst, branchInst, mergeBlockId))
+    return false;
+  return (*mergeInst)->opcode() == mergeOp;
+}
+
 bool AggressiveDCEPass::IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
       ir::Instruction** mergeInst, ir::Instruction** branchInst,
       uint32_t* mergeBlockId) {
@@ -192,13 +200,15 @@ bool AggressiveDCEPass::IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
   --brii;
   if (brii == bp->begin())
     return false;
-  *branchInst = &*brii;
   auto mii = brii;
   --mii;
-  if (mii->opcode() == SpvOpSelectionMerge)
-    return brii->opcode() == SpvOpBranchConditional;
-  else
-    return mii->opcode() == SpvOpLoopMerge;
+  if (mii->opcode() == SpvOpSelectionMerge) {
+    if (brii->opcode() != SpvOpBranchConditional)
+      return false;
+  }
+  else if (mii->opcode() != SpvOpLoopMerge)
+    return false;
+  *branchInst = &*brii;
   *mergeInst = &*mii;
   *mergeBlockId = mii->GetSingleWordInOperand(0);
   return true;
@@ -220,12 +230,20 @@ void AggressiveDCEPass::ComputeBlock2BranchMaps(
       currentMergeInst.pop();
       currentBranchInst.pop();
     }
-    block2merge_[*bi] = currentMergeInst.top();
-    block2branch_[*bi] = currentBranchInst.top();
     ir::Instruction* mergeInst;
     ir::Instruction* branchInst;
     uint32_t mergeBlockId;
-    if (IsStructuredIfOrLoopHeader(*bi, &mergeInst, &branchInst,
+    // If there is live code in loop header, the loop is live
+    if (IsStructuredHeader(*bi, SpvOpLoopMerge, &mergeInst, &branchInst,
+        &mergeBlockId)) {
+      currentMergeBlockId.push(mergeBlockId);
+      currentMergeInst.push(mergeInst);
+      currentBranchInst.push(branchInst);
+    }
+    block2merge_[*bi] = currentMergeInst.top();
+    block2branch_[*bi] = currentBranchInst.top();
+    // If there is live code following if header, the if is live
+    if (IsStructuredHeader(*bi, SpvOpSelectionMerge, &mergeInst, &branchInst,
         &mergeBlockId)) {
       currentMergeBlockId.push(mergeBlockId);
       currentMergeInst.push(mergeInst);
@@ -360,8 +378,11 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   while (!worklist_.empty()) {
     ir::Instruction* liveInst = worklist_.front();
     // Add all operand instructions if not already live
-    liveInst->ForEachInId([this](const uint32_t* iid) {
+    SpvOp op = liveInst->opcode();
+    liveInst->ForEachInId([&op,this](const uint32_t* iid) {
       ir::Instruction* inInst = def_use_mgr_->GetDef(*iid);
+      if (inInst->opcode() == SpvOpLabel && IsBranch(op))
+        return;
       if (!IsLive(inInst))
         AddToWorklist(inInst);
     });
@@ -404,8 +425,7 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     }
     worklist_.pop();
   }
-  // Mark all non-live instructions dead, except non-if- and non-loop-header
-  // branches
+  // Mark all non-live instructions dead except non-structured branches
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
     for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
       if (IsLive(&*ii))
@@ -444,17 +464,17 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
       if (dead_insts_.find(&*ii) == dead_insts_.end())
         continue;
-      // If dead instruction is selection merge, remember merge block
+      // If dead instruction is selection or loop merge, remember merge block
       // for new branch at end of block
-      if (ii->opcode() == SpvOpSelectionMerge)
-        mergeBlockId = 
-            ii->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
+      if (ii->opcode() == SpvOpSelectionMerge ||
+          ii->opcode() == SpvOpLoopMerge)
+        mergeBlockId = ii->GetSingleWordInOperand(0);
       def_use_mgr_->KillInst(&*ii);
       modified = true;
     }
-    // If a structured if was deleted, add a branch to its merge block,
-    // and traverse to the merge block killing all instructions on the way
-    // and remembering dead blocks for later deletion from function.
+    // If a structured if or loop was deleted, add a branch to its merge
+    // block, and traverse to the merge block killing all instructions on
+    // the way and remembering dead blocks for later deletion from function.
     if (mergeBlockId != 0) {
       AddBranch(mergeBlockId, *bi);
       for (++bi; (*bi)->id() != mergeBlockId; ++bi) {
