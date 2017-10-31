@@ -90,9 +90,10 @@ void DeadBranchElimPass::ComputeStructuredOrder(
 }
 
 bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
-  bool condIsConst;
+  bool condIsConst = false;
   ir::Instruction* cInst = def_use_mgr_->GetDef(condId);
-  switch (cInst->opcode()) {
+  SpvOp op = cInst->opcode();
+  switch (op) {
     case SpvOpConstantFalse: {
       *condVal = false;
       condIsConst = true;
@@ -103,13 +104,23 @@ bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
     } break;
     case SpvOpLogicalNot: {
       bool negVal;
-      condIsConst = GetConstCondition(cInst->GetSingleWordInOperand(0),
-          &negVal);
-      if (condIsConst)
-        *condVal = !negVal;
+      if (!GetConstCondition(cInst->GetSingleWordInOperand(0), &negVal))
+        break;
+      *condVal = !negVal;
+      condIsConst = true;
+    } break;
+    case SpvOpIEqual:
+    case SpvOpINotEqual: {
+      uint32_t c0;
+      if (!GetConstInteger(cInst->GetSingleWordInOperand(0), &c0))
+        break;
+      uint32_t c1;
+      if (!GetConstInteger(cInst->GetSingleWordInOperand(1), &c1))
+        break;
+      *condVal = (op == SpvOpIEqual) ? (c0 == c1) : (c0 != c1);
+      condIsConst = true;
     } break;
     default: {
-      condIsConst = false;
     } break;
   }
   return condIsConst;
