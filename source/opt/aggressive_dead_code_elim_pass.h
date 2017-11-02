@@ -101,15 +101,15 @@ class AggressiveDCEPass : public MemPass {
   void ProcessLoad(uint32_t varId);
 
   // If |bp| is structured |mergeOp| header block, return true and set
-  // |branchInst| to the conditional branch and |mergeBlockId| to the merge
-  // block.
+  // |mergeInst| to the merge instruction, |branchInst| to the conditional
+  // branch and |mergeBlockId| to the merge block if they are not nullptr.
   bool IsStructuredHeader(ir::BasicBlock* bp, SpvOp mergeOp,
     ir::Instruction** mergeInst, ir::Instruction** branchInst,
     uint32_t* mergeBlockId);
 
   // If |bp| is structured if or loop header block, return true and set
-  // |branchInst|  to the conditional branch and |mergeBlockId| to the merge
-  // block.
+  // |mergeInst| to the merge instruction, |branchInst| to the conditional
+  // branch and |mergeBlockId| to the merge block if they are not nullptr.
   bool IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
     ir::Instruction** mergeInst, ir::Instruction** branchInst,
     uint32_t* mergeBlockId);

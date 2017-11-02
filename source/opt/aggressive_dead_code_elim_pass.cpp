@@ -132,9 +132,12 @@ void AggressiveDCEPass::ProcessLoad(uint32_t varId) {
 bool AggressiveDCEPass::IsStructuredHeader(ir::BasicBlock* bp,
       SpvOp mergeOp, ir::Instruction** mergeInst,
       ir::Instruction** branchInst, uint32_t* mergeBlockId) {
-  if (!IsStructuredIfOrLoopHeader(bp, mergeInst, branchInst, mergeBlockId))
+  ir::Instruction* tempMergeInst;
+  if (!IsStructuredIfOrLoopHeader(bp, &tempMergeInst, branchInst, mergeBlockId))
     return false;
-  return (*mergeInst)->opcode() == mergeOp;
+  if (mergeInst != nullptr)
+    *mergeInst = tempMergeInst;
+  return tempMergeInst->opcode() == mergeOp;
 }
 
 bool AggressiveDCEPass::IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
@@ -152,9 +155,9 @@ bool AggressiveDCEPass::IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
   }
   else if (mii->opcode() != SpvOpLoopMerge)
     return false;
-  *branchInst = &*brii;
-  *mergeInst = &*mii;
-  *mergeBlockId = mii->GetSingleWordInOperand(0);
+  if (branchInst != nullptr) *branchInst = &*brii;
+  if (mergeInst != nullptr) *mergeInst = &*mii;
+  if (mergeBlockId != nullptr) *mergeBlockId = mii->GetSingleWordInOperand(0);
   return true;
 }
 
@@ -169,6 +172,7 @@ void AggressiveDCEPass::ComputeBlock2HeaderMaps(
   currentBranchInst.push(nullptr);
   currentMergeBlockId.push(0);
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    // If leaving an if or loop, update stacks
     if ((*bi)->id() == currentMergeBlockId.top()) {
       currentMergeBlockId.pop();
       currentMergeInst.pop();
@@ -236,14 +240,16 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   call_in_func_ = false;
   func_is_entry_point_ = false;
   private_stores_.clear();
-  // Stacks to keep track of when we are inside an if-construct. When not
-  // immediately inside an in-construct,  we must assume all branches are live. 
+  // Stacks to keep track of when we are inside an if- or loop-construct.
+  // When not immediately inside an if- or loop-construct,  we must assume
+  // all branches are live.
   std::stack<bool> assume_branches_live;
   std::stack<uint32_t> currentMergeBlockId;
   // Push sentinel values on stack for when outside of any control flow.
   assume_branches_live.push(true);
   currentMergeBlockId.push(0);
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    // If exiting if or loop, update stacks
     if ((*bi)->id() == currentMergeBlockId.top()) {
       assume_branches_live.pop();
       currentMergeBlockId.pop();
@@ -334,7 +340,9 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
         AddToWorklist(inInst);
     });
     // If in a structured if or loop construct, add the controlling
-    // conditional branch and its merge
+    // conditional branch and its merge. Any containing control construct
+    // is marked live when the merge and branch are processed out of the
+    // worklist.
     ir::BasicBlock* blk = inst2block_[liveInst];
     ir::Instruction* branchInst = block2headerBranch_[blk];
     if (branchInst != nullptr && !IsLive(branchInst)) {
@@ -372,7 +380,8 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     }
     worklist_.pop();
   }
-  // Mark all non-live instructions dead except non-structured branches
+  // Mark all non-live instructions dead except non-structured branches, which
+  // now should be considered live unless their block is deleted.
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
     for (auto ii = (*bi)->begin(); ii != (*bi)->end(); ++ii) {
       if (IsLive(&*ii))
@@ -413,8 +422,8 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
       modified = true;
     }
     // If a structured if or loop was deleted, add a branch to its merge
-    // block, and traverse to the merge block killing all instructions on
-    // the way and remembering dead blocks for later deletion from function.
+    // block, and traverse to the merge block and continue processing there.
+    // We know the block still exists because the label is not deleted.
     if (mergeBlockId != 0) {
       AddBranch(mergeBlockId, *bi);
       for (++bi; (*bi)->id() != mergeBlockId; ++bi) {
