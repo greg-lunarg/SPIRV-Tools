@@ -216,6 +216,9 @@ class Module {
   // Returns 1 more than the maximum Id value mentioned in the module.
   uint32_t ComputeIdBound() const;
 
+  // Returns true if module has explicit or implicit shader capability
+  bool IsShader();
+
   // Returns true if module has capability |cap|
   bool HasCapability(uint32_t cap);
 

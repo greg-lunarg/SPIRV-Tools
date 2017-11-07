@@ -403,7 +403,7 @@ bool DeadBranchElimPass::AllExtensionsSupported() const {
 Pass::Status DeadBranchElimPass::ProcessImpl() {
   // Current functionality assumes structured control flow. 
   // TODO(greg-lunarg): Handle non-structured control-flow.
-  if (!get_module()->HasCapability(SpvCapabilityShader))
+  if (!get_module()->IsShader())
     return Status::SuccessWithoutChange;
   // Do not process if module contains OpGroupDecorate. Additional
   // support required in KillNamesAndDecorates().

@@ -45,8 +45,7 @@ CFG::CFG(ir::Module* module)
 
 void CFG::ComputeStructuredOrder(ir::Function* func, ir::BasicBlock* root,
                                  std::list<ir::BasicBlock*>* order) {
-  assert(module_->HasCapability(SpvCapabilityShader) &&
-         "This only works on structured control flow");
+  assert(module_->IsShader() && "This only works on structured control flow");
 
   // Compute structured successors and do DFS.
   ComputeStructuredSuccessors(func);

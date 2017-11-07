@@ -458,7 +458,7 @@ void AggressiveDCEPass::Initialize(ir::IRContext* c) {
 Pass::Status AggressiveDCEPass::ProcessImpl() {
   // Current functionality assumes shader capability 
   // TODO(greg-lunarg): Handle additional capabilities
-  if (!get_module()->HasCapability(SpvCapabilityShader))
+  if (!get_module()->IsShader())
     return Status::SuccessWithoutChange;
   // Current functionality assumes logical addressing only
   // TODO(greg-lunarg): Handle non-logical addressing

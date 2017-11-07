@@ -536,7 +536,7 @@ bool CommonUniformElimPass::AllExtensionsSupported() const {
 Pass::Status CommonUniformElimPass::ProcessImpl() {
   // Assumes all control flow structured.
   // TODO(greg-lunarg): Do SSA rewrite for non-structured control flow
-  if (!get_module()->HasCapability(SpvCapabilityShader))
+  if (!get_module()->IsShader())
     return Status::SuccessWithoutChange;
   // Assumes logical addressing only
   // TODO(greg-lunarg): Add support for physical addressing

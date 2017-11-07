@@ -150,6 +150,12 @@ bool Module::HasCapability(uint32_t cap) {
   return false;
 }
 
+bool Module::IsShader() {
+  return HasCapability(SpvCapabilityShader) ||
+         HasCapability(SpvCapabilityTessellation) ||
+         HasCapability(SpvCapabilityGeometry);
+}
+
 uint32_t Module::GetExtInstImportId(const char* extstr) {
   for (auto& ei : ext_inst_imports_)
     if (!strcmp(extstr,

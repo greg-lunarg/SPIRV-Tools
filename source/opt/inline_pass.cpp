@@ -584,7 +584,7 @@ InlinePass::GetBlocksFunction InlinePass::StructuredSuccessorsFunction() {
 bool InlinePass::HasNoReturnInLoop(ir::Function* func) {
   // If control not structured, do not do loop/return analysis
   // TODO: Analyze returns in non-structured control flow
-  if (!get_module()->HasCapability(SpvCapabilityShader))
+  if (!get_module()->IsShader())
     return false;
   // Compute structured block order. This order has the property
   // that dominators are before all blocks they dominate and merge blocks
