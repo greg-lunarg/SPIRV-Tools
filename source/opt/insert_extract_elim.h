@@ -56,6 +56,14 @@ class InsertExtractElimPass : public Pass {
   // Return true if |typeId| is a vector type
   bool IsVectorType(uint32_t typeId);
 
+  // Mark all inserts in chain starting at |ins| that intersect with |ext|.
+  // Mark all insert in chain if |ext| is nullptr.
+  void markInChain(ir::Instruction* ins, ir::Instruction* ext);
+
+  // Kill all dead inserts in |func|. Replace any reference to the insert
+  // with its original composite.
+  bool EliminateDeadInserts(ir::Function* func);
+
   // Look for OpExtract on sequence of OpInserts in |func|. If there is an
   // insert with identical indices, replace the extract with the value
   // that is inserted if possible. Specifically, replace if there is no
@@ -70,6 +78,9 @@ class InsertExtractElimPass : public Pass {
 
   void Initialize(ir::IRContext* c);
   Pass::Status ProcessImpl();
+
+  // Live inserts
+  std::unordered_set<uint32_t> liveInserts_;
 
   // Extensions supported by this pass.
   std::unordered_set<std::string> extensions_whitelist_;
