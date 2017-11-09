@@ -64,6 +64,11 @@ class InsertExtractElimPass : public Pass {
   // with its original composite.
   bool EliminateDeadInserts(ir::Function* func);
 
+  // For all extracts from insert chains in |func|, clone only that part of
+  // insert chain that intersects with extract. This frees the larger insert
+  // chain to be DCE'd. Return true if |func| is modified.
+  bool CloneExtractInsertChains(ir::Function* func);
+
   // Look for OpExtract on sequence of OpInserts in |func|. If there is an
   // insert with identical indices, replace the extract with the value
   // that is inserted if possible. Specifically, replace if there is no
