@@ -96,7 +96,7 @@ bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
               kExtractCompositeIdInIdx : kInsertCompositeIdInIdx;
           lastInst->SetInOperand(compIdx, {rId});
           newInsts.emplace(newInsts.begin(), std::move(lastInst));
-          lastInst = std::move(cinst->Clone);
+          lastInst.reset(cinst->Clone());
           lastInst->SetResultId(rId);
           last_is_extract = false;
         }
