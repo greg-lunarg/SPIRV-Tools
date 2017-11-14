@@ -65,14 +65,6 @@ class InsertExtractElimPass : public Pass {
   // Return true if |typeId| is a vector type
   bool IsVectorType(uint32_t typeId);
 
-  // Mark all inserts in chain starting at |ins| that intersect with |ext|.
-  // Mark all insert in chain if |ext| is nullptr.
-  void markInChain(ir::Instruction* ins, ir::Instruction* ext);
-
-  // Kill all dead inserts in |func|. Replace any reference to the insert
-  // with its original composite.
-  bool EliminateDeadInserts(ir::Function* func);
-
   // For all extracts from insert chains in |func|, clone only that part of
   // insert chain that intersects with extract. This frees the larger insert
   // chain to be DCE'd. Return true if |func| is modified.

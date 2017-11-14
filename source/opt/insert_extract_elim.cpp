@@ -157,69 +157,6 @@ bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
   return modified;
 }
 
-void InsertExtractElimPass::markInChain(ir::Instruction* insert,
-  ir::Instruction* extract) {
-  ir::Instruction* inst = insert;
-  while (inst->opcode() == SpvOpCompositeInsert) {
-    if (extract != nullptr && ExtInsMatch(extract, inst)) {
-      liveInserts_.insert(inst->result_id());
-      break;
-    }
-    if (extract == nullptr || ExtInsConflict(extract, inst))
-      liveInserts_.insert(inst->result_id());
-    const uint32_t sourceId = inst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-    inst = get_def_use_mgr()->GetDef(sourceId);
-  }
-}
-
-bool InsertExtractElimPass::EliminateDeadInserts(ir::Function* func) {
-  bool modified = false;
-  // Mark all live inserts
-  liveInserts_.clear();
-  for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
-      if (ii->opcode() != SpvOpCompositeInsert)
-        continue;
-      const uint32_t id = ii->result_id();
-      const analysis::UseList* uses = get_def_use_mgr()->GetUses(id);
-      if (uses == nullptr)
-        continue;
-      for (const auto u : *uses) {
-        const SpvOp op = u.inst->opcode();
-        switch (op) {
-          case SpvOpCompositeInsert:
-            // Use by insert does not cause mark
-            break;
-          case SpvOpCompositeExtract: {
-            // Mark all inserts in chain that intersect with extract
-            markInChain(&*ii, u.inst);
-          } break;
-          default: {
-            // Mark all inserts in chain
-            markInChain(&*ii, nullptr);
-          } break;
-        }
-      }
-    }
-  }
-  // Delete dead inserts
-  for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
-      if (ii->opcode() != SpvOpCompositeInsert)
-        continue;
-      const uint32_t id = ii->result_id();
-      if (liveInserts_.find(id) != liveInserts_.end())
-        continue;
-      const uint32_t replId =
-          ii->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-      (void)get_def_use_mgr()->ReplaceAllUsesWith(id, replId);
-      get_def_use_mgr()->KillInst(&*ii);
-      modified = true;
-    }
-  }
-  return modified;
-}
-
 bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
   bool modified = false;
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
