@@ -61,6 +61,30 @@ bool InsertExtractElimPass::IsVectorType(uint32_t typeId) {
   return typeInst->opcode() == SpvOpTypeVector;
 }
 
+bool InsertExtractElimPass::InsCovers(const ir::Instruction* coverer,
+    const ir::Instruction* coveree) const {
+  if (coverer->NumInOperands() > coveree->NumInOperands())
+    return false;
+  uint32_t numIdx = coverer->NumInOperands() - 2;
+  for (uint32_t i = 0; i < numIdx; ++i)
+    if (coverer->GetSingleWordInOperand(i + 2) !=
+        coveree->GetSingleWordInOperand(i + 2))
+      return false;
+  return true;
+}
+
+bool InsertExtractElimPass::IsCoveredInsert(const ir::Instruction* insert,
+      const uint32_t compId) const {
+  ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
+  while (cinst != insert) {
+    if (InsCovers(cinst, insert))
+      break;
+    uint32_t compId2 = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+    cinst = get_def_use_mgr()->GetDef(compId2);
+  }
+  return (cinst != insert);
+}
+
 bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
   bool modified = false;
   // Look for extracts with irrelevant inserts
@@ -73,7 +97,12 @@ bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
       ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
       // Look for irrelevant insert
       while (cinst->opcode() == SpvOpCompositeInsert) {
+        // Insert does not intersect with extract
         if (!ExtInsMatch(&*ii, cinst) && !ExtInsConflict(&*ii, cinst))
+          break;
+        // Insert covered by later insert
+        if (IsCoveredInsert(cinst, 
+              ii->GetSingleWordInOperand(kExtractCompositeIdInIdx)))
           break;
         compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
         cinst = get_def_use_mgr()->GetDef(compId);
@@ -90,7 +119,11 @@ bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
       cinst = get_def_use_mgr()->GetDef(compId);
       bool last_is_extract = true;
       while (cinst->opcode() == SpvOpCompositeInsert) {
-        if (ExtInsMatch(&*ii, cinst) || ExtInsConflict(&*ii, cinst)) {
+        // Insert is relevant if intersects with extract and is not covered
+        // by later insert
+        if ((ExtInsMatch(&*ii, cinst) || ExtInsConflict(&*ii, cinst)) &&
+            !IsCoveredInsert(cinst, 
+                ii->GetSingleWordInOperand(kExtractCompositeIdInIdx))) {
           uint32_t rId = TakeNextId();
           uint32_t compIdx = last_is_extract ?
               kExtractCompositeIdInIdx : kInsertCompositeIdInIdx;

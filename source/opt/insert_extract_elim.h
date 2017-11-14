@@ -45,6 +45,15 @@ class InsertExtractElimPass : public Pass {
   bool ExtInsMatch(
     const ir::Instruction* extInst, const ir::Instruction* insInst) const;
 
+  // Return true if insert |coverer| covers earlier insert |coveree|.
+  bool InsCovers(
+    const ir::Instruction* coverer, const ir::Instruction* coveree) const;
+
+  // Return true if |insert| is covered by a later insert before use
+  // at insert with result |compId|.
+  bool IsCoveredInsert(
+    const ir::Instruction* insert, const uint32_t compId) const;
+
   // Return true if indices of extract |extInst| and insert |insInst| conflict,
   // specifically, if the insert changes bits specified by the extract, but
   // changes either more bits or less bits than the extract specifies,
