@@ -73,16 +73,66 @@ bool InsertExtractElimPass::InsCovers(const ir::Instruction* coverer,
   return true;
 }
 
-bool InsertExtractElimPass::IsCoveredInsert(const ir::Instruction* insert,
-      const uint32_t compId) const {
-  ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
-  while (cinst != insert) {
-    if (InsCovers(cinst, insert))
-      break;
-    uint32_t compId2 = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-    cinst = get_def_use_mgr()->GetDef(compId2);
+bool InsertExtractElimPass::CloneCoveringInsertChains(ir::Function* func) {
+  bool modified = false;
+  // Look for inserts which cover previous inserts
+  for (auto bi = func->begin(); bi != func->end(); ++bi) {
+    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
+      if (ii->opcode() != SpvOpCompositeInsert)
+        continue;
+      uint32_t compId =
+          ii->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+      ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
+      ir::Instruction* last = nullptr;
+      // Look for covered insert
+      while (cinst->opcode() == SpvOpCompositeInsert) {
+        if (InsCovers(&*ii, cinst))
+          last = cinst;
+        compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+        cinst = get_def_use_mgr()->GetDef(compId);
+      }
+      // If no covered insert, continue to next extract
+      if (last == nullptr)
+        continue;
+      // Clone insert chain without covered inserts
+      std::vector<std::unique_ptr<ir::Instruction>> newInsts;
+      std::unique_ptr<ir::Instruction> lastInst(ii->Clone());
+      uint32_t replId = TakeNextId();
+      lastInst->SetResultId(replId);
+      compId = ii->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+      cinst = get_def_use_mgr()->GetDef(compId);
+      // Clone all inserts if not covered 
+      while (cinst != last) {
+        if (!InsCovers(&*ii, cinst)) {
+          uint32_t rId = TakeNextId();
+          lastInst->SetInOperand(kInsertCompositeIdInIdx, {rId});
+          newInsts.emplace(newInsts.begin(), std::move(lastInst));
+          lastInst.reset(cinst->Clone());
+          lastInst->SetResultId(rId);
+        }
+        compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+        cinst = get_def_use_mgr()->GetDef(compId);
+      }
+      // Link in remainder of chain
+      compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+      cinst = get_def_use_mgr()->GetDef(compId);
+      uint32_t rId = cinst->result_id();
+      lastInst->SetInOperand(kInsertCompositeIdInIdx, {rId});
+      newInsts.emplace(newInsts.begin(), std::move(lastInst));
+      // Analyze new instructions
+      for (auto& newInst : newInsts)
+        get_def_use_mgr()->AnalyzeInstDefUse(&*newInst);
+      // Replace covering insert and add new instructions
+      (void)get_def_use_mgr()->ReplaceAllUsesWith(ii->result_id(), replId);
+      get_def_use_mgr()->KillInst(&*ii);
+      ++ii;
+      ii = ii.InsertBefore(std::move(newInsts));
+      while (ii->result_id() != replId)
+        ++ii;
+      modified = true;
+    }
   }
-  return (cinst != insert);
+  return modified;
 }
 
 bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
@@ -95,14 +145,9 @@ bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
       uint32_t compId =
           ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
       ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
-      // Look for irrelevant insert
+      // Look for insert that does not intersect with extract
       while (cinst->opcode() == SpvOpCompositeInsert) {
-        // Insert does not intersect with extract
         if (!ExtInsMatch(&*ii, cinst) && !ExtInsConflict(&*ii, cinst))
-          break;
-        // Insert covered by later insert
-        if (IsCoveredInsert(cinst, 
-              ii->GetSingleWordInOperand(kExtractCompositeIdInIdx)))
           break;
         compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
         cinst = get_def_use_mgr()->GetDef(compId);
@@ -118,12 +163,9 @@ bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
       compId = ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
       cinst = get_def_use_mgr()->GetDef(compId);
       bool last_is_extract = true;
+      // Clone only those inserts which intersect with extract
       while (cinst->opcode() == SpvOpCompositeInsert) {
-        // Insert is relevant if intersects with extract and is not covered
-        // by later insert
-        if ((ExtInsMatch(&*ii, cinst) || ExtInsConflict(&*ii, cinst)) &&
-            !IsCoveredInsert(cinst, 
-                ii->GetSingleWordInOperand(kExtractCompositeIdInIdx))) {
+        if ((ExtInsMatch(&*ii, cinst) || ExtInsConflict(&*ii, cinst))) {
           uint32_t rId = TakeNextId();
           uint32_t compIdx = last_is_extract ?
               kExtractCompositeIdInIdx : kInsertCompositeIdInIdx;
@@ -215,6 +257,7 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
       }
     }
   }
+  modified |= CloneCoveringInsertChains(func);
   modified |= CloneExtractInsertChains(func);
   return modified;
 }
