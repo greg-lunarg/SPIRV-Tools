@@ -27,14 +27,14 @@
 #include "basic_block.h"
 #include "def_use_manager.h"
 #include "module.h"
-#include "pass.h"
+#include "mem_pass.h"
 #include "ir_context.h"
 
 namespace spvtools {
 namespace opt {
 
 // See optimizer.hpp for documentation.
-class InsertExtractElimPass : public Pass {
+class InsertExtractElimPass : public MemPass {
  public:
   InsertExtractElimPass();
   const char* name() const override { return "eliminate-insert-extract"; }
@@ -44,15 +44,6 @@ class InsertExtractElimPass : public Pass {
   // Return true if indices of extract |extInst| and insert |insInst| match
   bool ExtInsMatch(
     const ir::Instruction* extInst, const ir::Instruction* insInst) const;
-
-  // Return true if insert |coverer| covers earlier insert |coveree|.
-  bool InsCovers(
-    const ir::Instruction* coverer, const ir::Instruction* coveree) const;
-
-  // Return true if |insert| is covered by a later insert before use
-  // at insert with result |compId|.
-  bool IsCoveredInsert(
-    const ir::Instruction* insert, const uint32_t compId) const;
 
   // Return true if indices of extract |extInst| and insert |insInst| conflict,
   // specifically, if the insert changes bits specified by the extract, but
@@ -69,14 +60,14 @@ class InsertExtractElimPass : public Pass {
   // Mark all insert in chain if |ext| is nullptr.
   void markInChain(ir::Instruction* ins, ir::Instruction* ext);
 
-  // Kill all dead inserts in |func|. Replace any reference to the insert
-  // with its original composite.
+  // Perform EliminateDeadInsertsOnePass(|func|) until no modification is
+  // made. Return true if modified.
   bool EliminateDeadInserts(ir::Function* func);
 
-  // For all extracts from insert chains in |func|, clone only that part of
-  // insert chain that intersects with extract. This frees the larger insert
-  // chain to be DCE'd. Return true if |func| is modified.
-  bool CloneExtractInsertChains(ir::Function* func);
+  // DCE all dead inserts in |func|. An insert is dead if the value it inserts
+  // is never used. Replace any reference to the insert with its original 
+  // composite. Return true if modified.
+  bool EliminateDeadInsertsOnePass(ir::Function* func);
 
   // Look for OpExtract on sequence of OpInserts in |func|. If there is an
   // insert with identical indices, replace the extract with the value

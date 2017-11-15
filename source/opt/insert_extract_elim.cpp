@@ -61,118 +61,47 @@ bool InsertExtractElimPass::IsVectorType(uint32_t typeId) {
   return typeInst->opcode() == SpvOpTypeVector;
 }
 
-bool InsertExtractElimPass::InsCovers(const ir::Instruction* coverer,
-    const ir::Instruction* coveree) const {
-  if (coverer->NumInOperands() > coveree->NumInOperands())
-    return false;
-  uint32_t numIdx = coverer->NumInOperands() - 2;
-  for (uint32_t i = 0; i < numIdx; ++i)
-    if (coverer->GetSingleWordInOperand(i + 2) !=
-        coveree->GetSingleWordInOperand(i + 2))
-      return false;
-  return true;
-}
-
-bool InsertExtractElimPass::IsCoveredInsert(const ir::Instruction* insert,
-      const uint32_t compId) const {
-  ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
-  while (cinst != insert) {
-    if (InsCovers(cinst, insert))
-      break;
-    uint32_t compId2 = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-    cinst = get_def_use_mgr()->GetDef(compId2);
-  }
-  return (cinst != insert);
-}
-
-bool InsertExtractElimPass::CloneExtractInsertChains(ir::Function* func) {
-  bool modified = false;
-  // Look for extracts with irrelevant inserts
-  for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
-      if (ii->opcode() != SpvOpCompositeExtract)
-        continue;
-      uint32_t compId =
-          ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
-      ir::Instruction* cinst = get_def_use_mgr()->GetDef(compId);
-      // Look for irrelevant insert
-      while (cinst->opcode() == SpvOpCompositeInsert) {
-        // Insert does not intersect with extract
-        if (!ExtInsMatch(&*ii, cinst) && !ExtInsConflict(&*ii, cinst))
-          break;
-        // Insert covered by later insert
-        if (IsCoveredInsert(cinst, 
-              ii->GetSingleWordInOperand(kExtractCompositeIdInIdx)))
-          break;
-        compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-        cinst = get_def_use_mgr()->GetDef(compId);
-      }
-      // If no irrelevant insert, continue to next extract
-      if (cinst->opcode() != SpvOpCompositeInsert)
-        continue;
-      // Clone extract and all relevant inserts
-      std::vector<std::unique_ptr<ir::Instruction>> newInsts;
-      std::unique_ptr<ir::Instruction> lastInst(ii->Clone());
-      uint32_t replId = TakeNextId();
-      lastInst->SetResultId(replId);
-      compId = ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
-      cinst = get_def_use_mgr()->GetDef(compId);
-      bool last_is_extract = true;
-      while (cinst->opcode() == SpvOpCompositeInsert) {
-        // Insert is relevant if intersects with extract and is not covered
-        // by later insert
-        if ((ExtInsMatch(&*ii, cinst) || ExtInsConflict(&*ii, cinst)) &&
-            !IsCoveredInsert(cinst, 
-                ii->GetSingleWordInOperand(kExtractCompositeIdInIdx))) {
-          uint32_t rId = TakeNextId();
-          uint32_t compIdx = last_is_extract ?
-              kExtractCompositeIdInIdx : kInsertCompositeIdInIdx;
-          lastInst->SetInOperand(compIdx, {rId});
-          newInsts.emplace(newInsts.begin(), std::move(lastInst));
-          lastInst.reset(cinst->Clone());
-          lastInst->SetResultId(rId);
-          last_is_extract = false;
-        }
-        compId = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-        cinst = get_def_use_mgr()->GetDef(compId);
-      }
-      uint32_t rId = cinst->result_id();
-      uint32_t compIdx = last_is_extract ?
-        kExtractCompositeIdInIdx : kInsertCompositeIdInIdx;
-      lastInst->SetInOperand(compIdx, {rId});
-      newInsts.emplace(newInsts.begin(), std::move(lastInst));
-      // Analyze new instructions
-      for (auto& newInst : newInsts)
-        get_def_use_mgr()->AnalyzeInstDefUse(&*newInst);
-      // Replace old extract and insert new extract and inserts
-      (void)get_def_use_mgr()->ReplaceAllUsesWith(ii->result_id(), replId);
-      get_def_use_mgr()->KillInst(&*ii);
-      ++ii;
-      ii = ii.InsertBefore(std::move(newInsts));
-      while (ii->opcode() != SpvOpCompositeExtract)
-        ++ii;
-      modified = true;
-    }
-  }
-  return modified;
-}
-
 void InsertExtractElimPass::markInChain(ir::Instruction* insert,
   ir::Instruction* extract) {
   ir::Instruction* inst = insert;
   while (inst->opcode() == SpvOpCompositeInsert) {
+    // Once we find a matching insert, we are done
     if (extract != nullptr && ExtInsMatch(extract, inst)) {
       liveInserts_.insert(inst->result_id());
       break;
     }
+    // If no extract or non-matching intersection, mark live and continue
     if (extract == nullptr || ExtInsConflict(extract, inst))
       liveInserts_.insert(inst->result_id());
-    const uint32_t sourceId = inst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-    inst = get_def_use_mgr()->GetDef(sourceId);
+    // Get next insert in chain
+    const uint32_t compId =
+        inst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+    inst = get_def_use_mgr()->GetDef(compId);
   }
+  // If insert chain ended with phi, do recursive call on each operand
+  if (inst->opcode() != SpvOpPhi)
+    return;
+  uint32_t icnt = 0;
+  inst->ForEachInId([&icnt,&extract,this](uint32_t* idp) {
+    if (icnt % 2 == 0) {
+      ir::Instruction* pi = get_def_use_mgr()->GetDef(*idp);
+      markInChain(pi, extract);
+    }
+    ++icnt;
+  });
 }
 
 bool InsertExtractElimPass::EliminateDeadInserts(ir::Function* func) {
+  bool modified = false;
+  bool lastmodified = true;
+  while (lastmodified) {
+    lastmodified = EliminateDeadInsertsOnePass(func);
+    modified |= lastmodified;
+  }
+  return modified;
+}
+
+bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
   bool modified = false;
   // Mark all live inserts
   liveInserts_.clear();
@@ -213,7 +142,7 @@ bool InsertExtractElimPass::EliminateDeadInserts(ir::Function* func) {
       const uint32_t replId =
           ii->GetSingleWordInOperand(kInsertCompositeIdInIdx);
       (void)get_def_use_mgr()->ReplaceAllUsesWith(id, replId);
-      get_def_use_mgr()->KillInst(&*ii);
+      DCEInst(&*ii);
       modified = true;
     }
   }
@@ -278,7 +207,7 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
       }
     }
   }
-  modified |= CloneExtractInsertChains(func);
+  modified |= EliminateDeadInserts(func);
   return modified;
 }
 

@@ -360,7 +360,7 @@ TEST_F(InsertExtractElimTest, ConflictingInsertPreventsOptimization2) {
   //     gl_FragColor = vec4(s0.v1[1], 0.0, 0.0, 0.0);
   // }
 
-  const std::string predefs =
+  const std::string assembly =
       R"(OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
@@ -392,10 +392,7 @@ OpName %gl_FragColor "gl_FragColor"
 %_ptr_Output_v4float = OpTypePointer Output %v4float
 %gl_FragColor = OpVariable %_ptr_Output_v4float Output
 %float_0 = OpConstant %float 0
-)";
-
-  const std::string before =
-      R"(%main = OpFunction %void None %8
+%main = OpFunction %void None %8
 %22 = OpLabel
 %s0 = OpVariable %_ptr_Function_S_t Function
 %23 = OpLoad %S_t %s0
@@ -409,24 +406,8 @@ OpReturn
 OpFunctionEnd
 )";
 
-  const std::string after =
-      R"(%main = OpFunction %void None %8
-%22 = OpLabel
-%s0 = OpVariable %_ptr_Function_S_t Function
-%23 = OpLoad %S_t %s0
-%24 = OpCompositeInsert %S_t %float_1 %23 1 1
-%25 = OpLoad %v4float %BaseColor
-%26 = OpCompositeInsert %S_t %25 %24 1
-%30 = OpCompositeInsert %S_t %25 %23 1
-%29 = OpCompositeExtract %float %30 1 1
-%28 = OpCompositeConstruct %v4float %29 %float_0 %float_0 %float_0
-OpStore %gl_FragColor %28
-OpReturn
-OpFunctionEnd
-)";
-
-  SinglePassRunAndCheck<opt::InsertExtractElimPass>(predefs + before, 
-      predefs + after, true, true);
+  SinglePassRunAndCheck<opt::InsertExtractElimPass>(assembly, assembly,
+      true, true);
 }
 
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
