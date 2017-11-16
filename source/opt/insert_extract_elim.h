@@ -53,8 +53,8 @@ class InsertExtractElimPass : public MemPass {
   bool ExtInsConflict(
     const ir::Instruction* extInst, const ir::Instruction* insInst) const;
 
-  // Return true if |typeId| is a vector type
-  bool IsVectorType(uint32_t typeId);
+  // Return true if |typeId| is a |typeOp| type
+  bool IsType(uint32_t typeId, SpvOp typeOp);
 
   // Mark all inserts in chain starting at |ins| that intersect with |ext|.
   // Mark all insert in chain if |ext| is nullptr.

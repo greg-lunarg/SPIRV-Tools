@@ -56,9 +56,9 @@ bool InsertExtractElimPass::ExtInsConflict(const ir::Instruction* extInst,
   return true;
 }
 
-bool InsertExtractElimPass::IsVectorType(uint32_t typeId) {
+bool InsertExtractElimPass::IsType(uint32_t typeId, SpvOp typeOp) {
   ir::Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
-  return typeInst->opcode() == SpvOpTypeVector;
+  return typeInst->opcode() == typeOp;
 }
 
 void InsertExtractElimPass::markInChain(ir::Instruction* insert,
@@ -81,6 +81,9 @@ void InsertExtractElimPass::markInChain(ir::Instruction* insert,
   // If insert chain ended with phi, do recursive call on each operand
   if (inst->opcode() != SpvOpPhi)
     return;
+  if (liveInserts_.find(inst->result_id()) != liveInserts_.end())
+    return;
+  liveInserts_.insert(inst->result_id());
   uint32_t icnt = 0;
   inst->ForEachInId([&icnt,&extract,this](uint32_t* idp) {
     if (icnt % 2 == 0) {
@@ -89,6 +92,7 @@ void InsertExtractElimPass::markInChain(ir::Instruction* insert,
     }
     ++icnt;
   });
+  liveInserts_.erase(inst->result_id());
 }
 
 bool InsertExtractElimPass::EliminateDeadInserts(ir::Function* func) {
@@ -109,6 +113,8 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpCompositeInsert)
         continue;
+      if (!IsType(ii->type_id(), SpvOpTypeStruct))
+        continue;
       const uint32_t id = ii->result_id();
       const analysis::UseList* uses = get_def_use_mgr()->GetUses(id);
       if (uses == nullptr)
@@ -117,6 +123,7 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
         const SpvOp op = u.inst->opcode();
         switch (op) {
           case SpvOpCompositeInsert:
+          case SpvOpPhi:
             // Use by insert does not cause mark
             break;
           case SpvOpCompositeExtract: {
@@ -135,6 +142,8 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpCompositeInsert)
+        continue;
+      if (!IsType(ii->type_id(), SpvOpTypeStruct))
         continue;
       const uint32_t id = ii->result_id();
       if (liveInserts_.find(id) != liveInserts_.end())
@@ -178,7 +187,7 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
                cinst->opcode() == SpvOpConstantComposite) &&
               (*ii).NumInOperands() == 2) {
             uint32_t compIdx = (*ii).GetSingleWordInOperand(1);
-            if (IsVectorType(cinst->type_id())) {
+            if (IsType(cinst->type_id(), SpvOpTypeVector)) {
               if (compIdx < cinst->NumInOperands()) {
                 uint32_t i = 0;
                 for (; i <= compIdx; i++) {
