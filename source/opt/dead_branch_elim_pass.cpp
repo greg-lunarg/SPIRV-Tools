@@ -58,11 +58,11 @@ bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
     case SpvOpFOrdEqual:
     case SpvOpFOrdNotEqual: {
       float f0;
-      if (!Get32bConst(cInst->GetSingleWordInOperand(0), SpvOpTypeFloat,
+      if (!Get32bConst(cInst->GetSingleWordInOperand(0), 
           reinterpret_cast<uint32_t*>(&f0)))
         break;
       float f1;
-      if (!Get32bConst(cInst->GetSingleWordInOperand(1), SpvOpTypeFloat,
+      if (!Get32bConst(cInst->GetSingleWordInOperand(1),
           reinterpret_cast<uint32_t*>(&f1)))
         break;
       condIsConst = true;
@@ -79,10 +79,10 @@ bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
     case SpvOpIEqual:
     case SpvOpINotEqual: {
       uint32_t c0;
-      if (!Get32bConst(cInst->GetSingleWordInOperand(0), SpvOpTypeInt, &c0))
+      if (!Get32bConst(cInst->GetSingleWordInOperand(0), &c0))
         break;
       uint32_t c1;
-      if (!Get32bConst(cInst->GetSingleWordInOperand(1), SpvOpTypeInt, &c1))
+      if (!Get32bConst(cInst->GetSingleWordInOperand(1), &c1))
         break;
       *condVal = (op == SpvOpIEqual) ? (c0 == c1) : (c0 != c1);
       condIsConst = true;
@@ -93,14 +93,12 @@ bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
   return condIsConst;
 }
 
-bool DeadBranchElimPass::Get32bConst(uint32_t selId, SpvOp typeOp,
-    uint32_t* selVal) {
+bool DeadBranchElimPass::Get32bConst(uint32_t selId, uint32_t* selVal) {
   ir::Instruction* sInst = get_def_use_mgr()->GetDef(selId);
   uint32_t typeId = sInst->type_id();
   ir::Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
-  if (!typeInst || (typeInst->opcode() != typeOp)) return false;
   // TODO(greg-lunarg): Support non-32 bit ints
-  if (typeInst->GetSingleWordInOperand(0) != 32)
+  if (!typeInst || typeInst->GetSingleWordInOperand(0) != 32)
     return false;
   if (sInst->opcode() == SpvOpConstant) {
     *selVal = sInst->GetSingleWordInOperand(0);
@@ -109,6 +107,49 @@ bool DeadBranchElimPass::Get32bConst(uint32_t selId, SpvOp typeOp,
   else if (sInst->opcode() == SpvOpConstantNull) {
     *selVal = 0;
     return true;
+  }
+  else {
+    switch (sInst->opcode()) {
+      case SpvOpConvertFToS:
+      case SpvOpConvertSToF: {
+        uint32_t u;
+        if (!Get32bConst(sInst->GetSingleWordInOperand(0), &u))
+          return false;
+        switch (sInst->opcode()) {
+          case SpvOpConvertFToS: {
+            float* fp = reinterpret_cast<float*>(&u);
+            int32_t i = int32_t(*fp);
+            *selVal = *(reinterpret_cast<uint32_t*>(&i));
+            return true;
+          } break;
+          case SpvOpConvertSToF: {
+            float f = float(*(reinterpret_cast<int32_t*>(&u)));
+            uint32_t* up = reinterpret_cast<uint32_t*>(&f);
+            *selVal = *up;
+            return true;
+          } break;
+          default: {
+            assert(false && "missing op");
+            return false;
+          } break;
+        }
+      } break;
+      case SpvOpSelect: {
+        bool b;
+        if (!GetConstCondition(sInst->GetSingleWordInOperand(0), &b))
+          return false;
+        uint32_t u1;
+        if (!Get32bConst(sInst->GetSingleWordInOperand(1), &u1))
+          return false;
+        uint32_t u2;
+        if (!Get32bConst(sInst->GetSingleWordInOperand(2), &u2))
+          return false;
+        *selVal = b ? u1 : u2;
+        return true;
+      } break;
+      default: {
+      } break;
+    }
   }
   return false;
 }
@@ -244,7 +285,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       // Search switch operands for selector value, set liveLabId to
       // corresponding label, use default if not found
       uint32_t selVal;
-      if (!Get32bConst(condId, SpvOpTypeInt, &selVal))
+      if (!Get32bConst(condId, &selVal))
         continue;
       uint32_t icnt = 0;
       uint32_t caseVal;
