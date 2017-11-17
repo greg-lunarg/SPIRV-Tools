@@ -41,20 +41,23 @@ class InsertExtractElimPass : public MemPass {
   Status Process(ir::IRContext*) override;
 
  private:
-  // Return true if indices of extract |extInst| and insert |insInst| match
-  bool ExtInsMatch(
-    const ir::Instruction* extInst, const ir::Instruction* insInst) const;
-
-  // Return true if indices of extract |extInst| and insert |insInst| conflict,
-  // specifically, if the insert changes bits specified by the extract, but
-  // changes either more bits or less bits than the extract specifies,
-  // meaning the exact value being inserted cannot be used to replace
-  // the extract.
-  bool ExtInsConflict(
-    const ir::Instruction* extInst, const ir::Instruction* insInst) const;
-
   // Return true if |typeId| is a |typeOp| type
   bool IsType(uint32_t typeId, SpvOp typeOp);
+
+  // Return true if indices of extract |extInst| starting at |extOffset|
+  // match indices of insert |insInst|. 
+  bool ExtInsMatch(const ir::Instruction* extInst,
+                   const ir::Instruction* insInst,
+                   const uint32_t extOffset) const;
+
+  // Return true if indices of extract |extInst| starting at |extOffset| and
+  // indices of insert |insInst| conflict, specifically, if the insert
+  // changes bits specified by the extract, but changes either more bits
+  // or less bits than the extract specifies, meaning the exact value being
+  // inserted cannot be used to replace the extract.
+  bool ExtInsConflict(const ir::Instruction* extInst,
+                      const ir::Instruction* insInst,
+                      const uint32_t extOffset) const;
 
   // Mark all inserts in chain starting at |ins| that intersect with |ext|.
   // Mark all insert in chain if |ext| is nullptr.
@@ -69,10 +72,10 @@ class InsertExtractElimPass : public MemPass {
   // composite. Return true if modified.
   bool EliminateDeadInsertsOnePass(ir::Function* func);
 
-  // Look for OpExtract on sequence of OpInserts in |func|. If there is an
-  // insert with identical indices, replace the extract with the value
-  // that is inserted if possible. Specifically, replace if there is no
-  // intervening insert which conflicts.
+  // Look for OpExtract on sequence of OpInserts in |func|. If there is a
+  // reaching insert which corresponds to the indices of the extract, replace
+  // the extract with the value that is inserted. Also resolve extracts from
+  // CompositeConstruct or ConstantComposite.
   bool EliminateInsertExtract(ir::Function* func);
 
   // Initialize extensions whitelist
