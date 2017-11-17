@@ -40,17 +40,20 @@ class InsertExtractElimPass : public Pass {
   Status Process(ir::IRContext*) override;
 
  private:
-  // Return true if indices of extract |extInst| and insert |insInst| match
+  // Return true if indices of extract |extInst| starting at |offset|
+  // match indices of insert |insInst|. 
   bool ExtInsMatch(const ir::Instruction* extInst,
-                   const ir::Instruction* insInst) const;
+                   const ir::Instruction* insInst,
+                   const uint32_t offset) const;
 
-  // Return true if indices of extract |extInst| and insert |insInst| conflict,
-  // specifically, if the insert changes bits specified by the extract, but
-  // changes either more bits or less bits than the extract specifies,
-  // meaning the exact value being inserted cannot be used to replace
-  // the extract.
+  // Return true if indices of extract |extInst| starting at |offset| and
+  // indices of insert |insInst| conflict, specifically, if the insert
+  // changes bits specified by the extract, but changes either more bits
+  // or less bits than the extract specifies, meaning the exact value being
+  // inserted cannot be used to replace the extract.
   bool ExtInsConflict(const ir::Instruction* extInst,
-                      const ir::Instruction* insInst) const;
+                      const ir::Instruction* insInst,
+                      const uint32_t offset) const;
 
   // Return true if |typeId| is a vector type
   bool IsVectorType(uint32_t typeId);

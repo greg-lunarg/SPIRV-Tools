@@ -31,24 +31,28 @@ const uint32_t kInsertCompositeIdInIdx = 1;
 }  // anonymous namespace
 
 bool InsertExtractElimPass::ExtInsMatch(const ir::Instruction* extInst,
-                                        const ir::Instruction* insInst) const {
-  if (extInst->NumInOperands() != insInst->NumInOperands() - 1) return false;
-  uint32_t numIdx = extInst->NumInOperands() - 1;
+                                        const ir::Instruction* insInst,
+                                        const uint32_t offset) const {
+  if (extInst->NumInOperands() - offset != insInst->NumInOperands() - 1)
+    return false;
+  uint32_t numIdx = extInst->NumInOperands() - 1 - offset;
   for (uint32_t i = 0; i < numIdx; ++i)
-    if (extInst->GetSingleWordInOperand(i + 1) !=
+    if (extInst->GetSingleWordInOperand(i + 1 + offset) !=
         insInst->GetSingleWordInOperand(i + 2))
       return false;
   return true;
 }
 
 bool InsertExtractElimPass::ExtInsConflict(
-    const ir::Instruction* extInst, const ir::Instruction* insInst) const {
-  if (extInst->NumInOperands() == insInst->NumInOperands() - 1) return false;
-  uint32_t extNumIdx = extInst->NumInOperands() - 1;
+    const ir::Instruction* extInst, const ir::Instruction* insInst,
+    const uint32_t offset) const {
+  if (extInst->NumInOperands() - offset == insInst->NumInOperands() - 1)
+    return false;
+  uint32_t extNumIdx = extInst->NumInOperands() - 1 - offset;
   uint32_t insNumIdx = insInst->NumInOperands() - 2;
   uint32_t numIdx = std::min(extNumIdx, insNumIdx);
   for (uint32_t i = 0; i < numIdx; ++i)
-    if (extInst->GetSingleWordInOperand(i + 1) !=
+    if (extInst->GetSingleWordInOperand(i + 1 + offset) !=
         insInst->GetSingleWordInOperand(i + 2))
       return false;
   return true;
@@ -68,13 +72,29 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
           uint32_t cid = ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
           ir::Instruction* cinst = get_def_use_mgr()->GetDef(cid);
           uint32_t replId = 0;
+          // Offset of extract indices being compared
+          uint32_t offset = 0;
           while (cinst->opcode() == SpvOpCompositeInsert) {
-            if (ExtInsConflict(&*ii, cinst)) break;
-            if (ExtInsMatch(&*ii, cinst)) {
+            if (ExtInsMatch(&*ii, cinst, offset)) {
               replId = cinst->GetSingleWordInOperand(kInsertObjectIdInIdx);
               break;
             }
-            cid = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+            else if (ExtInsConflict(&*ii, cinst, offset)) {
+              // If extract has fewer indices than the insert, stop searching.
+              // Otherwise increment offset of indices considered and
+              // continue searching through the inserted value
+              if (ii->NumOperands() - offset < cinst->NumOperands() - 1) {
+                break;
+              }
+              else {
+                offset += cinst->NumOperands() - 1;
+                cid = cinst->GetSingleWordInOperand(kInsertObjectIdInIdx);
+              }
+            }
+            else {
+              // Consider next composite in insert chain
+              cid = cinst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+            }
             cinst = get_def_use_mgr()->GetDef(cid);
           }
           // If search ended with CompositeConstruct or ConstantComposite
@@ -85,8 +105,8 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
           // vector composition, and additional CompositeInsert.
           if ((cinst->opcode() == SpvOpCompositeConstruct ||
                cinst->opcode() == SpvOpConstantComposite) &&
-              (*ii).NumInOperands() == 2) {
-            uint32_t compIdx = (*ii).GetSingleWordInOperand(1);
+              (*ii).NumInOperands() - offset == 2) {
+            uint32_t compIdx = (*ii).GetSingleWordInOperand(offset + 1);
             if (IsVectorType(cinst->type_id())) {
               if (compIdx < cinst->NumInOperands()) {
                 uint32_t i = 0;
