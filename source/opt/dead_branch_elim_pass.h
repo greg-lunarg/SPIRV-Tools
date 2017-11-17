@@ -72,11 +72,20 @@ class DeadBranchElimPass : public MemPass {
   bool GetSelectionBranch(ir::BasicBlock* bp, ir::Instruction** branchInst,
     ir::Instruction** mergeInst, uint32_t *condId);
 
+  // If block |bp| contains an OpLoopMerge, set |mergeId| to the id of
+  // the merge block and return true.
+  bool GetLoopMerge(ir::BasicBlock* bp, uint32_t *mergeId);
+
   // Return true if |labelId| has any non-phi, non-backedge references
   bool HasNonPhiNonBackedgeRef(uint32_t labelId);
 
   // Compute backedges for blocks in |structuredOrder|.
   void ComputeBackEdges(std::list<ir::BasicBlock*>& structuredOrder);
+  
+  // Update phi instructions in |bp| given dead predecessor blocks in
+  // |deadPreds|.
+  void UpdatePhis(ir::BasicBlock* bp,
+      std::unordered_set<ir::BasicBlock*>& deadPreds);
 
   // For function |func|, look for BranchConditionals with constant condition
   // and convert to a Branch to the indicated label. Delete resulting dead

@@ -19,6 +19,8 @@
 #include "cfa.h"
 #include "iterator.h"
 
+#include <stack>
+
 namespace spvtools {
 namespace opt {
 
@@ -28,6 +30,7 @@ const uint32_t kBranchTargetLabIdInIdx = 0;
 const uint32_t kBranchCondTrueLabIdInIdx = 1;
 const uint32_t kBranchCondFalseLabIdInIdx = 2;
 const uint32_t kSelectionMergeMergeBlockIdInIdx = 0;
+const uint32_t kLoopMergeMergeBlockIdInIdx = 0;
 
 } // anonymous namespace
 
@@ -183,6 +186,19 @@ void DeadBranchElimPass::AddBranchConditional(uint32_t condId,
   bp->AddInstruction(std::move(newBranchCond));
 }
 
+bool DeadBranchElimPass::GetLoopMerge(ir::BasicBlock* bp, uint32_t *mergeId) {
+  auto ii = bp->end();
+  --ii;
+  if (ii == bp->begin())
+    return false;
+  --ii;
+  ir::Instruction* mergeInst = &*ii;
+  if (mergeInst->opcode() != SpvOpLoopMerge)
+    return false;
+  *mergeId = mergeInst->GetSingleWordInOperand(kLoopMergeMergeBlockIdInIdx);
+  return true;
+}
+
 bool DeadBranchElimPass::GetSelectionBranch(ir::BasicBlock* bp,
     ir::Instruction** branchInst, ir::Instruction** mergeInst,
     uint32_t *condId) {
@@ -250,14 +266,87 @@ void DeadBranchElimPass::ComputeBackEdges(
   }
 }
 
+void DeadBranchElimPass::UpdatePhis(ir::BasicBlock* bp,
+  std::unordered_set<ir::BasicBlock*>& deadPreds) {
+  for (auto pii = bp->begin(); ; ++pii) {
+    // Skip NoOps, break at end of phis
+    SpvOp op = pii->opcode();
+    if (op == SpvOpNop)
+      continue;
+    if (op != SpvOpPhi)
+      break;
+    // Count phi's live predecessors with lcnt and remember last one
+    // with lidx.
+    uint32_t lcnt = 0;
+    uint32_t lidx = 0;
+    uint32_t icnt = 0;
+    pii->ForEachInId(
+      [&deadPreds, &icnt, &lcnt, &lidx, this](uint32_t* idp) {
+      if (icnt % 2 == 1) {
+        if (deadPreds.find(cfg()->block(*idp)) == deadPreds.end()) {
+          ++lcnt;
+          lidx = icnt - 1;
+        }
+      }
+      ++icnt;
+    });
+    // If just one live predecessor, replace resultid with live value id.
+    uint32_t replId;
+    if (lcnt == 1) {
+      replId = pii->GetSingleWordInOperand(lidx);
+    }
+    else {
+      // Otherwise create new phi eliminating dead predecessor entries
+      assert(lcnt > 1);
+      replId = TakeNextId();
+      std::vector<ir::Operand> phi_in_opnds;
+      icnt = 0;
+      uint32_t lastId;
+      pii->ForEachInId(
+        [&deadPreds, &icnt, &phi_in_opnds, &lastId, this](uint32_t* idp) {
+        if (icnt % 2 == 1) {
+          if (deadPreds.find(cfg()->block(*idp)) == deadPreds.end()) {
+            phi_in_opnds.push_back(
+            { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ lastId } });
+            phi_in_opnds.push_back(
+            { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ *idp } });
+          }
+        }
+        else {
+          lastId = *idp;
+        }
+        ++icnt;
+      });
+      std::unique_ptr<ir::Instruction> newPhi(new ir::Instruction(
+        SpvOpPhi, pii->type_id(), replId, phi_in_opnds));
+      get_def_use_mgr()->AnalyzeInstDefUse(&*newPhi);
+      pii = pii.InsertBefore(std::move(newPhi));
+      ++pii;
+    }
+    const uint32_t phiId = pii->result_id();
+    KillNamesAndDecorates(phiId);
+    (void)get_def_use_mgr()->ReplaceAllUsesWith(phiId, replId);
+    get_def_use_mgr()->KillInst(&*pii);
+  }
+}
+
 bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
   // Traverse blocks in structured order
   std::list<ir::BasicBlock*> structuredOrder;
   cfg()->ComputeStructuredOrder(func, &*func->begin(), &structuredOrder);
   ComputeBackEdges(structuredOrder);
   std::unordered_set<ir::BasicBlock*> elimBlocks;
+  // Keep track of current loop mergeId.
+  std::stack<uint32_t> mergeIds;
   bool modified = false;
   for (auto bi = structuredOrder.begin(); bi != structuredOrder.end(); ++bi) {
+    // Check for exiting loop
+    if (!mergeIds.empty() && mergeIds.top() == (*bi)->id())
+      mergeIds.pop();
+    // Check for entering loop
+    uint32_t mergeId;
+    if (GetLoopMerge(*bi, &mergeId))
+      mergeIds.push(mergeId);
     // Skip blocks that are already in the elimination set
     if (elimBlocks.find(*bi) != elimBlocks.end())
       continue;
@@ -276,9 +365,9 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       bool condVal;
       if (!GetConstCondition(condId, &condVal))
         continue;
-      liveLabId = (condVal == true) ? 
-          br->GetSingleWordInOperand(kBranchCondTrueLabIdInIdx) :
-          br->GetSingleWordInOperand(kBranchCondFalseLabIdInIdx);
+      liveLabId = (condVal == true) ?
+        br->GetSingleWordInOperand(kBranchCondTrueLabIdInIdx) :
+        br->GetSingleWordInOperand(kBranchCondFalseLabIdInIdx);
     }
     else {
       assert(br->opcode() == SpvOpSwitch);
@@ -290,7 +379,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
       uint32_t icnt = 0;
       uint32_t caseVal;
       br->ForEachInOperand(
-            [&icnt,&caseVal,&selVal,&liveLabId](const uint32_t* idp) {
+        [&icnt, &caseVal, &selVal, &liveLabId](const uint32_t* idp) {
         if (icnt == 1) {
           // Start with default label
           liveLabId = *idp;
@@ -309,7 +398,7 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     }
 
     const uint32_t mergeLabId =
-        mergeInst->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
+      mergeInst->GetSingleWordInOperand(kSelectionMergeMergeBlockIdInIdx);
     AddBranch(liveLabId, *bi);
     get_def_use_mgr()->KillInst(br);
     get_def_use_mgr()->KillInst(mergeInst);
@@ -350,68 +439,12 @@ bool DeadBranchElimPass::EliminateDeadBranches(ir::Function* func) {
     std::unordered_set<ir::BasicBlock*> deadPreds(elimBlocks);
     if (liveLabId != dLabId)
       deadPreds.insert(*bi);
-
     // Update phi instructions in terminating block.
-    for (auto pii = (*dbi)->begin(); ; ++pii) {
-      // Skip NoOps, break at end of phis
-      SpvOp op = pii->opcode();
-      if (op == SpvOpNop)
-        continue;
-      if (op != SpvOpPhi)
-        break;
-      // Count phi's live predecessors with lcnt and remember last one
-      // with lidx.
-      uint32_t lcnt = 0;
-      uint32_t lidx = 0;
-      uint32_t icnt = 0;
-      pii->ForEachInId(
-          [&deadPreds,&icnt,&lcnt,&lidx,this](uint32_t* idp) {
-        if (icnt % 2 == 1) {
-          if (deadPreds.find(cfg()->block(*idp)) == deadPreds.end()) {
-            ++lcnt;
-            lidx = icnt - 1;
-          }
-        }
-        ++icnt;
-      });
-      // If just one live predecessor, replace resultid with live value id.
-      uint32_t replId;
-      if (lcnt == 1) {
-        replId = pii->GetSingleWordInOperand(lidx);
-      }
-      else {
-        // Otherwise create new phi eliminating dead predecessor entries
-        assert(lcnt > 1);
-        replId = TakeNextId();
-        std::vector<ir::Operand> phi_in_opnds;
-        icnt = 0;
-        uint32_t lastId;
-        pii->ForEachInId(
-            [&deadPreds,&icnt,&phi_in_opnds,&lastId,this](uint32_t* idp) {
-          if (icnt % 2 == 1) {
-            if (deadPreds.find(cfg()->block(*idp)) == deadPreds.end()) {
-              phi_in_opnds.push_back(
-                  {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {lastId}});
-              phi_in_opnds.push_back(
-                  {spv_operand_type_t::SPV_OPERAND_TYPE_ID, {*idp}});
-            }
-          }
-          else {
-            lastId = *idp;
-          }
-          ++icnt;
-        });
-        std::unique_ptr<ir::Instruction> newPhi(new ir::Instruction(
-            SpvOpPhi, pii->type_id(), replId, phi_in_opnds));
-        get_def_use_mgr()->AnalyzeInstDefUse(&*newPhi);
-        pii = pii.InsertBefore(std::move(newPhi));
-        ++pii;
-      }
-      const uint32_t phiId = pii->result_id();
-      KillNamesAndDecorates(phiId);
-      (void)get_def_use_mgr()->ReplaceAllUsesWith(phiId, replId);
-      get_def_use_mgr()->KillInst(&*pii);
-    }
+    UpdatePhis(*dbi, deadPreds);
+    // Since deleted blocks can branch to innermost loop's merge block, update
+    // phi instructions in that block, if any
+    if (!mergeIds.empty())
+      UpdatePhis(cfg()->block(mergeIds.top()), deadPreds);
   }
 
   // Erase dead blocks
