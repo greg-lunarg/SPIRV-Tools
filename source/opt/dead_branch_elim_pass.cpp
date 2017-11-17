@@ -90,6 +90,30 @@ bool DeadBranchElimPass::GetConstCondition(uint32_t condId, bool* condVal) {
       *condVal = (op == SpvOpIEqual) ? (c0 == c1) : (c0 != c1);
       condIsConst = true;
     } break;
+    case SpvOpLogicalAnd: {
+      bool b0;
+      if (GetConstCondition(cInst->GetSingleWordInOperand(0), &b0)) {
+        if (!b0) {
+          *condVal = false;
+          condIsConst = true;
+          break;
+        }
+      }
+      else
+        break;
+      bool b1;
+      if (GetConstCondition(cInst->GetSingleWordInOperand(1), &b1)) {
+        if (!b1) {
+          *condVal = false;
+          condIsConst = true;
+          break;
+        }
+      }
+      else
+        break;
+      *condVal = b0 && b1;
+      condIsConst = true;
+    } break;
     default: {
     } break;
   }
