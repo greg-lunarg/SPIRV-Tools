@@ -83,11 +83,11 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
               // If extract has fewer indices than the insert, stop searching.
               // Otherwise increment offset of indices considered and
               // continue searching through the inserted value
-              if (ii->NumOperands() - offset < cinst->NumOperands() - 1) {
+              if (ii->NumInOperands() - offset < cinst->NumInOperands() - 1) {
                 break;
               }
               else {
-                offset += cinst->NumOperands() - 1;
+                offset += cinst->NumInOperands() - 2;
                 cid = cinst->GetSingleWordInOperand(kInsertObjectIdInIdx);
               }
             }
