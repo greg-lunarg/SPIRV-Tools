@@ -113,8 +113,6 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpCompositeInsert)
         continue;
-      if (!IsType(ii->type_id(), SpvOpTypeStruct))
-        continue;
       const uint32_t id = ii->result_id();
       const analysis::UseList* uses = get_def_use_mgr()->GetUses(id);
       if (uses == nullptr)
@@ -124,7 +122,7 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
         switch (op) {
           case SpvOpCompositeInsert:
           case SpvOpPhi:
-            // Use by insert does not cause mark
+            // Use by insert or phi does not cause mark
             break;
           case SpvOpCompositeExtract: {
             // Mark all inserts in chain that intersect with extract
