@@ -19,6 +19,8 @@
 #include "iterator.h"
 #include "ir_context.h"
 
+#include <vector>
+
 namespace spvtools {
 namespace opt {
 
@@ -30,29 +32,29 @@ const uint32_t kInsertCompositeIdInIdx = 1;
 
 } // anonymous namespace
 
-bool InsertExtractElimPass::ExtInsMatch(const ir::Instruction* extInst,
-                                        const ir::Instruction* insInst,
-                                        const uint32_t extOffset) const {
-  if (extInst->NumInOperands() - extOffset != insInst->NumInOperands() - 1)
+bool InsertExtractElimPass::ExtInsMatch(
+    const std::vector<uint32_t>& extIndices, const ir::Instruction* insInst,
+    const uint32_t extOffset) const {
+  uint32_t numIndices = static_cast<uint32_t>(extIndices.size()) - extOffset;
+  if (numIndices != insInst->NumInOperands() - 2)
     return false;
-  uint32_t numIdx = extInst->NumInOperands() - 1 - extOffset;
-  for (uint32_t i = 0; i < numIdx; ++i)
-    if (extInst->GetSingleWordInOperand(i + 1 + extOffset) !=
+  for (uint32_t i = 0; i < numIndices; ++i)
+    if (extIndices[i + extOffset] !=
         insInst->GetSingleWordInOperand(i + 2))
       return false;
   return true;
 }
 
 bool InsertExtractElimPass::ExtInsConflict(
-    const ir::Instruction* extInst, const ir::Instruction* insInst,
+    const std::vector<uint32_t>& extIndices, const ir::Instruction* insInst,
     const uint32_t extOffset) const {
-  if (extInst->NumInOperands() - extOffset == insInst->NumInOperands() - 1)
+  if (extIndices.size() - extOffset == insInst->NumInOperands() - 2)
     return false;
-  uint32_t extNumIdx = extInst->NumInOperands() - 1 - extOffset;
-  uint32_t insNumIdx = insInst->NumInOperands() - 2;
-  uint32_t numIdx = std::min(extNumIdx, insNumIdx);
-  for (uint32_t i = 0; i < numIdx; ++i)
-    if (extInst->GetSingleWordInOperand(i + 1 + extOffset) !=
+  uint32_t extNumIndices = static_cast<uint32_t>(extIndices.size()) - extOffset;
+  uint32_t insNumIndices = insInst->NumInOperands() - 2;
+  uint32_t numIndices = std::min(extNumIndices, insNumIndices);
+  for (uint32_t i = 0; i < numIndices; ++i)
+    if (extIndices[i + extOffset] !=
         insInst->GetSingleWordInOperand(i + 2))
       return false;
   return true;
@@ -65,15 +67,22 @@ bool InsertExtractElimPass::IsType(uint32_t typeId, SpvOp typeOp) {
 
 void InsertExtractElimPass::markInChain(ir::Instruction* insert,
   ir::Instruction* extract) {
-  ir::Instruction* inst = insert;
+  ir::Instruction* inst = insert;          // Capture extract indices
+  std::vector<uint32_t> extIndices;
+  uint32_t icnt = 0;
+  extract->ForEachInOperand([&icnt, &extIndices](const uint32_t* idp) {
+    if (icnt > 0)
+      extIndices.push_back(*idp);
+    ++icnt;
+  });
   while (inst->opcode() == SpvOpCompositeInsert) {
     // Once we find a matching insert, we are done
-    if (extract != nullptr && ExtInsMatch(extract, inst, 0)) {
+    if (extract != nullptr && ExtInsMatch(extIndices, inst, 0)) {
       liveInserts_.insert(inst->result_id());
       break;
     }
     // If no extract or non-matching intersection, mark live and continue
-    if (extract == nullptr || ExtInsConflict(extract, inst, 0))
+    if (extract == nullptr || ExtInsConflict(extIndices, inst, 0))
       liveInserts_.insert(inst->result_id());
     // Get next insert in chain
     const uint32_t compId =
@@ -86,7 +95,7 @@ void InsertExtractElimPass::markInChain(ir::Instruction* insert,
   if (liveInserts_.find(inst->result_id()) != liveInserts_.end())
     return;
   liveInserts_.insert(inst->result_id());
-  uint32_t icnt = 0;
+  icnt = 0;
   inst->ForEachInId([&icnt,&extract,this](uint32_t* idp) {
     if (icnt % 2 == 0) {
       ir::Instruction* pi = get_def_use_mgr()->GetDef(*idp);
@@ -166,22 +175,29 @@ bool InsertExtractElimPass::EliminateInsertExtract(ir::Function* func) {
         case SpvOpCompositeExtract: {
           uint32_t cid = ii->GetSingleWordInOperand(kExtractCompositeIdInIdx);
           ir::Instruction* cinst = get_def_use_mgr()->GetDef(cid);
-          uint32_t replId = 0;
+          // Capture extract indices
+          std::vector<uint32_t> extIndices;
+          uint32_t icnt = 0;
+          ii->ForEachInOperand([&icnt,&extIndices](const uint32_t* idp){
+            if (icnt > 0)
+              extIndices.push_back(*idp);
+            ++icnt;
+          });
           // Offset of extract indices being compared to insert indices.
           // Offset increases as indices are matched.
           uint32_t extOffset = 0;
+          uint32_t replId = 0;
           while (cinst->opcode() == SpvOpCompositeInsert) {
-            if (ExtInsMatch(&*ii, cinst, extOffset)) {
+            if (ExtInsMatch(extIndices, cinst, extOffset)) {
               // Match! Use inserted value as replacement
               replId = cinst->GetSingleWordInOperand(kInsertObjectIdInIdx);
               break;
             }
-            else if (ExtInsConflict(&*ii, cinst, extOffset)) {
+            else if (ExtInsConflict(extIndices, cinst, extOffset)) {
               // If extract has fewer indices than the insert, stop searching.
               // Otherwise increment offset of extract indices considered and
               // continue searching through the inserted value
-              if (ii->NumInOperands() - extOffset <
-                  cinst->NumInOperands() - 1) {
+              if (extIndices.size() - extOffset < cinst->NumInOperands() - 2) {
                 break;
               }
               else {

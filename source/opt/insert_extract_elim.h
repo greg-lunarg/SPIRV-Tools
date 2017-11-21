@@ -46,7 +46,7 @@ class InsertExtractElimPass : public MemPass {
 
   // Return true if indices of extract |extInst| starting at |extOffset|
   // match indices of insert |insInst|. 
-  bool ExtInsMatch(const ir::Instruction* extInst,
+  bool ExtInsMatch(const std::vector<uint32_t>& extIndices,
                    const ir::Instruction* insInst,
                    const uint32_t extOffset) const;
 
@@ -55,7 +55,7 @@ class InsertExtractElimPass : public MemPass {
   // changes bits specified by the extract, but changes either more bits
   // or less bits than the extract specifies, meaning the exact value being
   // inserted cannot be used to replace the extract.
-  bool ExtInsConflict(const ir::Instruction* extInst,
+  bool ExtInsConflict(const std::vector<uint32_t>& extIndices,
                       const ir::Instruction* insInst,
                       const uint32_t extOffset) const;
 
