@@ -59,9 +59,15 @@ class InsertExtractElimPass : public MemPass {
                       const ir::Instruction* insInst,
                       const uint32_t extOffset) const;
 
-  // Mark all inserts in chain starting at |ins| that intersect with |ext|.
-  // Mark all insert in chain if |ext| is nullptr.
-  void markInChain(ir::Instruction* ins, ir::Instruction* ext);
+  // Return the number of subcomponents in the composite type |typeId|.
+  // Return 0 if not a composite type.
+  uint32_t ComponentNum(uint32_t typeId);
+
+  // Mark all inserts in chain starting at |ins| that intersect with
+  // |extIndices| starting with index at |extOffset|. Mark all inserts
+  // in chain if |ext| is nullptr.
+  void markInsertChain(ir::Instruction* ins, std::vector<uint32_t>* extIndices,
+      uint32_t extOffset);
 
   // Perform EliminateDeadInsertsOnePass(|func|) until no modification is
   // made. Return true if modified.

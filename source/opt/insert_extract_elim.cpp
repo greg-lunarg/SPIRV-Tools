@@ -29,6 +29,11 @@ namespace {
 const uint32_t kExtractCompositeIdInIdx = 0;
 const uint32_t kInsertObjectIdInIdx = 0;
 const uint32_t kInsertCompositeIdInIdx = 1;
+const uint32_t kTypeVectorCountInIdx = 1;
+const uint32_t kTypeMatrixCountInIdx = 1;
+const uint32_t kTypeArrayLengthIdInIdx = 1;
+const uint32_t kTypeIntWidthInIdx = 0;
+const uint32_t kConstantValueInIdx = 0;
 
 } // anonymous namespace
 
@@ -65,45 +70,109 @@ bool InsertExtractElimPass::IsType(uint32_t typeId, SpvOp typeOp) {
   return typeInst->opcode() == typeOp;
 }
 
-void InsertExtractElimPass::markInChain(ir::Instruction* insert,
-  ir::Instruction* extract) {
-  ir::Instruction* inst = insert;          // Capture extract indices
-  std::vector<uint32_t> extIndices;
-  uint32_t icnt = 0;
-  extract->ForEachInOperand([&icnt, &extIndices](const uint32_t* idp) {
-    if (icnt > 0)
-      extIndices.push_back(*idp);
-    ++icnt;
-  });
-  while (inst->opcode() == SpvOpCompositeInsert) {
-    // Once we find a matching insert, we are done
-    if (extract != nullptr && ExtInsMatch(extIndices, inst, 0)) {
-      liveInserts_.insert(inst->result_id());
+uint32_t InsertExtractElimPass::ComponentNum(uint32_t typeId) {
+  ir::Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
+  switch (typeInst->opcode()) {
+    case SpvOpTypeVector: {
+      return typeInst->GetSingleWordInOperand(kTypeVectorCountInIdx);
+    } break;
+    case SpvOpTypeMatrix: {
+      return typeInst->GetSingleWordInOperand(kTypeMatrixCountInIdx);
+    } break;
+    case SpvOpTypeArray: {
+      uint32_t lenId =
+        typeInst->GetSingleWordInOperand(kTypeArrayLengthIdInIdx);
+      ir::Instruction* lenInst = get_def_use_mgr()->GetDef(lenId);
+      if (lenInst->opcode() != SpvOpConstant)
+        return 0;
+      uint32_t lenTypeId = lenInst->type_id();
+      ir::Instruction* lenTypeInst = get_def_use_mgr()->GetDef(lenTypeId);
+      // TODO(greg-lunarg): Support non-32-bit array length
+      if (lenTypeInst->GetSingleWordInOperand(kTypeIntWidthInIdx) != 32)
+        return 0;
+      return lenInst->GetSingleWordInOperand(kConstantValueInIdx);
+    } break;
+    default: {
+      return 0;
+    } break;
+  }
+}
+
+void InsertExtractElimPass::markInsertChain(ir::Instruction* insert,
+    std::vector<uint32_t>* pExtIndices, uint32_t extOffset) {
+  // If extract indices are empty, mark all subcomponents if type
+  // is constant length.
+  if (pExtIndices == nullptr) {
+    uint32_t cnum = ComponentNum(insert->type_id());
+    if (cnum > 0) {
+      std::vector<uint32_t> extIndices;
+      for (uint32_t i = 0; i < cnum; i++) {
+        extIndices.clear();
+        extIndices.push_back(i);
+        markInsertChain(insert, &extIndices, 0);
+      }
+      return;
+    }
+  }
+  ir::Instruction* insInst = insert;
+  while (insInst->opcode() == SpvOpCompositeInsert) {
+    // If no extract indices, mark insert and inserted object and continue
+    if (pExtIndices == nullptr) {
+      liveInserts_.insert(insInst->result_id());
+      uint32_t objId = insInst->GetSingleWordInOperand(kInsertObjectIdInIdx);
+      markInsertChain(get_def_use_mgr()->GetDef(objId), nullptr, 0);
+    }
+    // If extract indices match insert, we are done. Mark insert and
+    // inserted object which could also be an insert chain. 
+    else if (ExtInsMatch(*pExtIndices, insInst, extOffset)) {
+      liveInserts_.insert(insInst->result_id());
+      uint32_t objId = insInst->GetSingleWordInOperand(kInsertObjectIdInIdx);
+      markInsertChain(get_def_use_mgr()->GetDef(objId), nullptr, 0);
       break;
     }
-    // If no extract or non-matching intersection, mark live and continue
-    if (extract == nullptr || ExtInsConflict(extIndices, inst, 0))
-      liveInserts_.insert(inst->result_id());
+    // If non-matching intersection, mark insert
+    else if (ExtInsConflict(*pExtIndices, insInst, extOffset)) {
+      liveInserts_.insert(insInst->result_id());
+      // If more extract indices than insert, we are done. Use remaining
+      // extract indices to mark inserted object.
+      uint32_t numInsertIndices = insInst->NumInOperands() - 2;
+      if (pExtIndices->size() - extOffset > numInsertIndices) {
+        uint32_t objId = insInst->GetSingleWordInOperand(kInsertObjectIdInIdx);
+        markInsertChain(get_def_use_mgr()->GetDef(objId), pExtIndices,
+            extOffset + numInsertIndices);
+        break;
+      }
+      // If fewer extract indices than insert, also mark inserted object and
+      // continue up chain.
+      else {
+        uint32_t objId = insInst->GetSingleWordInOperand(kInsertObjectIdInIdx);
+        markInsertChain(get_def_use_mgr()->GetDef(objId), nullptr, 0);
+      }
+    }
     // Get next insert in chain
     const uint32_t compId =
-        inst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
-    inst = get_def_use_mgr()->GetDef(compId);
+        insInst->GetSingleWordInOperand(kInsertCompositeIdInIdx);
+    insInst = get_def_use_mgr()->GetDef(compId);
   }
   // If insert chain ended with phi, do recursive call on each operand
-  if (inst->opcode() != SpvOpPhi)
+  if (insInst->opcode() != SpvOpPhi)
     return;
-  if (liveInserts_.find(inst->result_id()) != liveInserts_.end())
+  // If phi is already live, we have processed already. Return to
+  // avoid infinite loop
+  if (liveInserts_.find(insInst->result_id()) != liveInserts_.end())
     return;
-  liveInserts_.insert(inst->result_id());
-  icnt = 0;
-  inst->ForEachInId([&icnt,&extract,this](uint32_t* idp) {
+  // Insert phi into live set to allow infinite loop check
+  liveInserts_.insert(insInst->result_id());
+  uint32_t icnt = 0;
+  insInst->ForEachInId([&icnt,&pExtIndices,&extOffset,this](uint32_t* idp) {
     if (icnt % 2 == 0) {
       ir::Instruction* pi = get_def_use_mgr()->GetDef(*idp);
-      markInChain(pi, extract);
+      markInsertChain(pi, pExtIndices, extOffset);
     }
     ++icnt;
   });
-  liveInserts_.erase(inst->result_id());
+  // Remove phi from live set when finished
+  liveInserts_.erase(insInst->result_id());
 }
 
 bool InsertExtractElimPass::EliminateDeadInserts(ir::Function* func) {
@@ -136,12 +205,21 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
             // Use by insert or phi does not cause mark
             break;
           case SpvOpCompositeExtract: {
+            // Capture extract indices
+            std::vector<uint32_t> extIndices;
+            uint32_t icnt = 0;
+            u.inst->ForEachInOperand([&icnt, &extIndices]
+                (const uint32_t* idp) {
+              if (icnt > 0)
+                extIndices.push_back(*idp);
+              ++icnt;
+            });
             // Mark all inserts in chain that intersect with extract
-            markInChain(&*ii, u.inst);
+            markInsertChain(&*ii, &extIndices, 0);
           } break;
           default: {
             // Mark all inserts in chain
-            markInChain(&*ii, nullptr);
+            markInsertChain(&*ii, nullptr, 0);
           } break;
         }
       }
@@ -151,8 +229,6 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       if (ii->opcode() != SpvOpCompositeInsert)
-        continue;
-      if (!IsType(ii->type_id(), SpvOpTypeStruct))
         continue;
       const uint32_t id = ii->result_id();
       if (liveInserts_.find(id) != liveInserts_.end())
