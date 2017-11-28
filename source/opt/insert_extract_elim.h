@@ -59,8 +59,12 @@ class InsertExtractElimPass : public MemPass {
                       const ir::Instruction* insInst,
                       const uint32_t extOffset) const;
 
+  // Return true if |typeId| is composite.
+  bool IsComposite(uint32_t typeId);
+
   // Return the number of subcomponents in the composite type |typeId|.
-  // Return 0 if not a composite type.
+  // Return 0 if not a composite type or number of components is not a
+  // 32-bit constant.
   uint32_t ComponentNum(uint32_t typeId);
 
   // Mark all inserts in chain starting at |ins| that intersect with
