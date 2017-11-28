@@ -70,6 +70,19 @@ bool InsertExtractElimPass::IsType(uint32_t typeId, SpvOp typeOp) {
   return typeInst->opcode() == typeOp;
 }
 
+bool InsertExtractElimPass::IsComposite(uint32_t typeId) {
+  ir::Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
+  switch (typeInst->opcode()) {
+  case SpvOpTypeVector:
+  case SpvOpTypeMatrix:
+  case SpvOpTypeArray:
+  case SpvOpTypeStruct:
+    return true;
+  default:
+    return false;
+  }
+}
+
 uint32_t InsertExtractElimPass::ComponentNum(uint32_t typeId) {
   ir::Instruction* typeInst = get_def_use_mgr()->GetDef(typeId);
   switch (typeInst->opcode()) {
@@ -191,7 +204,9 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
   liveInserts_.clear();
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
-      if (ii->opcode() != SpvOpCompositeInsert)
+      SpvOp op = ii->opcode();
+      if (op != SpvOpCompositeInsert && op != SpvOpPhi ||
+          !IsComposite(ii->type_id()))
         continue;
       const uint32_t id = ii->result_id();
       const analysis::UseList* uses = get_def_use_mgr()->GetUses(id);
