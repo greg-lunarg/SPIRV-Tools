@@ -82,6 +82,11 @@ class InsertExtractElimPass : public MemPass {
   // composite. Return true if modified.
   bool EliminateDeadInsertsOnePass(ir::Function* func);
 
+  // Return id of component of |cinst| specified by |extIndices| starting with
+  // index at |extOffset|. Return 0 if indices cannot be matched exactly.
+  uint32_t DoExtract(ir::Instruction* cinst, std::vector<uint32_t>* extIndices,
+    uint32_t extOffset);
+
   // Look for OpExtract on sequence of OpInserts in |func|. If there is a
   // reaching insert which corresponds to the indices of the extract, replace
   // the extract with the value that is inserted. Also resolve extracts from
