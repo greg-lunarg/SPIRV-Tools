@@ -42,9 +42,9 @@ const uint32_t kTypeVectorCompTypeIdInIdx = 0;
 const uint32_t kTypeVectorLengthInIdx = 1;
 const uint32_t kExtInstSetIdInIdx = 0;
 const uint32_t kExtInstInstructionInIdx = 1;
-const uint32_t kFMixXIdInIdx = 1;
-const uint32_t kFMixYIdInIdx = 2;
-const uint32_t kFMixAIdInIdx = 3;
+const uint32_t kFMixXIdInIdx = 2;
+const uint32_t kFMixYIdInIdx = 3;
+const uint32_t kFMixAIdInIdx = 4;
 
 } // anonymous namespace
 
