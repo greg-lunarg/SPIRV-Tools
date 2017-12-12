@@ -120,8 +120,8 @@ bool AggressiveDCEPass::IsStructuredIfOrLoopHeader(ir::BasicBlock* bp,
 
 void AggressiveDCEPass::ComputeBlock2HeaderMaps(
     std::list<ir::BasicBlock*>& structuredOrder) {
-  block2headerMerge_.clear();
   block2headerBranch_.clear();
+  branch2merge_.clear();
   std::stack<ir::Instruction*> currentMergeInst;
   std::stack<ir::Instruction*> currentBranchInst;
   std::stack<uint32_t> currentMergeBlockId;
@@ -146,8 +146,9 @@ void AggressiveDCEPass::ComputeBlock2HeaderMaps(
       currentMergeInst.push(mergeInst);
       currentBranchInst.push(branchInst);
     }
-    block2headerMerge_[*bi] = currentMergeInst.top();
-    block2headerBranch_[*bi] = currentBranchInst.top();
+    ir::Instruction* cbi = currentBranchInst.top();
+    block2headerBranch_[*bi] = cbi;
+    branch2merge_[cbi] = currentMergeInst.top();
     // If there is live code following if header, the if is live
     if (is_header && mergeInst->opcode() == SpvOpSelectionMerge) {
       currentMergeBlockId.push(mergeBlockId);
@@ -172,8 +173,18 @@ void AggressiveDCEPass::AddBranch(uint32_t labelId, ir::BasicBlock* bp) {
   bp->AddInstruction(std::move(newBranch));
 }
 
-void AggressiveDCEPass::AddBranchesToWorklist(uint32_t labelId) {
-  get_def_use_mgr()->ForEachUser(labelId, [this](ir::Instruction* user) {
+void AggressiveDCEPass::AddBreaksAndContinuesToWorklist(
+      ir::Instruction* mergeInst) {
+  const uint32_t mergeId =
+      mergeInst->GetSingleWordInOperand(kLoopMergeMergeBlockIdInIdx);
+  get_def_use_mgr()->ForEachUser(mergeId, [this](ir::Instruction* user) {
+    SpvOp op = user->opcode();
+    if (op == SpvOpBranchConditional || op == SpvOpBranch)
+      if (!IsLive(user)) AddToWorklist(user);
+  });
+  const uint32_t contId =
+      mergeInst->GetSingleWordInOperand(kLoopMergeContinueBlockIdInIdx);
+  get_def_use_mgr()->ForEachUser(contId, [this](ir::Instruction* user) {
     SpvOp op = user->opcode();
     if (op == SpvOpBranchConditional || op == SpvOpBranch)
       if (!IsLive(user)) AddToWorklist(user);
@@ -196,9 +207,8 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
   func_is_entry_point_ = false;
   private_stores_.clear();
   // Stacks to keep track of when we are inside an if- or loop-construct.
-  // When not immediately inside an if- or loop-construct,  we must assume
-  // all branches are live as we may be inside of a control construct (ie
-  // switch) which is not part of the ADCE analysis.
+  // When immediately inside an if- or loop-construct, we do not initially
+  // mark branches live. 
   std::stack<bool> assume_branches_live;
   std::stack<uint32_t> currentMergeBlockId;
   // Push sentinel values on stack for when outside of any control flow.
@@ -294,16 +304,11 @@ bool AggressiveDCEPass::AggressiveDCE(ir::Function* func) {
     ir::Instruction* branchInst = block2headerBranch_[blk];
     if (branchInst != nullptr && !IsLive(branchInst)) {
       AddToWorklist(branchInst);
-      ir::Instruction* mergeInst = block2headerMerge_[blk];
+      ir::Instruction* mergeInst = branch2merge_[branchInst];
       AddToWorklist(mergeInst);
-      // If in a loop, mark all branches targeting merge block
-      // and continue block as live.
-      if (mergeInst->opcode() == SpvOpLoopMerge) {
-        AddBranchesToWorklist(
-            mergeInst->GetSingleWordInOperand(kLoopMergeMergeBlockIdInIdx));
-        AddBranchesToWorklist(
-            mergeInst->GetSingleWordInOperand(kLoopMergeContinueBlockIdInIdx));
-      }
+      // If in a loop, mark all its break and continue instructions live
+      if (mergeInst->opcode() == SpvOpLoopMerge)
+        AddBreaksAndContinuesToWorklist(mergeInst);
     }
     // If local load, add all variable's stores if variable not already live
     if (liveInst->opcode() == SpvOpLoad) {
