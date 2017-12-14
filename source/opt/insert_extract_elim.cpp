@@ -216,7 +216,7 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     for (auto ii = bi->begin(); ii != bi->end(); ++ii) {
       SpvOp op = ii->opcode();
-      if (op != SpvOpCompositeInsert && op != SpvOpPhi ||
+      if ((op != SpvOpCompositeInsert && op != SpvOpPhi) ||
           !IsComposite(ii->type_id()))
         continue;
       const uint32_t id = ii->result_id();
@@ -224,8 +224,7 @@ bool InsertExtractElimPass::EliminateDeadInsertsOnePass(ir::Function* func) {
       if (uses == nullptr)
         continue;
       for (const auto u : *uses) {
-        const SpvOp op = u.inst->opcode();
-        switch (op) {
+        switch (u.inst->opcode()) {
           case SpvOpCompositeInsert:
           case SpvOpPhi:
             // Use by insert or phi does not cause mark
@@ -364,7 +363,7 @@ uint32_t InsertExtractElimPass::DoExtract(ir::Instruction* compInst,
       (cinst->opcode() == SpvOpCompositeConstruct ||
       cinst->opcode() == SpvOpConstantComposite) &&
       (*pExtIndices).size() - extOffset == 1) {
-    uint32_t compIdx = (*pExtIndices)[extOffset];
+    uint32_t cIdx = (*pExtIndices)[extOffset];
     // If a vector CompositeConstruct we make sure all preceding
     // components are of component type (not vector composition).
     uint32_t ctype_id = cinst->type_id();
@@ -373,20 +372,20 @@ uint32_t InsertExtractElimPass::DoExtract(ir::Instruction* compInst,
         cinst->opcode() == SpvOpConstantComposite) {
       uint32_t vec_comp_type_id =
           ctype_inst->GetSingleWordInOperand(kTypeVectorCompTypeIdInIdx);
-      if (compIdx < cinst->NumInOperands()) {
+      if (cIdx < cinst->NumInOperands()) {
         uint32_t i = 0;
-        for (; i <= compIdx; i++) {
-          uint32_t compId = cinst->GetSingleWordInOperand(i);
-          ir::Instruction* compInst = get_def_use_mgr()->GetDef(compId);
-          if (compInst->type_id() != vec_comp_type_id)
+        for (; i <= cIdx; i++) {
+          uint32_t cId = cinst->GetSingleWordInOperand(i);
+          ir::Instruction* componentInst = get_def_use_mgr()->GetDef(cId);
+          if (componentInst->type_id() != vec_comp_type_id)
             break;
         }
-        if (i > compIdx)
-          replId = cinst->GetSingleWordInOperand(compIdx);
+        if (i > cIdx)
+          replId = cinst->GetSingleWordInOperand(cIdx);
       }
     }
     else {
-      replId = cinst->GetSingleWordInOperand(compIdx);
+      replId = cinst->GetSingleWordInOperand(cIdx);
     }
   }
   return replId;
