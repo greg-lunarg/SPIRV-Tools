@@ -181,8 +181,8 @@ uint32_t InsertExtractElimPass::DoExtract(ir::Instruction* compInst,
         uint32_t i = 0;
         for (; i <= compIdx; i++) {
           uint32_t compId = cinst->GetSingleWordInOperand(i);
-          ir::Instruction* compInst = get_def_use_mgr()->GetDef(compId);
-          if (compInst->type_id() != vec_comp_type_id)
+          ir::Instruction* componentInst = get_def_use_mgr()->GetDef(compId);
+          if (componentInst->type_id() != vec_comp_type_id)
             break;
         }
         if (i > compIdx)
