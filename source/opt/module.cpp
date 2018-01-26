@@ -157,10 +157,13 @@ bool Module::IsShader() {
 }
 
 uint32_t Module::GetExtInstImportId(const char* extstr) {
-  for (auto& ei : ext_inst_imports_)
+  for (auto& ei : ext_inst_imports_) {
+    if (ei.opcode() != SpvOpExtInstImport)
+      continue;
     if (!strcmp(extstr,
-                reinterpret_cast<const char*>(&(ei.GetInOperand(0).words[0]))))
+        reinterpret_cast<const char*>(&(ei.GetInOperand(0).words[0]))))
       return ei.result_id();
+  }
   return 0;
 }
 
