@@ -122,11 +122,12 @@ std::vector<const analysis::Constant*> GetVectorComponents(
   return components;
 }
 
-// Returns a |ConstantFoldingRule| that folds floating point scalars using
-// |scalar_rule| and vectors of floating point by applying |scalar_rule| to the
-// elements of the vector.  The |ConstantFoldingRule| that is returned assumes
-// that |constants| contains 1 entry.  If they are not |nullptr|, then their
-// type is either |Float| or a |Vector| whose element type is |Float|.
+// Returns a |ConstantFoldingRule| that folds unary floating point scalar ops
+// using |scalar_rule| and unary float point vectors ops by applying
+// |scalar_rule| to the elements of the vector.  The |ConstantFoldingRule|
+// that is returned assumes that |constants| contains 1 entry.  If they are
+// not |nullptr|, then their type is either |Float| or |Integer| or a |Vector|
+// whose element type is |Float| or |Integer|.
 ConstantFoldingRule FoldFPUnaryOp(UnaryScalarFoldingRule scalar_rule) {
   return [scalar_rule](ir::Instruction* inst,
                        const std::vector<const analysis::Constant*>& constants)
@@ -253,6 +254,20 @@ double GetDoubleFromConst(const analysis::Constant* c) {
   }
 }
 
+// Returns the integer value of |c|.  The constant |c| must have type
+// |Integer|, and width |32|.
+uint32_t GetIntegerFromConst(const analysis::Constant* c) {
+  assert(c->type()->AsInteger() != nullptr &&
+         c->type()->AsInteger()->width() == 32);
+  const analysis::IntConstant* ic = c->AsIntConstant();
+  if (ic) {
+    return ic->GetU32BitValue();
+  } else {
+    assert(c->AsNullConstant() && "c must be an integer constant.");
+    return 0.0f;
+  }
+}
+
 // This macro defines a |UnaryScalarFoldingRule| that performs float to
 // integer conversion.
 // TODO(greg-lunarg): Support for 64-bit integer types.
@@ -284,6 +299,38 @@ double GetDoubleFromConst(const analysis::Constant* c) {
     return nullptr;                                                       \
   }
 
+// This macro defines a |UnaryScalarFoldingRule| that performs integer to
+// float conversion.
+// TODO(greg-lunarg): Support for 64-bit integer types.
+#define FOLD_ITOF_OP()                                                    \
+  [](const analysis::Type* result_type, const analysis::Constant* a,      \
+     analysis::ConstantManager* const_mgr) -> const analysis::Constant* { \
+    assert(result_type != nullptr && a != nullptr);                       \
+    const analysis::Integer* integer_type = a->type()->AsInteger();       \
+    const analysis::Float* float_type = result_type->AsFloat();           \
+    assert(float_type != nullptr);                                        \
+    assert(integer_type != nullptr);                                      \
+    if (integer_type->width() != 32)                                      \
+      return nullptr;                                                     \
+    uint32_t ua = GetIntegerFromConst(a);                                 \
+    if (float_type->width() == 32) {                                      \
+      float result_val = integer_type->IsSigned() ?                       \
+          static_cast<float>(static_cast<int32_t>(ua)) :                  \
+          static_cast<float>(ua);                                         \
+      spvutils::FloatProxy<float> result(result_val);                     \
+      std::vector<uint32_t> words = {result.data()};                      \
+      return const_mgr->GetConstant(result_type, words);                  \
+    } else if (float_type->width() == 64) {                               \
+      double result_val = integer_type->IsSigned() ?                      \
+          static_cast<double>(static_cast<int32_t>(ua)) :                 \
+          static_cast<double>(ua);                                        \
+      spvutils::FloatProxy<double> result(result_val);                    \
+      std::vector<uint32_t> words(ExtractInts(result.data()));            \
+      return const_mgr->GetConstant(result_type, words);                  \
+    }                                                                     \
+    return nullptr;                                                       \
+  }
+
 // This macro defines a |BinaryScalarFoldingRule| that applies |op|.  The
 // operator |op| must work for both float and double, and use syntax "f1 op f2".
 #define FOLD_FPARITH_OP(op)                                               \
@@ -310,9 +357,12 @@ double GetDoubleFromConst(const analysis::Constant* c) {
     return nullptr;                                                       \
   }
 
-// Define the folding rule for conversion of floating point to integer
+// Define the folding rule for conversion between floating point and integer
 ConstantFoldingRule FoldFToI() {
   return FoldFPUnaryOp(FOLD_FTOI_OP());
+}
+ConstantFoldingRule FoldIToF() {
+  return FoldFPUnaryOp(FOLD_ITOF_OP());
 }
 
 // Define the folding rules for subtraction, addition, multiplication, and
@@ -422,6 +472,8 @@ spvtools::opt::ConstantFoldingRules::ConstantFoldingRules() {
 
   rules_[SpvOpConvertFToS].push_back(FoldFToI());
   rules_[SpvOpConvertFToU].push_back(FoldFToI());
+  rules_[SpvOpConvertSToF].push_back(FoldIToF());
+  rules_[SpvOpConvertUToF].push_back(FoldIToF());
 
   rules_[SpvOpFAdd].push_back(FoldFAdd());
   rules_[SpvOpFDiv].push_back(FoldFDiv());
