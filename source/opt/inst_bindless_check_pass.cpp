@@ -109,7 +109,6 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   uint32_t ptrId = loadInst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
   Instruction* ptrInst = get_def_use_mgr()->GetDef(ptrId);
   // Check descriptor index against upper bound
-  // TODO(greg-lunarg): Check descriptor to make sure it is written.
   if (ptrInst->opcode() != SpvOp::SpvOpAccessChain)
     return;
   if (ptrInst->NumInOperands() != 2) {
@@ -130,6 +129,8 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   uint32_t ptrTypeId =
       varTypeInst->GetSingleWordInOperand(kSpvTypePointerTypeIdInIdx);
   Instruction* ptrTypeInst = get_def_use_mgr()->GetDef(ptrTypeId);
+  // TODO(greg-lunarg): Handle RuntimeArray. Will need to pull length
+  // out of debug input buffer.
   if (ptrTypeInst->opcode() != SpvOpTypeArray)
     return;
   // Generate full runtime bounds test code with true branch
