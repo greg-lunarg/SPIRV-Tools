@@ -159,7 +159,7 @@ void InstrumentPass::GenDebugOutputFieldCode(
   (void) builder->AddBinaryOp(0, SpvOpStore, achain_inst->result_id(), val_id);
 }
 
-void InstrumentPass::GenCommonDebugOutputCode(
+void InstrumentPass::GenCommonStreamWriteCode(
     uint32_t record_sz,
     uint32_t func_id,
     uint32_t inst_id,
@@ -213,59 +213,57 @@ void InstrumentPass::GenUintNullOutputCode(
       builder->GetNullId(GetUintId()), builder);
 }
 
-void InstrumentPass::GenVertDebugOutputCode(
-    uint32_t base_offset_id,
-    InstructionBuilder* builder) {
-  // Load and store VertexId and InstanceId
-  GenBuiltinOutputCode(context()->GetBuiltinVarId(SpvBuiltInVertexId),
-      kInstVertOutVertexId, base_offset_id, builder);
-  GenBuiltinOutputCode(context()->GetBuiltinVarId(SpvBuiltInInstanceId),
-      kInstVertOutInstanceId, base_offset_id, builder);
-}
-
-void InstrumentPass::GenCompDebugOutputCode(
+void InstrumentPass::GenStageStreamWriteCode(
+  uint32_t stage_idx,
   uint32_t base_offset_id,
   InstructionBuilder* builder) {
-  // Load and store GlobalInvocationId. Second word is unused; store zero.
-  GenBuiltinOutputCode(
-      context()->GetBuiltinVarId(SpvBuiltInGlobalInvocationId),
-      kInstCompOutGlobalInvocationId, base_offset_id, builder);
-  GenUintNullOutputCode(kInstCompOutUnused, base_offset_id, builder);
-}
-
-void InstrumentPass::GenTessDebugOutputCode(
-  uint32_t base_offset_id,
-  InstructionBuilder* builder) {
-  // Load and store InvocationId. Second word is unused; store zero.
-  GenBuiltinOutputCode(
-    context()->GetBuiltinVarId(SpvBuiltInInvocationId),
-    kInstTessOutInvocationId, base_offset_id, builder);
-  GenUintNullOutputCode(kInstTessOutUnused, base_offset_id, builder);
-}
-
-void InstrumentPass::GenGeomDebugOutputCode(
-  uint32_t base_offset_id,
-  InstructionBuilder* builder) {
-  // Load and store PrimitiveId and InvocationId.
-  GenBuiltinOutputCode(
-    context()->GetBuiltinVarId(SpvBuiltInPrimitiveId),
-    kInstGeomOutPrimitiveId, base_offset_id, builder);
-  GenBuiltinOutputCode(
-    context()->GetBuiltinVarId(SpvBuiltInInvocationId),
-    kInstGeomOutInvocationId, base_offset_id, builder);
-}
-
-void InstrumentPass::GenFragDebugOutputCode(
-    uint32_t base_offset_id,
-    InstructionBuilder* builder) {
-  // Load FragCoord and convert to Uint
-  Instruction* frag_coord_inst = builder->AddUnaryOp(GetVec4FloatId(),
-      SpvOpLoad, context()->GetBuiltinVarId(SpvBuiltInFragCoord));
-  Instruction* uint_frag_coord_inst = builder->AddUnaryOp(GetVec4UintId(),
-      SpvOpBitcast, frag_coord_inst->result_id());
-  for (uint32_t u = 0; u < 2u; ++u)
-    GenFragCoordEltDebugOutputCode(base_offset_id,
-        uint_frag_coord_inst->result_id(), u, builder);
+  // TODO(greg-lunarg): Add support for all stages
+  switch (stage_idx) {
+    case SpvExecutionModelVertex: {
+      // Load and store VertexId and InstanceId
+      GenBuiltinOutputCode(context()->GetBuiltinVarId(SpvBuiltInVertexId),
+        kInstVertOutVertexId, base_offset_id, builder);
+      GenBuiltinOutputCode(context()->GetBuiltinVarId(SpvBuiltInInstanceId),
+        kInstVertOutInstanceId, base_offset_id, builder);
+    } break;
+    case SpvExecutionModelGLCompute: {
+      // Load and store GlobalInvocationId. Second word is unused; store zero.
+      GenBuiltinOutputCode(
+        context()->GetBuiltinVarId(SpvBuiltInGlobalInvocationId),
+        kInstCompOutGlobalInvocationId, base_offset_id, builder);
+      GenUintNullOutputCode(kInstCompOutUnused, base_offset_id, builder);
+    } break;
+    case SpvExecutionModelGeometry: {
+      // Load and store PrimitiveId and InvocationId.
+      GenBuiltinOutputCode(
+        context()->GetBuiltinVarId(SpvBuiltInPrimitiveId),
+        kInstGeomOutPrimitiveId, base_offset_id, builder);
+      GenBuiltinOutputCode(
+        context()->GetBuiltinVarId(SpvBuiltInInvocationId),
+        kInstGeomOutInvocationId, base_offset_id, builder);
+    } break;
+    case SpvExecutionModelTessellationControl:
+    case SpvExecutionModelTessellationEvaluation: {
+      // Load and store InvocationId. Second word is unused; store zero.
+      GenBuiltinOutputCode(
+        context()->GetBuiltinVarId(SpvBuiltInInvocationId),
+        kInstTessOutInvocationId, base_offset_id, builder);
+      GenUintNullOutputCode(kInstTessOutUnused, base_offset_id, builder);
+    }  break;
+    case SpvExecutionModelFragment: {
+      // Load FragCoord and convert to Uint
+      Instruction* frag_coord_inst = builder->AddUnaryOp(GetVec4FloatId(),
+        SpvOpLoad, context()->GetBuiltinVarId(SpvBuiltInFragCoord));
+      Instruction* uint_frag_coord_inst = builder->AddUnaryOp(GetVec4UintId(),
+        SpvOpBitcast, frag_coord_inst->result_id());
+      for (uint32_t u = 0; u < 2u; ++u)
+        GenFragCoordEltDebugOutputCode(base_offset_id,
+          uint_frag_coord_inst->result_id(), u, builder);
+    } break;
+    default: {
+      assert(false && "unsupported stage");
+    } break;
+  }
 }
 
 void InstrumentPass::GenDebugStreamWrite(
@@ -528,33 +526,11 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     output_func->AddBasicBlock(std::move(new_blk_ptr));
     new_blk_ptr = MakeUnique<BasicBlock>(std::move(writeLabel));
     builder.SetInsertPoint(&*new_blk_ptr);
-    // Generate common debug record members
-    GenCommonDebugOutputCode(obuf_record_sz,
+    // Generate common and stage-specific debug record members
+    GenCommonStreamWriteCode(obuf_record_sz,
         param_vec[kInstCommonParamFuncIdx], param_vec[kInstCommonParamInstIdx],
         stage_idx, obuf_curr_sz_id, &builder);
-    // Generate stage-specific record members
-    // TODO(greg-lunarg): Add support for all stages
-    switch (stage_idx) {
-    case SpvExecutionModelFragment:
-      GenFragDebugOutputCode(obuf_curr_sz_id, &builder);
-      break;
-    case SpvExecutionModelVertex:
-      GenVertDebugOutputCode(obuf_curr_sz_id, &builder);
-      break;
-    case SpvExecutionModelGLCompute:
-      GenCompDebugOutputCode(obuf_curr_sz_id, &builder);
-      break;
-    case SpvExecutionModelGeometry:
-      GenGeomDebugOutputCode(obuf_curr_sz_id, &builder);
-      break;
-    case SpvExecutionModelTessellationControl:
-    case SpvExecutionModelTessellationEvaluation:
-      GenTessDebugOutputCode(obuf_curr_sz_id, &builder);
-      break;
-    default:
-      assert(false && "unsupported stage");
-      break;
-    }
+    GenStageStreamWriteCode(stage_idx, obuf_curr_sz_id, &builder);
     // Gen writes of validation specific data
     for (uint32_t i = 0; i < val_spec_param_cnt; ++i) {
       GenDebugOutputFieldCode(obuf_curr_sz_id, kInstStageOutRecordSize + i,

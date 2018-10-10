@@ -278,7 +278,7 @@ class InstrumentPass : public Pass {
   // Generate instructions into |builder| which will write the members
   // of the debug output record common for all stages and validations at
   // |base_off|.
-  void GenCommonDebugOutputCode(
+  void GenCommonStreamWriteCode(
     uint32_t record_sz,
     uint32_t func_idx,
     uint32_t instruction_idx,
@@ -310,33 +310,10 @@ class InstrumentPass : public Pass {
     uint32_t base_off,
     InstructionBuilder* builder);
 
-  // Generate instructions into |builder| which will write the vertex-
-  // shader-specific members of the debug output buffer at |base_off|.
-  void GenVertDebugOutputCode(
-    uint32_t base_off,
-    InstructionBuilder* builder);
-
-  // Generate instructions into |builder| which will write the compute-
-  // shader-specific members of the debug output buffer at |base_off|.
-  void GenCompDebugOutputCode(
-    uint32_t base_off,
-    InstructionBuilder* builder);
-
-  // Generate instructions into |builder| which will write the tessellation-
-  // shader-specific members of the debug output buffer at |base_off|.
-  void GenTessDebugOutputCode(
-    uint32_t base_off,
-    InstructionBuilder* builder);
-
-  // Generate instructions into |builder| which will write the geometry-
-  // shader-specific members of the debug output buffer at |base_off|.
-  void GenGeomDebugOutputCode(
-    uint32_t base_off,
-    InstructionBuilder* builder);
-
-  // Generate instructions into |builder| which will write the fragment-
-  // shader-specific members of the debug output buffer at |base_off|.
-  void GenFragDebugOutputCode(
+  // Generate instructions into |builder| which will write the |stage_idx|-
+  // specific members of the debug output stream at |base_off|.
+  void GenStageStreamWriteCode(
+    uint32_t stage_idx,
     uint32_t base_off,
     InstructionBuilder* builder);
 
