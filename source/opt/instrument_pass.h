@@ -189,8 +189,12 @@ class InstrumentPass : public Pass {
   // following Stage-specific words.
   //
   // The Stage-specific Words identify which invocation of the shader generated
-  // the error. Vertex shaders will write the Vertex and Instance ID. Fragment
-  // shaders will write FragCoord.xy.
+  // the error. Every stage will write two words, although in some cases the
+  // second word is unused and so zero is written. Vertex shaders will write
+  // the Vertex and Instance ID. Fragment shaders will write FragCoord.xy.
+  // Compute shaders will write the Global Invocation ID and zero (unused).
+  // Both tesselation shaders will write the Invocation Id and zero (unused).
+  // The geometry shader will write the Primitive ID and Invocation ID.
   //
   // The Validation Error Code specifies the exact error which has occurred.
   // These are enumerated with the kInstError* static consts. This allows
@@ -246,7 +250,7 @@ class InstrumentPass : public Pass {
 
   // Return id for output function. Define if it doesn't exist with
   // |val_spec_arg_cnt| validation-specific uint32 arguments.
-  uint32_t GetOutputFunctionId(uint32_t stage_idx,
+  uint32_t GetStreamWriteFunctionId(uint32_t stage_idx,
       uint32_t val_spec_param_cnt);
 
   // Apply instrumentation function |pfn| to every instruction in |func|.
@@ -315,6 +319,12 @@ class InstrumentPass : public Pass {
   // Generate instructions into |builder| which will write the compute-
   // shader-specific members of the debug output buffer at |base_off|.
   void GenCompDebugOutputCode(
+    uint32_t base_off,
+    InstructionBuilder* builder);
+
+  // Generate instructions into |builder| which will write the compute-
+  // shader-specific members of the debug output buffer at |base_off|.
+  void GenTessDebugOutputCode(
     uint32_t base_off,
     InstructionBuilder* builder);
 

@@ -46,6 +46,10 @@ static const int kInstFragOutFragCoordY = 6;
 static const int kInstCompOutGlobalInvocationId = 5;
 static const int kInstCompOutUnused = 6;
 
+// Compute Shader Output Record Offsets
+static const int kInstTessOutInvocationId = 5;
+static const int kInstTessOutUnused = 6;
+
 // Size of Common and Stage-specific Members
 static const int kInstStageOutRecordSize = 7;
 
@@ -225,6 +229,16 @@ void InstrumentPass::GenCompDebugOutputCode(
   GenUintNullOutputCode(kInstCompOutUnused, base_offset_id, builder);
 }
 
+void InstrumentPass::GenTessDebugOutputCode(
+  uint32_t base_offset_id,
+  InstructionBuilder* builder) {
+  // Load and store InvocationId. Second word is unused; store zero.
+  GenBuiltinOutputCode(
+    context()->GetBuiltinVarId(SpvBuiltInInvocationId),
+    kInstTessOutInvocationId, base_offset_id, builder);
+  GenUintNullOutputCode(kInstTessOutUnused, base_offset_id, builder);
+}
+
 void InstrumentPass::GenFragDebugOutputCode(
     uint32_t base_offset_id,
     InstructionBuilder* builder) {
@@ -247,7 +261,7 @@ void InstrumentPass::GenDebugStreamWrite(
   // Call debug output function. Pass func_idx, instruction_idx and
   // validation ids as args.
   uint32_t val_id_cnt = static_cast<uint32_t>(validation_ids.size());
-  uint32_t output_func_id = GetOutputFunctionId(stage_idx, val_id_cnt);
+  uint32_t output_func_id = GetStreamWriteFunctionId(stage_idx, val_id_cnt);
   std::vector<uint32_t> args = { output_func_id,
       builder->GetUintConstantId(func_idx),
       builder->GetUintConstantId(instruction_idx) };
@@ -419,7 +433,7 @@ uint32_t InstrumentPass::GetVoidId() {
   return void_id_;
 }
 
-uint32_t InstrumentPass::GetOutputFunctionId(uint32_t stage_idx,
+uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     uint32_t val_spec_param_cnt) {
   // Total param count is common params plus validation-specific
   // params
@@ -513,6 +527,10 @@ uint32_t InstrumentPass::GetOutputFunctionId(uint32_t stage_idx,
       break;
     case SpvExecutionModelGLCompute:
       GenCompDebugOutputCode(obuf_curr_sz_id, &builder);
+      break;
+    case SpvExecutionModelTessellationControl:
+    case SpvExecutionModelTessellationEvaluation:
+      GenTessDebugOutputCode(obuf_curr_sz_id, &builder);
       break;
     default:
       assert(false && "unsupported stage");
@@ -641,7 +659,9 @@ bool InstrumentPass::InstProcessEntryPointCallTree(
   // TODO(greg-lunarg): Handle all stages.
   if (eStage != SpvExecutionModelVertex &&
       eStage != SpvExecutionModelFragment &&
-      eStage != SpvExecutionModelGLCompute)
+      eStage != SpvExecutionModelGLCompute &&
+      eStage != SpvExecutionModelTessellationControl &&
+      eStage != SpvExecutionModelTessellationEvaluation)
     return false;
   // Add together the roots of all entry points
   std::queue<uint32_t> roots;
