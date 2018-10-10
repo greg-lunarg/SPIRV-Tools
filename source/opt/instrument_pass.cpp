@@ -42,6 +42,10 @@ static const int kInstVertOutInstanceId = 6;
 static const int kInstFragOutFragCoordX = 5;
 static const int kInstFragOutFragCoordY = 6;
 
+// Compute Shader Output Record Offsets
+static const int kInstCompOutGlobalInvocationId = 5;
+static const int kInstCompOutUnused = 6;
+
 // Size of Common and Stage-specific Members
 static const int kInstStageOutRecordSize = 7;
 
@@ -182,7 +186,7 @@ void InstrumentPass::GenFragCoordEltDebugOutputCode(
       element_val_inst->result_id(), builder);
 }
 
-void InstrumentPass::GenBuiltinIdOutputCode(
+void InstrumentPass::GenBuiltinOutputCode(
     uint32_t builtinId,
     uint32_t builtinOff,
     uint32_t base_offset_id,
@@ -193,14 +197,32 @@ void InstrumentPass::GenBuiltinIdOutputCode(
       builder);
 }
 
+void InstrumentPass::GenUintNullOutputCode(
+    uint32_t field_off,
+    uint32_t base_offset_id,
+    InstructionBuilder* builder) {
+  GenDebugOutputFieldCode(base_offset_id, field_off,
+      builder->GetNullId(GetUintId()), builder);
+}
+
 void InstrumentPass::GenVertDebugOutputCode(
     uint32_t base_offset_id,
     InstructionBuilder* builder) {
   // Load and store VertexId and InstanceId
-  GenBuiltinIdOutputCode(context()->GetBuiltinVarId(SpvBuiltInVertexId),
+  GenBuiltinOutputCode(context()->GetBuiltinVarId(SpvBuiltInVertexId),
       kInstVertOutVertexId, base_offset_id, builder);
-  GenBuiltinIdOutputCode(context()->GetBuiltinVarId(SpvBuiltInInstanceId),
+  GenBuiltinOutputCode(context()->GetBuiltinVarId(SpvBuiltInInstanceId),
       kInstVertOutInstanceId, base_offset_id, builder);
+}
+
+void InstrumentPass::GenCompDebugOutputCode(
+  uint32_t base_offset_id,
+  InstructionBuilder* builder) {
+  // Load and store GlobalInvocationId. Second word is unused; store zero.
+  GenBuiltinOutputCode(
+      context()->GetBuiltinVarId(SpvBuiltInGlobalInvocationId),
+      kInstCompOutGlobalInvocationId, base_offset_id, builder);
+  GenUintNullOutputCode(kInstCompOutUnused, base_offset_id, builder);
 }
 
 void InstrumentPass::GenFragDebugOutputCode(
@@ -489,6 +511,9 @@ uint32_t InstrumentPass::GetOutputFunctionId(uint32_t stage_idx,
     case SpvExecutionModelVertex:
       GenVertDebugOutputCode(obuf_curr_sz_id, &builder);
       break;
+    case SpvExecutionModelGLCompute:
+      GenCompDebugOutputCode(obuf_curr_sz_id, &builder);
+      break;
     default:
       assert(false && "unsupported stage");
       break;
@@ -612,10 +637,11 @@ bool InstrumentPass::InstProcessEntryPointCallTree(
     else if (e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx) != eStage)
       return false;
   }
-  // Only supporting vertex and fragment shaders at the moment.
+  // Only supporting vertex, fragment and compute shaders at the moment.
   // TODO(greg-lunarg): Handle all stages.
   if (eStage != SpvExecutionModelVertex &&
-      eStage != SpvExecutionModelFragment)
+      eStage != SpvExecutionModelFragment &&
+      eStage != SpvExecutionModelGLCompute)
     return false;
   // Add together the roots of all entry points
   std::queue<uint32_t> roots;

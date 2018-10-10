@@ -293,15 +293,28 @@ class InstrumentPass : public Pass {
 
   // Generate instructions into |builder| which will load the uint |builtin_id|
   // and write it into the debug output buffer at |base_off| + |builtin_off|.
-  void GenBuiltinIdOutputCode(
+  void GenBuiltinOutputCode(
     uint32_t builtin_id,
     uint32_t builtin_off,
+    uint32_t base_off,
+    InstructionBuilder* builder);
+
+  // Generate instructions into |builder| which will write a uint null into
+  // the debug output buffer at |base_off| + |builtin_off|.
+  void GenUintNullOutputCode(
+    uint32_t field_off,
     uint32_t base_off,
     InstructionBuilder* builder);
 
   // Generate instructions into |builder| which will write the vertex-
   // shader-specific members of the debug output buffer at |base_off|.
   void GenVertDebugOutputCode(
+    uint32_t base_off,
+    InstructionBuilder* builder);
+
+  // Generate instructions into |builder| which will write the compute-
+  // shader-specific members of the debug output buffer at |base_off|.
+  void GenCompDebugOutputCode(
     uint32_t base_off,
     InstructionBuilder* builder);
 

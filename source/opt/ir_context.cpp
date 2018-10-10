@@ -641,6 +641,7 @@ uint32_t IRContext::GetBuiltinVarId(uint32_t builtin) {
       }
       case SpvBuiltInVertexId:
       case SpvBuiltInInstanceId:
+      case SpvBuiltInGlobalInvocationId:
       {
         analysis::Integer uint_ty(32, false);
         reg_type = type_mgr->GetRegisteredType(&uint_ty);
