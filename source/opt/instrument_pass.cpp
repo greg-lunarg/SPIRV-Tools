@@ -46,9 +46,13 @@ static const int kInstFragOutFragCoordY = 6;
 static const int kInstCompOutGlobalInvocationId = 5;
 static const int kInstCompOutUnused = 6;
 
-// Compute Shader Output Record Offsets
+// Tessellation Shader Output Record Offsets
 static const int kInstTessOutInvocationId = 5;
 static const int kInstTessOutUnused = 6;
+
+// Geometry Shader Output Record Offsets
+static const int kInstGeomOutPrimitiveId = 5;
+static const int kInstGeomOutInvocationId = 6;
 
 // Size of Common and Stage-specific Members
 static const int kInstStageOutRecordSize = 7;
@@ -237,6 +241,18 @@ void InstrumentPass::GenTessDebugOutputCode(
     context()->GetBuiltinVarId(SpvBuiltInInvocationId),
     kInstTessOutInvocationId, base_offset_id, builder);
   GenUintNullOutputCode(kInstTessOutUnused, base_offset_id, builder);
+}
+
+void InstrumentPass::GenGeomDebugOutputCode(
+  uint32_t base_offset_id,
+  InstructionBuilder* builder) {
+  // Load and store PrimitiveId and InvocationId.
+  GenBuiltinOutputCode(
+    context()->GetBuiltinVarId(SpvBuiltInPrimitiveId),
+    kInstGeomOutPrimitiveId, base_offset_id, builder);
+  GenBuiltinOutputCode(
+    context()->GetBuiltinVarId(SpvBuiltInInvocationId),
+    kInstGeomOutInvocationId, base_offset_id, builder);
 }
 
 void InstrumentPass::GenFragDebugOutputCode(
@@ -528,6 +544,9 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     case SpvExecutionModelGLCompute:
       GenCompDebugOutputCode(obuf_curr_sz_id, &builder);
       break;
+    case SpvExecutionModelGeometry:
+      GenGeomDebugOutputCode(obuf_curr_sz_id, &builder);
+      break;
     case SpvExecutionModelTessellationControl:
     case SpvExecutionModelTessellationEvaluation:
       GenTessDebugOutputCode(obuf_curr_sz_id, &builder);
@@ -659,6 +678,7 @@ bool InstrumentPass::InstProcessEntryPointCallTree(
   // TODO(greg-lunarg): Handle all stages.
   if (eStage != SpvExecutionModelVertex &&
       eStage != SpvExecutionModelFragment &&
+      eStage != SpvExecutionModelGeometry &&
       eStage != SpvExecutionModelGLCompute &&
       eStage != SpvExecutionModelTessellationControl &&
       eStage != SpvExecutionModelTessellationEvaluation)

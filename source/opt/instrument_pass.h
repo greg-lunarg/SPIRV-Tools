@@ -322,9 +322,15 @@ class InstrumentPass : public Pass {
     uint32_t base_off,
     InstructionBuilder* builder);
 
-  // Generate instructions into |builder| which will write the compute-
+  // Generate instructions into |builder| which will write the tessellation-
   // shader-specific members of the debug output buffer at |base_off|.
   void GenTessDebugOutputCode(
+    uint32_t base_off,
+    InstructionBuilder* builder);
+
+  // Generate instructions into |builder| which will write the geometry-
+  // shader-specific members of the debug output buffer at |base_off|.
+  void GenGeomDebugOutputCode(
     uint32_t base_off,
     InstructionBuilder* builder);
 

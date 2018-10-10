@@ -641,6 +641,7 @@ uint32_t IRContext::GetBuiltinVarId(uint32_t builtin) {
       }
       case SpvBuiltInVertexId:
       case SpvBuiltInInstanceId:
+      case SpvBuiltInPrimitiveId:
       case SpvBuiltInInvocationId:
       case SpvBuiltInGlobalInvocationId:
       {
