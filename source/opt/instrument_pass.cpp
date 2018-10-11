@@ -361,6 +361,7 @@ uint32_t InstrumentPass::GetOutputBufferBinding() {
 // Return id for output buffer
 uint32_t InstrumentPass::GetOutputBufferId() {
   if (output_buffer_id_ == 0) {
+    // If not created yet, create one
     analysis::DecorationManager* deco_mgr = get_decoration_mgr();
     analysis::TypeManager* type_mgr = context()->get_type_mgr();
     analysis::Integer uint_ty(32, false);
@@ -389,6 +390,27 @@ uint32_t InstrumentPass::GetOutputBufferId() {
         desc_set_);
     deco_mgr->AddDecorationVal(output_buffer_id_, SpvDecorationBinding,
         GetOutputBufferBinding());
+    // Look for storage buffer extension. If none, create one.
+    bool found = false;
+    for (auto& ei : get_module()->extensions()) {
+      const char* extName =
+        reinterpret_cast<const char*>(&ei.GetInOperand(0).words[0]);
+      if (strcmp(extName, "SPV_KHR_storage_buffer_storage_class") == 0) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      const std::string ext_name("SPV_KHR_storage_buffer_storage_class");
+      const auto num_chars = ext_name.size();
+      // Compute num words, accommodate the terminating null character.
+      const auto num_words = (num_chars + 1 + 3) / 4;
+      std::vector<uint32_t> ext_words(num_words, 0u);
+      std::memcpy(ext_words.data(), ext_name.data(), num_chars);
+      context()->AddExtension(std::unique_ptr<Instruction>(
+          new Instruction(context(), SpvOpExtension, 0u, 0u,
+          { { SPV_OPERAND_TYPE_LITERAL_STRING, ext_words } })));
+    }
   }
   return output_buffer_id_;
 }
