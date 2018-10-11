@@ -247,7 +247,7 @@ Pass::Status InstBindlessCheckPass::ProcessImpl() {
     std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
     return GenBindlessCheckCode(ref_inst_itr, ref_block_itr,
         function_idx, instruction_idx, stage_idx, new_blocks); };
-  bool modified = InstProcessEntryPointCallTree(pfn, get_module());
+  bool modified = InstProcessEntryPointCallTree(pfn);
   // This pass does not update inst->blk info
   context()->InvalidateAnalyses(IRContext::kAnalysisInstrToBlockMapping);
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;

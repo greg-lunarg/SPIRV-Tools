@@ -653,9 +653,7 @@ bool InstrumentPass::InstProcessCallTreeFromRoots(
   return modified;
 }
 
-bool InstrumentPass::InstProcessEntryPointCallTree(
-    InstProcessFunction& pfn,
-    Module* module) {
+bool InstrumentPass::InstProcessEntryPointCallTree(InstProcessFunction& pfn) {
   // Make sure all entry points have the same execution model. Do not
   // instrument if they do not.
   // TODO(greg-lunarg): Handle mixed stages. Technically, a shader module
@@ -665,12 +663,13 @@ bool InstrumentPass::InstProcessEntryPointCallTree(
   // to clone any functions which are in the call trees of entrypoints
   // with differing execution models.
   uint32_t ecnt = 0;
-  uint32_t eStage;
+  uint32_t eStage = SpvExecutionModelMax;
   for (auto& e : get_module()->entry_points()) {
     if (ecnt == 0)
       eStage = e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx);
     else if (e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx) != eStage)
       return false;
+    ++ecnt;
   }
   // Only supporting vertex, fragment and compute shaders at the moment.
   // TODO(greg-lunarg): Handle all stages.

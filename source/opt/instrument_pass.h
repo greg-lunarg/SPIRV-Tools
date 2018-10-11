@@ -111,8 +111,7 @@ class InstrumentPass : public Pass {
   // the instruction's block with the new blocks that are generated. Continue
   // processing at the top of the last new block.
   bool InstProcessEntryPointCallTree(
-    InstProcessFunction& pfn,
-    Module* module);
+    InstProcessFunction& pfn);
 
   // Move all code in |ref_block_itr| preceding the instruction |ref_inst_itr|
   // to be instrumented into block |new_blk_ptr|.
