@@ -117,7 +117,6 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   }
   uint32_t indexId =
       ptrInst->GetSingleWordInOperand(kSpvAccessChainIndex0IdInIdx);
-  Instruction* indexInst = get_def_use_mgr()->GetDef(indexId);
   ptrId = ptrInst->GetSingleWordInOperand(kSpvAccessChainBaseIdInIdx);
   ptrInst = get_def_use_mgr()->GetDef(ptrId);
   if (ptrInst->opcode() != SpvOpVariable) {
