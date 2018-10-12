@@ -50,7 +50,7 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
   // Look for reference through bindless descriptor. If not, return.
   std::unique_ptr<BasicBlock> new_blk_ptr;
-  uint32_t imageId;
+  uint32_t image_id;
   switch (ref_inst_itr->opcode()) {
     case SpvOp::SpvOpImageSampleImplicitLod:
     case SpvOp::SpvOpImageSampleExplicitLod:
@@ -84,57 +84,57 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
     case SpvOp::SpvOpImageSparseFetch:
     case SpvOp::SpvOpImageSparseRead:
     case SpvOp::SpvOpImageWrite:
-      imageId =
+      image_id =
           ref_inst_itr->GetSingleWordInOperand(kSpvImageSampleImageIdInIdx);
       break;
     default:
       return;
   }
-  Instruction* imageInst = get_def_use_mgr()->GetDef(imageId);
-  uint32_t loadId;
-  Instruction* loadInst;
+  Instruction* imageInst = get_def_use_mgr()->GetDef(image_id);
+  uint32_t load_id;
+  Instruction* load_inst;
   if (imageInst->opcode() == SpvOp::SpvOpSampledImage) {
-    loadId = imageInst->GetSingleWordInOperand(kSpvSampledImageImageIdInIdx);
-    loadInst = get_def_use_mgr()->GetDef(loadId);
+    load_id = imageInst->GetSingleWordInOperand(kSpvSampledImageImageIdInIdx);
+    load_inst = get_def_use_mgr()->GetDef(load_id);
   }
   else if (imageInst->opcode() == SpvOp::SpvOpImage) {
-    loadId = imageInst->GetSingleWordInOperand(kSpvImageSampledImageIdInIdx);
-    loadInst = get_def_use_mgr()->GetDef(loadId);
+    load_id = imageInst->GetSingleWordInOperand(kSpvImageSampledImageIdInIdx);
+    load_inst = get_def_use_mgr()->GetDef(load_id);
   }
   else {
-    loadId = imageId;
-    loadInst = imageInst;
-    imageId = 0;
+    load_id = image_id;
+    load_inst = imageInst;
+    image_id = 0;
   }
-  if (loadInst->opcode() != SpvOp::SpvOpLoad) {
+  if (load_inst->opcode() != SpvOp::SpvOpLoad) {
     // TODO(greg-lunarg): Handle additional possibilities
     return;
   }
-  uint32_t ptrId = loadInst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
-  Instruction* ptrInst = get_def_use_mgr()->GetDef(ptrId);
+  uint32_t ptr_id = load_inst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
+  Instruction* ptr_inst = get_def_use_mgr()->GetDef(ptr_id);
   // Check descriptor index against upper bound
-  if (ptrInst->opcode() != SpvOp::SpvOpAccessChain)
+  if (ptr_inst->opcode() != SpvOp::SpvOpAccessChain)
     return;
-  if (ptrInst->NumInOperands() != 2) {
+  if (ptr_inst->NumInOperands() != 2) {
     assert(false && "unexpected bindless index number");
     return;
   }
-  uint32_t indexId =
-      ptrInst->GetSingleWordInOperand(kSpvAccessChainIndex0IdInIdx);
-  ptrId = ptrInst->GetSingleWordInOperand(kSpvAccessChainBaseIdInIdx);
-  ptrInst = get_def_use_mgr()->GetDef(ptrId);
-  if (ptrInst->opcode() != SpvOpVariable) {
+  uint32_t index_id =
+      ptr_inst->GetSingleWordInOperand(kSpvAccessChainIndex0IdInIdx);
+  ptr_id = ptr_inst->GetSingleWordInOperand(kSpvAccessChainBaseIdInIdx);
+  ptr_inst = get_def_use_mgr()->GetDef(ptr_id);
+  if (ptr_inst->opcode() != SpvOpVariable) {
     assert(false && "unexpected bindless base");
     return;
   }
-  uint32_t varTypeId = ptrInst->type_id();
-  Instruction* varTypeInst = get_def_use_mgr()->GetDef(varTypeId);
-  uint32_t ptrTypeId =
-      varTypeInst->GetSingleWordInOperand(kSpvTypePointerTypeIdInIdx);
-  Instruction* ptrTypeInst = get_def_use_mgr()->GetDef(ptrTypeId);
+  uint32_t var_type_id = ptr_inst->type_id();
+  Instruction* var_type_inst = get_def_use_mgr()->GetDef(var_type_id);
+  uint32_t ptr_type_id =
+      var_type_inst->GetSingleWordInOperand(kSpvTypePointerTypeIdInIdx);
+  Instruction* ptr_type_inst = get_def_use_mgr()->GetDef(ptr_type_id);
   // TODO(greg-lunarg): Handle RuntimeArray. Will need to pull length
   // out of debug input buffer.
-  if (ptrTypeInst->opcode() != SpvOpTypeArray)
+  if (ptr_type_inst->opcode() != SpvOpTypeArray)
     return;
   // Generate full runtime bounds test code with true branch
   // being full reference and false branch being debug output and zero
@@ -142,82 +142,82 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   MovePreludeCode(ref_inst_itr, ref_block_itr, &new_blk_ptr);
   InstructionBuilder builder(context(), &*new_blk_ptr,
       IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-  uint32_t errorId = builder.GetUintConstantId(kInstErrorBindlessBounds);
-  uint32_t lengthId =
-    ptrTypeInst->GetSingleWordInOperand(kSpvTypeArrayLengthIdInIdx);
+  uint32_t error_id = builder.GetUintConstantId(kInstErrorBindlessBounds);
+  uint32_t length_id =
+    ptr_type_inst->GetSingleWordInOperand(kSpvTypeArrayLengthIdInIdx);
   Instruction* ult_inst = builder.AddBinaryOp(GetBoolId(), SpvOpULessThan,
-      indexId, lengthId);
-  uint32_t mergeBlkId = TakeNextId();
-  uint32_t validBlkId = TakeNextId();
-  uint32_t invalidBlkId = TakeNextId();
-  std::unique_ptr<Instruction> mergeLabel(NewLabel(mergeBlkId));
-  std::unique_ptr<Instruction> validLabel(NewLabel(validBlkId));
-  std::unique_ptr<Instruction> invalidLabel(NewLabel(invalidBlkId));
-  (void) builder.AddConditionalBranch(ult_inst->result_id(), validBlkId,
-      invalidBlkId, mergeBlkId, SpvSelectionControlMaskNone);
+      index_id, length_id);
+  uint32_t merge_blk_id = TakeNextId();
+  uint32_t valid_blk_id = TakeNextId();
+  uint32_t invalid_blk_id = TakeNextId();
+  std::unique_ptr<Instruction> merge_label(NewLabel(merge_blk_id));
+  std::unique_ptr<Instruction> valid_label(NewLabel(valid_blk_id));
+  std::unique_ptr<Instruction> invalid_label(NewLabel(invalid_blk_id));
+  (void) builder.AddConditionalBranch(ult_inst->result_id(), valid_blk_id,
+      invalid_blk_id, merge_blk_id, SpvSelectionControlMaskNone);
   // Close selection block and gen valid reference block
   new_blocks->push_back(std::move(new_blk_ptr));
-  new_blk_ptr.reset(new BasicBlock(std::move(validLabel)));
+  new_blk_ptr.reset(new BasicBlock(std::move(valid_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
   // Clone descriptor load
-  Instruction* newLoadInst = builder.AddLoad(loadInst->type_id(),
-      loadInst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx));
-  uint32_t newLoadId = newLoadInst->result_id();
-  get_decoration_mgr()->CloneDecorations(loadInst->result_id(), newLoadId);
-  uint32_t newImageId = newLoadId;
+  Instruction* new_load_inst = builder.AddLoad(load_inst->type_id(),
+      load_inst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx));
+  uint32_t new_load_id = new_load_inst->result_id();
+  get_decoration_mgr()->CloneDecorations(load_inst->result_id(), new_load_id);
+  uint32_t new_image_id = new_load_id;
   // Clone Image/SampledImage with new load, if needed
-  if (imageId != 0) {
+  if (image_id != 0) {
     if (imageInst->opcode() == SpvOp::SpvOpSampledImage) {
-      Instruction* newImageInst = builder.AddBinaryOp(imageInst->type_id(),
-          SpvOpSampledImage, newLoadId, imageInst->GetSingleWordInOperand(
+      Instruction* new_image_inst = builder.AddBinaryOp(imageInst->type_id(),
+          SpvOpSampledImage, new_load_id, imageInst->GetSingleWordInOperand(
               kSpvSampledImageSamplerIdInIdx));
-      newImageId = newImageInst->result_id();
+      new_image_id = new_image_inst->result_id();
     }
     else {
       assert(imageInst->opcode() == SpvOp::SpvOpImage && "expecting OpImage");
-      Instruction* newImageInst = builder.AddUnaryOp(imageInst->type_id(),
-          SpvOpImage, newLoadId);
-      newImageId = newImageInst->result_id();
+      Instruction* new_image_inst = builder.AddUnaryOp(imageInst->type_id(),
+          SpvOpImage, new_load_id);
+      new_image_id = new_image_inst->result_id();
     }
-    get_decoration_mgr()->CloneDecorations(imageId, newImageId);
+    get_decoration_mgr()->CloneDecorations(image_id, new_image_id);
   }
   // Clone original reference using new image code
-  std::unique_ptr<Instruction> newRefInst(ref_inst_itr->Clone(context()));
-  uint32_t refResultId = ref_inst_itr->result_id();
-  uint32_t newRefId = 0;
-  if (refResultId != 0) {
-    newRefId = TakeNextId();
-    newRefInst->SetResultId(newRefId);
+  std::unique_ptr<Instruction> new_ref_inst(ref_inst_itr->Clone(context()));
+  uint32_t ref_result_id = ref_inst_itr->result_id();
+  uint32_t new_ref_id = 0;
+  if (ref_result_id != 0) {
+    new_ref_id = TakeNextId();
+    new_ref_inst->SetResultId(new_ref_id);
   }
-  newRefInst->SetInOperand(kSpvImageSampleImageIdInIdx, { newImageId });
+  new_ref_inst->SetInOperand(kSpvImageSampleImageIdInIdx, { new_image_id });
   // Register new reference and add to new block
-  builder.AddInstruction(std::move(newRefInst));
-  if (newRefId != 0)
-    get_decoration_mgr()->CloneDecorations(refResultId, newRefId);
+  builder.AddInstruction(std::move(new_ref_inst));
+  if (new_ref_id != 0)
+    get_decoration_mgr()->CloneDecorations(ref_result_id, new_ref_id);
   // Close valid block and gen invalid block
-  (void) builder.AddBranch(mergeBlkId);
+  (void) builder.AddBranch(merge_blk_id);
   new_blocks->push_back(std::move(new_blk_ptr));
-  new_blk_ptr.reset(new BasicBlock(std::move(invalidLabel)));
+  new_blk_ptr.reset(new BasicBlock(std::move(invalid_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
-  uint32_t uIndexId = GenUintCastCode(indexId, &builder);
+  uint32_t u_index_id = GenUintCastCode(index_id, &builder);
   GenDebugStreamWrite(function_idx, instruction_idx,
-      stage_idx, { errorId, uIndexId, lengthId }, &builder);
+      stage_idx, { error_id, u_index_id, length_id }, &builder);
   // Remember last invalid block id
-  uint32_t lastInvalidBlkId = new_blk_ptr->GetLabelInst()->result_id();
+  uint32_t last_invalid_blk_id = new_blk_ptr->GetLabelInst()->result_id();
   // Gen zero for invalid  reference
-  uint32_t refTypeId = ref_inst_itr->type_id();
+  uint32_t ref_type_id = ref_inst_itr->type_id();
   // Close invalid block and gen merge block
-  (void) builder.AddBranch(mergeBlkId);
+  (void) builder.AddBranch(merge_blk_id);
   new_blocks->push_back(std::move(new_blk_ptr));
-  new_blk_ptr.reset(new BasicBlock(std::move(mergeLabel)));
+  new_blk_ptr.reset(new BasicBlock(std::move(merge_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
   // Gen phi of new reference and zero, if necessary, and replace the
   // result id of the original reference with that of the Phi. Kill original
   // reference and move in remainder of original block.
-  if (newRefId != 0) {
-    Instruction* phi_inst = builder.AddPhi(refTypeId, { newRefId, validBlkId,
-        builder.GetNullId(refTypeId), lastInvalidBlkId });
-    context()->ReplaceAllUsesWith(refResultId, phi_inst->result_id());
+  if (new_ref_id != 0) {
+    Instruction* phi_inst = builder.AddPhi(ref_type_id, { new_ref_id,
+        valid_blk_id, builder.GetNullId(ref_type_id), last_invalid_blk_id });
+    context()->ReplaceAllUsesWith(ref_result_id, phi_inst->result_id());
   }
   context()->KillInst(&*ref_inst_itr);
   MovePostludeCode(ref_block_itr, &new_blk_ptr);
@@ -231,9 +231,9 @@ void InstBindlessCheckPass::InitializeInstBindlessCheck() {
   // Look for related extensions
   ext_descriptor_indexing_defined_ = false;
   for (auto& ei : get_module()->extensions()) {
-    const char* extName =
+    const char* ext_name =
       reinterpret_cast<const char*>(&ei.GetInOperand(0).words[0]);
-    if (strcmp(extName, "SPV_EXT_descriptor_indexing") == 0) {
+    if (strcmp(ext_name, "SPV_EXT_descriptor_indexing") == 0) {
       ext_descriptor_indexing_defined_ = true;
       break;
     }

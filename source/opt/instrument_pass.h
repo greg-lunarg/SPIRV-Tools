@@ -321,12 +321,12 @@ class InstrumentPass : public Pass {
   bool IsSameBlockOp(const Instruction* inst) const;
 
   // Clone operands which must be in same block as consumer instructions.
-  // Look in preCallSB for instructions that need cloning. Look in
-  // postCallSB for instructions already cloned. Add cloned instruction
-  // to postCallSB.
+  // Look in same_blk_pre for instructions that need cloning. Look in
+  // same_blk_post for instructions already cloned. Add cloned instruction
+  // to same_blk_post.
   void CloneSameBlockOps(std::unique_ptr<Instruction>* inst,
-    std::unordered_map<uint32_t, uint32_t>* postCallSB,
-    std::unordered_map<uint32_t, Instruction*>* preCallSB,
+    std::unordered_map<uint32_t, uint32_t>* same_blk_post,
+    std::unordered_map<uint32_t, Instruction*>* same_blk_pre,
     std::unique_ptr<BasicBlock>* block_ptr);
 
   // Update phis in succeeding blocks to point to new last block
@@ -377,10 +377,10 @@ class InstrumentPass : public Pass {
   uint32_t void_id_;
 
   // Pre-instrumentation same-block insts
-  std::unordered_map<uint32_t, Instruction*> preCallSB_;
+  std::unordered_map<uint32_t, Instruction*> same_block_pre_;
 
   // Post-instrumentation same-block op ids
-  std::unordered_map<uint32_t, uint32_t> postCallSB_;
+  std::unordered_map<uint32_t, uint32_t> same_block_post_;
 };
 
 }  // namespace opt

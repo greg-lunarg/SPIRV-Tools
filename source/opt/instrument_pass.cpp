@@ -83,8 +83,8 @@ void InstrumentPass::MovePreludeCode(
     BasicBlock::iterator ref_inst_itr,
     UptrVectorIterator<BasicBlock> ref_block_itr,
     std::unique_ptr<BasicBlock>* new_blk_ptr) {
-  preCallSB_.clear();
-  postCallSB_.clear();
+  same_block_pre_.clear();
+  same_block_post_.clear();
   // Initialize new block. Replace all uses of original block with
   // new block.
   uint32_t ref_blk_id = ref_block_itr->id();
@@ -100,7 +100,7 @@ void InstrumentPass::MovePreludeCode(
     // Remember same-block ops for possible regeneration.
     if (IsSameBlockOp(&*mv_ptr)) {
       auto* sb_inst_ptr = mv_ptr.get();
-      preCallSB_[mv_ptr->result_id()] = sb_inst_ptr;
+      same_block_pre_[mv_ptr->result_id()] = sb_inst_ptr;
     }
     (*new_blk_ptr)->AddInstruction(std::move(mv_ptr));
   }
@@ -118,12 +118,12 @@ void InstrumentPass::MovePostludeCode(
     std::unique_ptr<Instruction> mv_inst(inst);
     // Regenerate any same-block instruction that has not been seen in the
     // current block.
-    if (preCallSB_.size() > 0) {
-      CloneSameBlockOps(&mv_inst, &postCallSB_, &preCallSB_, new_blk_ptr);
+    if (same_block_pre_.size() > 0) {
+      CloneSameBlockOps(&mv_inst, &same_block_post_, &same_block_pre_, new_blk_ptr);
       // Remember same-block ops in this block.
       if (IsSameBlockOp(&*mv_inst)) {
         const uint32_t rid = mv_inst->result_id();
-        postCallSB_[rid] = rid;
+        same_block_post_[rid] = rid;
       }
     }
     (*new_blk_ptr)->AddInstruction(std::move(mv_inst));
@@ -199,13 +199,13 @@ void InstrumentPass::GenFragCoordEltDebugOutputCode(
 }
 
 void InstrumentPass::GenBuiltinOutputCode(
-    uint32_t builtinId,
-    uint32_t builtinOff,
+    uint32_t builtin_id,
+    uint32_t builtin_off,
     uint32_t base_offset_id,
     InstructionBuilder* builder) {
   // Load and store builtin
-  Instruction* load_inst = builder->AddUnaryOp(GetUintId(), SpvOpLoad, builtinId);
-  GenDebugOutputFieldCode(base_offset_id, builtinOff, load_inst->result_id(),
+  Instruction* load_inst = builder->AddUnaryOp(GetUintId(), SpvOpLoad, builtin_id);
+  GenDebugOutputFieldCode(base_offset_id, builtin_off, load_inst->result_id(),
       builder);
 }
 
@@ -293,49 +293,49 @@ bool InstrumentPass::IsSameBlockOp(const Instruction* inst) const {
 
 void InstrumentPass::CloneSameBlockOps(
     std::unique_ptr<Instruction>* inst,
-    std::unordered_map<uint32_t, uint32_t>* postCallSB,
-    std::unordered_map<uint32_t, Instruction*>* preCallSB,
+    std::unordered_map<uint32_t, uint32_t>* same_blk_post,
+    std::unordered_map<uint32_t, Instruction*>* same_blk_pre,
     std::unique_ptr<BasicBlock>* block_ptr) {
   (*inst)->ForEachInId(
-      [&postCallSB, &preCallSB, &block_ptr, this](uint32_t* iid) {
-        const auto mapItr = (*postCallSB).find(*iid);
-        if (mapItr == (*postCallSB).end()) {
-          const auto mapItr2 = (*preCallSB).find(*iid);
-          if (mapItr2 != (*preCallSB).end()) {
+      [&same_blk_post, &same_blk_pre, &block_ptr, this](uint32_t* iid) {
+        const auto map_itr = (*same_blk_post).find(*iid);
+        if (map_itr == (*same_blk_post).end()) {
+          const auto map_itr2 = (*same_blk_pre).find(*iid);
+          if (map_itr2 != (*same_blk_pre).end()) {
             // Clone pre-call same-block ops, map result id.
-            const Instruction* inInst = mapItr2->second;
-            std::unique_ptr<Instruction> sb_inst(inInst->Clone(context()));
-            CloneSameBlockOps(&sb_inst, postCallSB, preCallSB, block_ptr);
+            const Instruction* in_inst = map_itr2->second;
+            std::unique_ptr<Instruction> sb_inst(in_inst->Clone(context()));
+            CloneSameBlockOps(&sb_inst, same_blk_post, same_blk_pre, block_ptr);
             const uint32_t rid = sb_inst->result_id();
             const uint32_t nid = this->TakeNextId();
             get_decoration_mgr()->CloneDecorations(rid, nid);
             sb_inst->SetResultId(nid);
-            (*postCallSB)[rid] = nid;
+            (*same_blk_post)[rid] = nid;
             *iid = nid;
             (*block_ptr)->AddInstruction(std::move(sb_inst));
           }
         } else {
           // Reset same-block op operand.
-          *iid = mapItr->second;
+          *iid = map_itr->second;
         }
       });
 }
 
 void InstrumentPass::UpdateSucceedingPhis(
     std::vector<std::unique_ptr<BasicBlock>>& new_blocks) {
-  const auto firstBlk = new_blocks.begin();
-  const auto lastBlk = new_blocks.end() - 1;
-  const uint32_t firstId = (*firstBlk)->id();
-  const uint32_t lastId = (*lastBlk)->id();
-  const BasicBlock& const_last_block = *lastBlk->get();
+  const auto first_blk = new_blocks.begin();
+  const auto last_blk = new_blocks.end() - 1;
+  const uint32_t first_id = (*first_blk)->id();
+  const uint32_t last_id = (*last_blk)->id();
+  const BasicBlock& const_last_block = *last_blk->get();
   const_last_block.ForEachSuccessorLabel(
-      [&firstId, &lastId, this](const uint32_t succ) {
+      [&first_id, &last_id, this](const uint32_t succ) {
         BasicBlock* sbp = this->id2block_[succ];
-        sbp->ForEachPhiInst([&firstId, &lastId, this](Instruction* phi) {
+        sbp->ForEachPhiInst([&first_id, &last_id, this](Instruction* phi) {
           bool changed = false;
-          phi->ForEachInId([&firstId, &lastId, &changed](uint32_t* id) {
-            if (*id == firstId) {
-              *id = lastId;
+          phi->ForEachInId([&first_id, &last_id, &changed](uint32_t* id) {
+            if (*id == first_id) {
+              *id = last_id;
               changed = true;
             }
           });
@@ -397,9 +397,9 @@ uint32_t InstrumentPass::GetOutputBufferId() {
     // Look for storage buffer extension. If none, create one.
     bool found = false;
     for (auto& ei : get_module()->extensions()) {
-      const char* extName =
+      const char* ext_name =
         reinterpret_cast<const char*>(&ei.GetInOperand(0).words[0]);
-      if (strcmp(extName, "SPV_KHR_storage_buffer_storage_class") == 0) {
+      if (strcmp(ext_name, "SPV_KHR_storage_buffer_storage_class") == 0) {
         found = true;
         break;
       }
@@ -541,16 +541,16 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     Instruction* obuf_safe_inst = builder.AddBinaryOp(GetBoolId(),
         SpvOpULessThanEqual, obuf_new_sz_inst->result_id(),
         obuf_bnd_inst->result_id());
-    uint32_t mergeBlkId = TakeNextId();
-    uint32_t writeBlkId = TakeNextId();
-    std::unique_ptr<Instruction> mergeLabel(NewLabel(mergeBlkId));
-    std::unique_ptr<Instruction> writeLabel(NewLabel(writeBlkId));
+    uint32_t merge_blk_id = TakeNextId();
+    uint32_t write_blk_id = TakeNextId();
+    std::unique_ptr<Instruction> merge_label(NewLabel(merge_blk_id));
+    std::unique_ptr<Instruction> write_label(NewLabel(write_blk_id));
     (void) builder.AddConditionalBranch(obuf_safe_inst->result_id(),
-        writeBlkId, mergeBlkId, mergeBlkId, SpvSelectionControlMaskNone);
+        write_blk_id, merge_blk_id, merge_blk_id, SpvSelectionControlMaskNone);
     // Close safety test block and gen write block
     new_blk_ptr->SetParent(&*output_func);
     output_func->AddBasicBlock(std::move(new_blk_ptr));
-    new_blk_ptr = MakeUnique<BasicBlock>(std::move(writeLabel));
+    new_blk_ptr = MakeUnique<BasicBlock>(std::move(write_label));
     builder.SetInsertPoint(&*new_blk_ptr);
     // Generate common and stage-specific debug record members
     GenCommonStreamWriteCode(obuf_record_sz,
@@ -563,10 +563,10 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
           param_vec[kInstCommonOutFunctionIdx + i], &builder);
     }
     // Close write block and gen merge block
-    (void) builder.AddBranch(mergeBlkId);
+    (void) builder.AddBranch(merge_blk_id);
     new_blk_ptr->SetParent(&*output_func);
     output_func->AddBasicBlock(std::move(new_blk_ptr));
-    new_blk_ptr = MakeUnique<BasicBlock>(std::move(mergeLabel));
+    new_blk_ptr = MakeUnique<BasicBlock>(std::move(merge_label));
     builder.SetInsertPoint(&*new_blk_ptr);
     // Close merge block and function and add function to module
     (void) builder.AddNullaryOp(0, SpvOpReturn);
@@ -594,7 +594,7 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
       break;
     ++function_idx;
   }
-  std::vector<std::unique_ptr<BasicBlock>> newBlocks;
+  std::vector<std::unique_ptr<BasicBlock>> new_blks;
   // Count function instruction
   uint32_t instruction_idx = 1;
   // Using block iterators here because of block erasures and insertions.
@@ -605,23 +605,23 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
       // Bump instruction count if debug instructions
       instruction_idx += static_cast<uint32_t>(ii->dbg_line_insts().size());
       // Generate bindless check if warranted
-      pfn(ii, bi, function_idx, instruction_idx, stage_idx, &newBlocks);
-      if (newBlocks.size() == 0) {
+      pfn(ii, bi, function_idx, instruction_idx, stage_idx, &new_blks);
+      if (new_blks.size() == 0) {
         ++ii;
         continue;
       }
       // If there are new blocks we know there will always be two or
       // more, so update succeeding phis with label of new last block.
-      size_t newBlocksSize = newBlocks.size();
+      size_t newBlocksSize = new_blks.size();
       assert(newBlocksSize > 1);
-      UpdateSucceedingPhis(newBlocks);
+      UpdateSucceedingPhis(new_blks);
       // Replace original block with new block(s)
       context()->KillInst(bi->GetLabelInst());
       bi = bi.Erase();
-      for (auto& bb : newBlocks) {
+      for (auto& bb : new_blks) {
         bb->SetParent(func);
       }
-      bi = bi.InsertBefore(&newBlocks);
+      bi = bi.InsertBefore(&new_blks);
       // Reset block iterator to last new block
       for (size_t i = 0; i < newBlocksSize - 1; i++) ++bi;
       modified = true;
@@ -629,7 +629,7 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
       // but skip over any new phi or copy instruction.
       ii = bi->begin();
       if (ii->opcode() == SpvOpPhi || ii->opcode() == SpvOpCopyObject) ++ii;
-      newBlocks.clear();
+      new_blks.clear();
     }
   }
   return modified;
@@ -667,29 +667,29 @@ bool InstrumentPass::InstProcessEntryPointCallTree(InstProcessFunction& pfn) {
   // to clone any functions which are in the call trees of entrypoints
   // with differing execution models.
   uint32_t ecnt = 0;
-  uint32_t eStage = SpvExecutionModelMax;
+  uint32_t stage = SpvExecutionModelMax;
   for (auto& e : get_module()->entry_points()) {
     if (ecnt == 0)
-      eStage = e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx);
-    else if (e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx) != eStage)
+      stage = e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx);
+    else if (e.GetSingleWordInOperand(kEntryPointExecutionModelInIdx) != stage)
       return false;
     ++ecnt;
   }
   // Only supporting vertex, fragment and compute shaders at the moment.
   // TODO(greg-lunarg): Handle all stages.
-  if (eStage != SpvExecutionModelVertex &&
-      eStage != SpvExecutionModelFragment &&
-      eStage != SpvExecutionModelGeometry &&
-      eStage != SpvExecutionModelGLCompute &&
-      eStage != SpvExecutionModelTessellationControl &&
-      eStage != SpvExecutionModelTessellationEvaluation)
+  if (stage != SpvExecutionModelVertex &&
+      stage != SpvExecutionModelFragment &&
+      stage != SpvExecutionModelGeometry &&
+      stage != SpvExecutionModelGLCompute &&
+      stage != SpvExecutionModelTessellationControl &&
+      stage != SpvExecutionModelTessellationEvaluation)
     return false;
   // Add together the roots of all entry points
   std::queue<uint32_t> roots;
   for (auto& e : get_module()->entry_points()) {
     roots.push(e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx));
   }
-  bool modified = InstProcessCallTreeFromRoots(pfn, &roots, eStage);
+  bool modified = InstProcessCallTreeFromRoots(pfn, &roots, stage);
   return modified;
 }
 
