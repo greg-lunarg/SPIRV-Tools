@@ -16,6 +16,8 @@
 
 #include "inst_bindless_check_pass.h"
 
+namespace {
+
 // Input Operand Indices
 static const int kSpvImageSampleImageIdInIdx = 0;
 static const int kSpvSampledImageImageIdInIdx = 0;
@@ -33,6 +35,8 @@ static const int kInstBindlessOutError = 0;
 static const int kInstBindlessOutDescIndex = 1;
 static const int kInstBindlessOutDescBound = 2;
 static const int kInstBindlessOutRecordSize = 3;
+
+} // anonymous namespace
 
 namespace spvtools {
 namespace opt {

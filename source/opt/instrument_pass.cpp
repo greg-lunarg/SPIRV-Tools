@@ -18,6 +18,8 @@
 
 #include "source/cfa.h"
 
+namespace {
+
 // Debug Buffer Offsets
 static const int kDebugOutputSizeOffset = 0;
 static const int kDebugOutputDataOffset = 1;
@@ -71,6 +73,8 @@ static const int kSpvDecorateDecorationInIdx = 1;
 static const int kSpvDecorateBuiltinInIdx = 2;
 static const int kSpvMemberDecorateDecorationInIdx = 2;
 static const int kSpvMemberDecorateBuiltinInIdx = 3;
+
+} // anonymous namespace
 
 namespace spvtools {
 namespace opt {
