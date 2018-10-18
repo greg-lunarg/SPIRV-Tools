@@ -33,6 +33,10 @@ namespace opt {
 // See optimizer.hpp for documentation.
 class InstBindlessCheckPass : public InstrumentPass {
  public:
+   // For test harness only
+   InstBindlessCheckPass()
+     : InstrumentPass(7, 23, kInstValidationIdBindless) {}
+   // For all other interfaces
    InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id)
      : InstrumentPass(desc_set, shader_id, kInstValidationIdBindless) {}
 
