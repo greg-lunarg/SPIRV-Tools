@@ -27,17 +27,33 @@ namespace {
 using InstBindlessTest = PassTest<::testing::Test>;
 
 TEST_F(InstBindlessTest, Simple) {
-  //  #version 140
+  // Texture2D g_tColor[128];
   //
-  //  in vec4 BaseColor;
-  //  in vec4 Dead;
+  // layout(push_constant) cbuffer PerViewConstantBuffer_t
+  // {
+  //   uint g_nDataIdx;
+  // };
   //
-  //  void main()
-  //  {
-  //      vec4 v = BaseColor;
-  //      vec4 dv = sqrt(Dead);
-  //      gl_FragColor = v;
-  //  }
+  // SamplerState g_sAniso;
+  //
+  // struct PS_INPUT
+  // {
+  //   float2 vTextureCoords : TEXCOORD2;
+  // };
+  //
+  // struct PS_OUTPUT
+  // {
+  //   float4 vColor : SV_Target0;
+  // };
+  //
+  // PS_OUTPUT MainPs(PS_INPUT i)
+  // {
+  //   PS_OUTPUT ps_output;
+  //
+  //   ps_output.vColor = g_tColor[17].Sample(g_sAniso, i.vTextureCoords.xy);
+  //   return ps_output;
+  // }
+
 
   const std::string entry_before =
       R"(OpCapability Shader
