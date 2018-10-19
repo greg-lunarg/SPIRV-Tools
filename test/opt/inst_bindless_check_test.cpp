@@ -156,7 +156,7 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 %106 = OpConstantNull %v4float
 )";
 
-  const std::string func_before =
+  const std::string func_pt1 =
       R"(%MainPs = OpFunction %void None %10
 %29 = OpLabel
 %30 = OpLoad %v2float %i_vTextureCoords
@@ -166,23 +166,17 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 %34 = OpLoad %16 %33
 %35 = OpLoad %24 %g_sAniso
 %36 = OpSampledImage %26 %34 %35
-%37 = OpImageSampleImplicitLod %v4float %36 %30
+)";
+
+  const std::string func_pt2_before =
+      R"(%37 = OpImageSampleImplicitLod %v4float %36 %30
 OpStore %_entryPointOutput_vColor %37
 OpReturn
 OpFunctionEnd
 )";
 
-  const std::string func_after =
-      R"(%MainPs = OpFunction %void None %10
-%29 = OpLabel
-%30 = OpLoad %v2float %i_vTextureCoords
-%31 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
-%32 = OpLoad %uint %31
-%33 = OpAccessChain %_ptr_UniformConstant_16 %g_tColor %32
-%34 = OpLoad %16 %33
-%35 = OpLoad %24 %g_sAniso
-%36 = OpSampledImage %26 %34 %35
-%40 = OpULessThan %bool %32 %uint_128
+  const std::string func_pt2_after =
+      R"(%40 = OpULessThan %bool %32 %uint_128
 OpSelectionMerge %41 None
 OpBranchConditional %40 %42 %43
 %42 = OpLabel
@@ -258,8 +252,10 @@ OpFunctionEnd
 
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
-      entry_before + names_annots + consts_types_vars + func_before,
-      entry_after + names_annots + new_annots + consts_types_vars + new_consts_types_vars + func_after + output_func,
+      entry_before + names_annots + consts_types_vars + func_pt1 +
+      func_pt2_before,
+      entry_after + names_annots + new_annots + consts_types_vars +
+      new_consts_types_vars + func_pt1 + func_pt2_after + output_func,
       true, true);
 }
 
