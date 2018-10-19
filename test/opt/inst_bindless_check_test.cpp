@@ -50,7 +50,7 @@ TEST_F(InstBindlessTest, Simple) {
   // {
   //   PS_OUTPUT ps_output;
   //
-  //   ps_output.vColor = g_tColor[17].Sample(g_sAniso, i.vTextureCoords.xy);
+  //   ps_output.vColor = g_tColor[ g_nDataIdx ].Sample(g_sAniso, i.vTextureCoords.xy);
   //   return ps_output;
   // }
 
