@@ -85,12 +85,8 @@ void InstrumentPass::MovePreludeCode(
     std::unique_ptr<BasicBlock>* new_blk_ptr) {
   same_block_pre_.clear();
   same_block_post_.clear();
-  // Initialize new block. Replace all uses of original block with
-  // new block.
-  uint32_t ref_blk_id = ref_block_itr->id();
-  uint32_t new_blk_id = TakeNextId();
-  new_blk_ptr->reset(new BasicBlock(NewLabel(new_blk_id)));
-  context()->ReplaceAllUsesWith(ref_blk_id, new_blk_id);
+  // Initialize new block. Reuse label from original block.
+  new_blk_ptr->reset(new BasicBlock(ref_block_itr->GetLabel()));
   // Move contents of original ref block up to ref instruction.
   for (auto cii = ref_block_itr->begin(); cii != ref_inst_itr;
       cii = ref_block_itr->begin()) {
@@ -604,7 +600,7 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
     for (auto ii = bi->begin(); ii != bi->end(); ++instruction_idx) {
       // Bump instruction count if debug instructions
       instruction_idx += static_cast<uint32_t>(ii->dbg_line_insts().size());
-      // Generate bindless check if warranted
+      // Generate instrumentation if warranted
       pfn(ii, bi, function_idx, instruction_idx, stage_idx, &new_blks);
       if (new_blks.size() == 0) {
         ++ii;
@@ -616,7 +612,6 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
       assert(newBlocksSize > 1);
       UpdateSucceedingPhis(new_blks);
       // Replace original block with new block(s)
-      context()->KillInst(bi->GetLabelInst());
       bi = bi.Erase();
       for (auto& bb : new_blks) {
         bb->SetParent(func);
