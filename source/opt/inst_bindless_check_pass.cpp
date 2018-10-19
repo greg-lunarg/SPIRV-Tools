@@ -112,7 +112,6 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   }
   uint32_t ptr_id = load_inst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
   Instruction* ptr_inst = get_def_use_mgr()->GetDef(ptr_id);
-  // Check descriptor index against upper bound
   if (ptr_inst->opcode() != SpvOp::SpvOpAccessChain)
     return;
   if (ptr_inst->NumInOperands() != 2) {
@@ -136,15 +135,24 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   // out of debug input buffer.
   if (ptr_type_inst->opcode() != SpvOpTypeArray)
     return;
+  // If index and bound both compile-time constants and index < bound,
+  // return without changing
+  uint32_t length_id =
+      ptr_type_inst->GetSingleWordInOperand(kSpvTypeArrayLengthIdInIdx);
+  Instruction* index_inst = get_def_use_mgr()->GetDef(index_id);
+  Instruction* length_inst = get_def_use_mgr()->GetDef(length_id);
+  if (index_inst->opcode() == SpvOpConstant &&
+      length_inst->opcode() == SpvOpConstant &&
+      index_inst->GetSingleWordInOperand(kSpvConstantValueInIdx) <
+      length_inst->GetSingleWordInOperand(kSpvConstantValueInIdx))
+    return;
   // Generate full runtime bounds test code with true branch
   // being full reference and false branch being debug output and zero
   // for the referenced value.
   MovePreludeCode(ref_inst_itr, ref_block_itr, &new_blk_ptr);
   InstructionBuilder builder(context(), &*new_blk_ptr,
-      IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+    IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
   uint32_t error_id = builder.GetUintConstantId(kInstErrorBindlessBounds);
-  uint32_t length_id =
-    ptr_type_inst->GetSingleWordInOperand(kSpvTypeArrayLengthIdInIdx);
   Instruction* ult_inst = builder.AddBinaryOp(GetBoolId(), SpvOpULessThan,
       index_id, length_id);
   uint32_t merge_blk_id = TakeNextId();
