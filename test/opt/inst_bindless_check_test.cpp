@@ -55,7 +55,7 @@ TEST_F(InstBindlessTest, Simple) {
   // }
 
   const std::string entry_before =
-    R"(OpCapability Shader
+      R"(OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
 OpEntryPoint Fragment %MainPs "MainPs" %i_vTextureCoords %_entryPointOutput_vColor
@@ -64,7 +64,7 @@ OpSource HLSL 500
 )";
 
   const std::string entry_after =
-    R"(OpCapability Shader
+      R"(OpCapability Shader
 OpExtension "SPV_KHR_storage_buffer_storage_class"
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
@@ -74,7 +74,7 @@ OpSource HLSL 500
 )";
 
   const std::string names_annots =
-    R"(OpName %MainPs "MainPs"
+      R"(OpName %MainPs "MainPs"
 OpName %g_tColor "g_tColor"
 OpName %PerViewConstantBuffer_t "PerViewConstantBuffer_t"
 OpMemberName %PerViewConstantBuffer_t 0 "g_nDataIdx"
@@ -92,7 +92,7 @@ OpDecorate %_entryPointOutput_vColor Location 0
 )";
 
   const std::string new_annots =
-    R"(OpDecorate %_struct_56 Block
+      R"(OpDecorate %_struct_56 Block
 OpMemberDecorate %_struct_56 0 Offset 0
 OpMemberDecorate %_struct_56 1 Offset 4
 OpDecorate %58 DescriptorSet 7
@@ -101,7 +101,7 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 )";
 
   const std::string consts_types_vars =
-    R"(%void = OpTypeVoid
+      R"(%void = OpTypeVoid
 %10 = OpTypeFunction %void
 %float = OpTypeFloat 32
 %v2float = OpTypeVector %float 2
@@ -130,7 +130,7 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 )";
 
   const std::string new_consts_types_vars =
-    R"(%uint_0 = OpConstant %uint 0
+      R"(%uint_0 = OpConstant %uint 0
 %bool = OpTypeBool
 %48 = OpTypeFunction %void %uint %uint %uint %uint %uint
 %_runtimearr_uint = OpTypeRuntimeArray %uint
@@ -156,7 +156,7 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 )";
 
   const std::string func_pt1 =
-    R"(%MainPs = OpFunction %void None %10
+      R"(%MainPs = OpFunction %void None %10
 %29 = OpLabel
 %30 = OpLoad %v2float %i_vTextureCoords
 %31 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
@@ -168,14 +168,14 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 )";
 
   const std::string func_pt2_before =
-    R"(%37 = OpImageSampleImplicitLod %v4float %36 %30
+      R"(%37 = OpImageSampleImplicitLod %v4float %36 %30
 OpStore %_entryPointOutput_vColor %37
 OpReturn
 OpFunctionEnd
 )";
 
   const std::string func_pt2_after =
-    R"(%40 = OpULessThan %bool %32 %uint_128
+      R"(%40 = OpULessThan %bool %32 %uint_128
 OpSelectionMerge %41 None
 OpBranchConditional %40 %42 %43
 %42 = OpLabel
@@ -194,7 +194,7 @@ OpFunctionEnd
 )";
 
   const std::string output_func =
-    R"(%47 = OpFunction %void None %48
+      R"(%47 = OpFunction %void None %48
 %49 = OpFunctionParameter %uint
 %50 = OpFunctionParameter %uint
 %51 = OpFunctionParameter %uint
@@ -422,7 +422,7 @@ OpDecorate %_entryPointOutput_vColor Location 0
 )";
 
   const std::string defs_after =
-    R"(OpCapability Shader
+      R"(OpCapability Shader
 OpExtension "SPV_KHR_storage_buffer_storage_class"
 %1 = OpExtInstImport "GLSL.std.450"
 OpMemoryModel Logical GLSL450
@@ -505,7 +505,7 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 )";
 
   const std::string func_before =
-    R"(%MainPs = OpFunction %void None %10
+      R"(%MainPs = OpFunction %void None %10
 %30 = OpLabel
 %31 = OpLoad %v2float %i_vTextureCoords
 %32 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
@@ -528,7 +528,7 @@ OpFunctionEnd
 )";
 
   const std::string func_after =
-    R"(%MainPs = OpFunction %void None %10
+      R"(%MainPs = OpFunction %void None %10
 %30 = OpLabel
 %31 = OpLoad %v2float %i_vTextureCoords
 %32 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
@@ -575,7 +575,7 @@ OpFunctionEnd
 )";
 
   const std::string output_func =
-    R"(%55 = OpFunction %void None %56
+      R"(%55 = OpFunction %void None %56
 %57 = OpFunctionParameter %uint
 %58 = OpFunctionParameter %uint
 %59 = OpFunctionParameter %uint
@@ -631,6 +631,274 @@ OpFunctionEnd
 )";
 
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<InstBindlessCheckPass>(defs_before + func_before,
+    defs_after + func_after + output_func, true, true);
+}
+
+TEST_F(InstBindlessTest, ReuseConstsTypesBuiltins) {
+  // This test verifies that the pass resuses existing constants, types
+  // and builtin variables
+
+  const std::string defs_before =
+      R"(OpCapability Shader
+OpExtension "SPV_KHR_storage_buffer_storage_class"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %MainPs "MainPs" %i_vTextureCoords %_entryPointOutput_vColor %gl_FragCoord
+OpExecutionMode %MainPs OriginUpperLeft
+OpSource HLSL 500
+OpName %MainPs "MainPs"
+OpName %g_tColor "g_tColor"
+OpName %PerViewConstantBuffer_t "PerViewConstantBuffer_t"
+OpMemberName %PerViewConstantBuffer_t 0 "g_nDataIdx"
+OpName %_ ""
+OpName %g_sAniso "g_sAniso"
+OpName %i_vTextureCoords "i.vTextureCoords"
+OpName %_entryPointOutput_vColor "@entryPointOutput.vColor"
+OpDecorate %g_tColor DescriptorSet 3
+OpDecorate %g_tColor Binding 0
+OpMemberDecorate %PerViewConstantBuffer_t 0 Offset 0
+OpDecorate %PerViewConstantBuffer_t Block
+OpDecorate %g_sAniso DescriptorSet 0
+OpDecorate %i_vTextureCoords Location 0
+OpDecorate %_entryPointOutput_vColor Location 0
+OpDecorate %85 DescriptorSet 7
+OpDecorate %85 Binding 0
+OpDecorate %gl_FragCoord BuiltIn FragCoord
+%void = OpTypeVoid
+%3 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v2float = OpTypeVector %float 2
+%v4float = OpTypeVector %float 4
+%int = OpTypeInt 32 1
+%int_0 = OpConstant %int 0
+%20 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%uint = OpTypeInt 32 0
+%uint_128 = OpConstant %uint 128
+%_arr_20_uint_128 = OpTypeArray %20 %uint_128
+%_ptr_UniformConstant__arr_20_uint_128 = OpTypePointer UniformConstant %_arr_20_uint_128
+%g_tColor = OpVariable %_ptr_UniformConstant__arr_20_uint_128 UniformConstant
+%PerViewConstantBuffer_t = OpTypeStruct %uint
+%_ptr_PushConstant_PerViewConstantBuffer_t = OpTypePointer PushConstant %PerViewConstantBuffer_t
+%_ = OpVariable %_ptr_PushConstant_PerViewConstantBuffer_t PushConstant
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+%_ptr_UniformConstant_20 = OpTypePointer UniformConstant %20
+%35 = OpTypeSampler
+%_ptr_UniformConstant_35 = OpTypePointer UniformConstant %35
+%g_sAniso = OpVariable %_ptr_UniformConstant_35 UniformConstant
+%39 = OpTypeSampledImage %20
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%i_vTextureCoords = OpVariable %_ptr_Input_v2float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput_vColor = OpVariable %_ptr_Output_v4float Output
+%uint_0 = OpConstant %uint 0
+%bool = OpTypeBool
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%_struct_83 = OpTypeStruct %uint %_runtimearr_uint
+%_ptr_StorageBuffer__struct_83 = OpTypePointer StorageBuffer %_struct_83
+%85 = OpVariable %_ptr_StorageBuffer__struct_83 StorageBuffer
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+%uint_10 = OpConstant %uint 10
+%uint_4 = OpConstant %uint 4
+%uint_1 = OpConstant %uint 1
+%uint_23 = OpConstant %uint 23
+%uint_2 = OpConstant %uint 2
+%uint_9 = OpConstant %uint 9
+%uint_3 = OpConstant %uint 3
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%gl_FragCoord = OpVariable %_ptr_Input_v4float Input
+%v4uint = OpTypeVector %uint 4
+%uint_5 = OpConstant %uint 5
+%uint_6 = OpConstant %uint 6
+%uint_7 = OpConstant %uint 7
+%uint_8 = OpConstant %uint 8
+%131 = OpConstantNull %v4float
+)";
+
+  const std::string defs_after =
+      R"(OpCapability Shader
+OpExtension "SPV_KHR_storage_buffer_storage_class"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %MainPs "MainPs" %i_vTextureCoords %_entryPointOutput_vColor %gl_FragCoord
+OpExecutionMode %MainPs OriginUpperLeft
+OpSource HLSL 500
+OpName %MainPs "MainPs"
+OpName %g_tColor "g_tColor"
+OpName %PerViewConstantBuffer_t "PerViewConstantBuffer_t"
+OpMemberName %PerViewConstantBuffer_t 0 "g_nDataIdx"
+OpName %_ ""
+OpName %g_sAniso "g_sAniso"
+OpName %i_vTextureCoords "i.vTextureCoords"
+OpName %_entryPointOutput_vColor "@entryPointOutput.vColor"
+OpDecorate %g_tColor DescriptorSet 3
+OpDecorate %g_tColor Binding 0
+OpMemberDecorate %PerViewConstantBuffer_t 0 Offset 0
+OpDecorate %PerViewConstantBuffer_t Block
+OpDecorate %g_sAniso DescriptorSet 0
+OpDecorate %i_vTextureCoords Location 0
+OpDecorate %_entryPointOutput_vColor Location 0
+OpDecorate %10 DescriptorSet 7
+OpDecorate %10 Binding 0
+OpDecorate %gl_FragCoord BuiltIn FragCoord
+OpDecorate %_struct_34 Block
+OpMemberDecorate %_struct_34 0 Offset 0
+OpMemberDecorate %_struct_34 1 Offset 4
+OpDecorate %75 DescriptorSet 7
+OpDecorate %75 Binding 0
+%void = OpTypeVoid
+%12 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v2float = OpTypeVector %float 2
+%v4float = OpTypeVector %float 4
+%int = OpTypeInt 32 1
+%int_0 = OpConstant %int 0
+%18 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%uint = OpTypeInt 32 0
+%uint_128 = OpConstant %uint 128
+%_arr_18_uint_128 = OpTypeArray %18 %uint_128
+%_ptr_UniformConstant__arr_18_uint_128 = OpTypePointer UniformConstant %_arr_18_uint_128
+%g_tColor = OpVariable %_ptr_UniformConstant__arr_18_uint_128 UniformConstant
+%PerViewConstantBuffer_t = OpTypeStruct %uint
+%_ptr_PushConstant_PerViewConstantBuffer_t = OpTypePointer PushConstant %PerViewConstantBuffer_t
+%_ = OpVariable %_ptr_PushConstant_PerViewConstantBuffer_t PushConstant
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+%_ptr_UniformConstant_18 = OpTypePointer UniformConstant %18
+%26 = OpTypeSampler
+%_ptr_UniformConstant_26 = OpTypePointer UniformConstant %26
+%g_sAniso = OpVariable %_ptr_UniformConstant_26 UniformConstant
+%28 = OpTypeSampledImage %18
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%i_vTextureCoords = OpVariable %_ptr_Input_v2float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput_vColor = OpVariable %_ptr_Output_v4float Output
+%uint_0 = OpConstant %uint 0
+%bool = OpTypeBool
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%_struct_34 = OpTypeStruct %uint %_runtimearr_uint
+%_ptr_StorageBuffer__struct_34 = OpTypePointer StorageBuffer %_struct_34
+%10 = OpVariable %_ptr_StorageBuffer__struct_34 StorageBuffer
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+%uint_10 = OpConstant %uint 10
+%uint_4 = OpConstant %uint 4
+%uint_1 = OpConstant %uint 1
+%uint_23 = OpConstant %uint 23
+%uint_2 = OpConstant %uint 2
+%uint_9 = OpConstant %uint 9
+%uint_3 = OpConstant %uint 3
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%gl_FragCoord = OpVariable %_ptr_Input_v4float Input
+%v4uint = OpTypeVector %uint 4
+%uint_5 = OpConstant %uint 5
+%uint_6 = OpConstant %uint 6
+%uint_7 = OpConstant %uint 7
+%uint_8 = OpConstant %uint 8
+%50 = OpConstantNull %v4float
+%68 = OpTypeFunction %void %uint %uint %uint %uint %uint
+%75 = OpVariable %_ptr_StorageBuffer__struct_34 StorageBuffer
+)";
+
+  const std::string func_before =
+      R"(%MainPs = OpFunction %void None %3
+%5 = OpLabel
+%53 = OpLoad %v2float %i_vTextureCoords
+%63 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
+%64 = OpLoad %uint %63
+%65 = OpAccessChain %_ptr_UniformConstant_20 %g_tColor %64
+%67 = OpLoad %35 %g_sAniso
+%78 = OpLoad %20 %65
+%79 = OpSampledImage %39 %78 %67
+%71 = OpImageSampleImplicitLod %v4float %79 %53
+OpStore %_entryPointOutput_vColor %71
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string func_after =
+    R"(%MainPs = OpFunction %void None %12
+%51 = OpLabel
+%52 = OpLoad %v2float %i_vTextureCoords
+%53 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
+%54 = OpLoad %uint %53
+%55 = OpAccessChain %_ptr_UniformConstant_18 %g_tColor %54
+%56 = OpLoad %26 %g_sAniso
+%57 = OpLoad %18 %55
+%58 = OpSampledImage %28 %57 %56
+%60 = OpULessThan %bool %54 %uint_128
+OpSelectionMerge %61 None
+OpBranchConditional %60 %62 %63
+%62 = OpLabel
+%64 = OpLoad %18 %55
+%65 = OpSampledImage %28 %64 %56
+%66 = OpImageSampleImplicitLod %v4float %65 %52
+OpBranch %61
+%63 = OpLabel
+%107 = OpFunctionCall %void %67 %uint_0 %uint_9 %uint_0 %54 %uint_128
+OpBranch %61
+%61 = OpLabel
+%108 = OpPhi %v4float %66 %62 %50 %63
+OpStore %_entryPointOutput_vColor %108
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string output_func =
+    R"(%67 = OpFunction %void None %68
+%69 = OpFunctionParameter %uint
+%70 = OpFunctionParameter %uint
+%71 = OpFunctionParameter %uint
+%72 = OpFunctionParameter %uint
+%73 = OpFunctionParameter %uint
+%74 = OpLabel
+%76 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_0
+%77 = OpAtomicIAdd %uint %76 %uint_4 %uint_0 %uint_10
+%78 = OpIAdd %uint %77 %uint_10
+%79 = OpArrayLength %uint %75 1
+%80 = OpULessThanEqual %bool %78 %79
+OpSelectionMerge %81 None
+OpBranchConditional %80 %82 %81
+%82 = OpLabel
+%83 = OpIAdd %uint %77 %uint_0
+%84 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %83
+OpStore %84 %uint_10
+%85 = OpIAdd %uint %77 %uint_1
+%86 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %85
+OpStore %86 %uint_23
+%87 = OpIAdd %uint %77 %uint_2
+%88 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %87
+OpStore %88 %69
+%89 = OpIAdd %uint %77 %uint_3
+%90 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %89
+OpStore %90 %70
+%91 = OpIAdd %uint %77 %uint_4
+%92 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %91
+OpStore %92 %uint_4
+%93 = OpLoad %v4float %gl_FragCoord
+%94 = OpBitcast %v4uint %93
+%95 = OpCompositeExtract %uint %94 0
+%96 = OpIAdd %uint %77 %uint_5
+%97 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %96
+OpStore %97 %95
+%98 = OpCompositeExtract %uint %94 1
+%99 = OpIAdd %uint %77 %uint_6
+%100 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %99
+OpStore %100 %98
+%101 = OpIAdd %uint %77 %uint_7
+%102 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %101
+OpStore %102 %71
+%103 = OpIAdd %uint %77 %uint_8
+%104 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %103
+OpStore %104 %72
+%105 = OpIAdd %uint %77 %uint_9
+%106 = OpAccessChain %_ptr_StorageBuffer_uint %75 %uint_1 %105
+OpStore %106 %73
+OpBranch %81
+%81 = OpLabel
+OpReturn
+OpFunctionEnd
+)";
+
+  // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(defs_before + func_before,
       defs_after + func_after + output_func, true, true);
 }
