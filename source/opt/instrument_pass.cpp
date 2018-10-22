@@ -391,16 +391,7 @@ uint32_t InstrumentPass::GetOutputBufferId() {
     deco_mgr->AddDecorationVal(output_buffer_id_, SpvDecorationBinding,
         GetOutputBufferBinding());
     // Look for storage buffer extension. If none, create one.
-    bool found = false;
-    for (auto& ei : get_module()->extensions()) {
-      const char* ext_name =
-        reinterpret_cast<const char*>(&ei.GetInOperand(0).words[0]);
-      if (strcmp(ext_name, "SPV_KHR_storage_buffer_storage_class") == 0) {
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
+    if (!get_feature_mgr()->HasExtension(kSPV_KHR_storage_buffer_storage_class)) {
       const std::string ext_name("SPV_KHR_storage_buffer_storage_class");
       const auto num_chars = ext_name.size();
       // Compute num words, accommodate the terminating null character.
