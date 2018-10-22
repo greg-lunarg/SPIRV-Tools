@@ -54,7 +54,6 @@ TEST_F(InstBindlessTest, Simple) {
   //   return ps_output;
   // }
 
-
   const std::string entry_before =
     R"(OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
@@ -282,7 +281,6 @@ TEST_F(InstBindlessTest, NoInstrumentConstIndexInbounds) {
   //   return ps_output;
   // }
 
-
   const std::string before =
       R"(OpCapability Shader
 %1 = OpExtInstImport "GLSL.std.450"
@@ -340,9 +338,306 @@ OpFunctionEnd
   SinglePassRunAndCheck<InstBindlessCheckPass>(before, before, true, true);
 }
 
+TEST_F(InstBindlessTest, InstrumentMultipleInstructions) {
+  // Texture2D g_tColor[128];
+  //
+  // layout(push_constant) cbuffer PerViewConstantBuffer_t
+  // {
+  //   uint g_nDataIdx;
+  //   uint g_nDataIdx2;
+  // };
+  //
+  // SamplerState g_sAniso;
+  //
+  // struct PS_INPUT
+  // {
+  //   float2 vTextureCoords : TEXCOORD2;
+  // };
+  //
+  // struct PS_OUTPUT
+  // {
+  //   float4 vColor : SV_Target0;
+  // };
+  //
+  // PS_OUTPUT MainPs(PS_INPUT i)
+  // {
+  //   PS_OUTPUT ps_output;
+  //
+  //   float t  = g_tColor[g_nDataIdx ].Sample(g_sAniso, i.vTextureCoords.xy);
+  //   float t2 = g_tColor[g_nDataIdx2].Sample(g_sAniso, i.vTextureCoords.xy);
+  //   ps_output.vColor = t + t2;
+  //   return ps_output;
+  // }
+
+  const std::string defs_before =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %MainPs "MainPs" %i_vTextureCoords %_entryPointOutput_vColor
+OpExecutionMode %MainPs OriginUpperLeft
+OpSource HLSL 500
+OpName %MainPs "MainPs"
+OpName %g_tColor "g_tColor"
+OpName %PerViewConstantBuffer_t "PerViewConstantBuffer_t"
+OpMemberName %PerViewConstantBuffer_t 0 "g_nDataIdx"
+OpName %_ ""
+OpName %g_sAniso "g_sAniso"
+OpName %i_vTextureCoords "i.vTextureCoords"
+OpName %_entryPointOutput_vColor "@entryPointOutput.vColor"
+OpDecorate %g_tColor DescriptorSet 3
+OpDecorate %g_tColor Binding 0
+OpMemberDecorate %PerViewConstantBuffer_t 0 Offset 0
+OpMemberDecorate %PerViewConstantBuffer_t 1 Offset 4
+OpDecorate %PerViewConstantBuffer_t Block
+OpDecorate %g_sAniso DescriptorSet 0
+OpDecorate %i_vTextureCoords Location 0
+OpDecorate %_entryPointOutput_vColor Location 0
+%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v2float = OpTypeVector %float 2
+%v4float = OpTypeVector %float 4
+%int = OpTypeInt 32 1
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%17 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%uint = OpTypeInt 32 0
+%uint_128 = OpConstant %uint 128
+%_arr_17_uint_128 = OpTypeArray %17 %uint_128
+%_ptr_UniformConstant__arr_17_uint_128 = OpTypePointer UniformConstant %_arr_17_uint_128
+%g_tColor = OpVariable %_ptr_UniformConstant__arr_17_uint_128 UniformConstant
+%PerViewConstantBuffer_t = OpTypeStruct %uint %uint
+%_ptr_PushConstant_PerViewConstantBuffer_t = OpTypePointer PushConstant %PerViewConstantBuffer_t
+%_ = OpVariable %_ptr_PushConstant_PerViewConstantBuffer_t PushConstant
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+%_ptr_UniformConstant_17 = OpTypePointer UniformConstant %17
+%25 = OpTypeSampler
+%_ptr_UniformConstant_25 = OpTypePointer UniformConstant %25
+%g_sAniso = OpVariable %_ptr_UniformConstant_25 UniformConstant
+%27 = OpTypeSampledImage %17
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%i_vTextureCoords = OpVariable %_ptr_Input_v2float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput_vColor = OpVariable %_ptr_Output_v4float Output
+)";
+
+  const std::string defs_after =
+    R"(OpCapability Shader
+OpExtension "SPV_KHR_storage_buffer_storage_class"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %MainPs "MainPs" %i_vTextureCoords %_entryPointOutput_vColor %gl_FragCoord
+OpExecutionMode %MainPs OriginUpperLeft
+OpSource HLSL 500
+OpName %MainPs "MainPs"
+OpName %g_tColor "g_tColor"
+OpName %PerViewConstantBuffer_t "PerViewConstantBuffer_t"
+OpMemberName %PerViewConstantBuffer_t 0 "g_nDataIdx"
+OpName %_ ""
+OpName %g_sAniso "g_sAniso"
+OpName %i_vTextureCoords "i.vTextureCoords"
+OpName %_entryPointOutput_vColor "@entryPointOutput.vColor"
+OpDecorate %g_tColor DescriptorSet 3
+OpDecorate %g_tColor Binding 0
+OpMemberDecorate %PerViewConstantBuffer_t 0 Offset 0
+OpMemberDecorate %PerViewConstantBuffer_t 1 Offset 4
+OpDecorate %PerViewConstantBuffer_t Block
+OpDecorate %g_sAniso DescriptorSet 0
+OpDecorate %i_vTextureCoords Location 0
+OpDecorate %_entryPointOutput_vColor Location 0
+OpDecorate %_struct_64 Block
+OpMemberDecorate %_struct_64 0 Offset 0
+OpMemberDecorate %_struct_64 1 Offset 4
+OpDecorate %66 DescriptorSet 7
+OpDecorate %66 Binding 0
+OpDecorate %gl_FragCoord BuiltIn FragCoord
+%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v2float = OpTypeVector %float 2
+%v4float = OpTypeVector %float 4
+%int = OpTypeInt 32 1
+%int_0 = OpConstant %int 0
+%int_1 = OpConstant %int 1
+%17 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%uint = OpTypeInt 32 0
+%uint_128 = OpConstant %uint 128
+%_arr_17_uint_128 = OpTypeArray %17 %uint_128
+%_ptr_UniformConstant__arr_17_uint_128 = OpTypePointer UniformConstant %_arr_17_uint_128
+%g_tColor = OpVariable %_ptr_UniformConstant__arr_17_uint_128 UniformConstant
+%PerViewConstantBuffer_t = OpTypeStruct %uint %uint
+%_ptr_PushConstant_PerViewConstantBuffer_t = OpTypePointer PushConstant %PerViewConstantBuffer_t
+%_ = OpVariable %_ptr_PushConstant_PerViewConstantBuffer_t PushConstant
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+%_ptr_UniformConstant_17 = OpTypePointer UniformConstant %17
+%25 = OpTypeSampler
+%_ptr_UniformConstant_25 = OpTypePointer UniformConstant %25
+%g_sAniso = OpVariable %_ptr_UniformConstant_25 UniformConstant
+%27 = OpTypeSampledImage %17
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%i_vTextureCoords = OpVariable %_ptr_Input_v2float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput_vColor = OpVariable %_ptr_Output_v4float Output
+%uint_0 = OpConstant %uint 0
+%bool = OpTypeBool
+%56 = OpTypeFunction %void %uint %uint %uint %uint %uint
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%_struct_64 = OpTypeStruct %uint %_runtimearr_uint
+%_ptr_StorageBuffer__struct_64 = OpTypePointer StorageBuffer %_struct_64
+%66 = OpVariable %_ptr_StorageBuffer__struct_64 StorageBuffer
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+%uint_10 = OpConstant %uint 10
+%uint_4 = OpConstant %uint 4
+%uint_1 = OpConstant %uint 1
+%uint_23 = OpConstant %uint 23
+%uint_2 = OpConstant %uint 2
+%uint_3 = OpConstant %uint 3
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%gl_FragCoord = OpVariable %_ptr_Input_v4float Input
+%v4uint = OpTypeVector %uint 4
+%uint_5 = OpConstant %uint 5
+%uint_6 = OpConstant %uint 6
+%uint_7 = OpConstant %uint 7
+%uint_8 = OpConstant %uint 8
+%uint_9 = OpConstant %uint 9
+%114 = OpConstantNull %v4float
+%uint_15 = OpConstant %uint 15
+)";
+
+  const std::string func_before =
+    R"(%MainPs = OpFunction %void None %10
+%30 = OpLabel
+%31 = OpLoad %v2float %i_vTextureCoords
+%32 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
+%33 = OpLoad %uint %32
+%34 = OpAccessChain %_ptr_UniformConstant_17 %g_tColor %33
+%35 = OpLoad %17 %34
+%36 = OpLoad %25 %g_sAniso
+%37 = OpSampledImage %27 %35 %36
+%38 = OpImageSampleImplicitLod %v4float %37 %31
+%39 = OpAccessChain %_ptr_PushConstant_uint %_ %int_1
+%40 = OpLoad %uint %39
+%41 = OpAccessChain %_ptr_UniformConstant_17 %g_tColor %40
+%42 = OpLoad %17 %41
+%43 = OpSampledImage %27 %42 %36
+%44 = OpImageSampleImplicitLod %v4float %43 %31
+%45 = OpFAdd %v4float %38 %44
+OpStore %_entryPointOutput_vColor %45
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string func_after =
+    R"(%MainPs = OpFunction %void None %10
+%30 = OpLabel
+%31 = OpLoad %v2float %i_vTextureCoords
+%32 = OpAccessChain %_ptr_PushConstant_uint %_ %int_0
+%33 = OpLoad %uint %32
+%34 = OpAccessChain %_ptr_UniformConstant_17 %g_tColor %33
+%35 = OpLoad %17 %34
+%36 = OpLoad %25 %g_sAniso
+%37 = OpSampledImage %27 %35 %36
+%48 = OpULessThan %bool %33 %uint_128
+OpSelectionMerge %49 None
+OpBranchConditional %48 %50 %51
+%50 = OpLabel
+%52 = OpLoad %17 %34
+%53 = OpSampledImage %27 %52 %36
+%54 = OpImageSampleImplicitLod %v4float %53 %31
+OpBranch %49
+%51 = OpLabel
+%113 = OpFunctionCall %void %55 %uint_0 %uint_9 %uint_0 %33 %uint_128
+OpBranch %49
+%49 = OpLabel
+%115 = OpPhi %v4float %54 %50 %114 %51
+%39 = OpAccessChain %_ptr_PushConstant_uint %_ %int_1
+%40 = OpLoad %uint %39
+%41 = OpAccessChain %_ptr_UniformConstant_17 %g_tColor %40
+%42 = OpLoad %17 %41
+%43 = OpSampledImage %27 %42 %36
+%116 = OpULessThan %bool %40 %uint_128
+OpSelectionMerge %117 None
+OpBranchConditional %116 %118 %119
+%118 = OpLabel
+%120 = OpLoad %17 %41
+%121 = OpSampledImage %27 %120 %36
+%122 = OpImageSampleImplicitLod %v4float %121 %31
+OpBranch %117
+%119 = OpLabel
+%124 = OpFunctionCall %void %55 %uint_0 %uint_15 %uint_0 %40 %uint_128
+OpBranch %117
+%117 = OpLabel
+%125 = OpPhi %v4float %122 %118 %114 %119
+%45 = OpFAdd %v4float %115 %125
+OpStore %_entryPointOutput_vColor %45
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string output_func =
+    R"(%55 = OpFunction %void None %56
+%57 = OpFunctionParameter %uint
+%58 = OpFunctionParameter %uint
+%59 = OpFunctionParameter %uint
+%60 = OpFunctionParameter %uint
+%61 = OpFunctionParameter %uint
+%62 = OpLabel
+%68 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_0
+%71 = OpAtomicIAdd %uint %68 %uint_4 %uint_0 %uint_10
+%72 = OpIAdd %uint %71 %uint_10
+%73 = OpArrayLength %uint %66 1
+%74 = OpULessThanEqual %bool %72 %73
+OpSelectionMerge %75 None
+OpBranchConditional %74 %76 %75
+%76 = OpLabel
+%77 = OpIAdd %uint %71 %uint_0
+%79 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %77
+OpStore %79 %uint_10
+%81 = OpIAdd %uint %71 %uint_1
+%82 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %81
+OpStore %82 %uint_23
+%84 = OpIAdd %uint %71 %uint_2
+%85 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %84
+OpStore %85 %57
+%87 = OpIAdd %uint %71 %uint_3
+%88 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %87
+OpStore %88 %58
+%89 = OpIAdd %uint %71 %uint_4
+%90 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %89
+OpStore %90 %uint_4
+%93 = OpLoad %v4float %gl_FragCoord
+%95 = OpBitcast %v4uint %93
+%96 = OpCompositeExtract %uint %95 0
+%98 = OpIAdd %uint %71 %uint_5
+%99 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %98
+OpStore %99 %96
+%100 = OpCompositeExtract %uint %95 1
+%102 = OpIAdd %uint %71 %uint_6
+%103 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %102
+OpStore %103 %100
+%105 = OpIAdd %uint %71 %uint_7
+%106 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %105
+OpStore %106 %59
+%108 = OpIAdd %uint %71 %uint_8
+%109 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %108
+OpStore %109 %60
+%111 = OpIAdd %uint %71 %uint_9
+%112 = OpAccessChain %_ptr_StorageBuffer_uint %66 %uint_1 %111
+OpStore %112 %61
+OpBranch %75
+%75 = OpLabel
+OpReturn
+OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<InstBindlessCheckPass>(defs_before + func_before,
+      defs_after + func_after + output_func, true, true);
+}
+
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
 //
-// TODO(greg-lunarg): Come up with stuff to put here :)
+// TODO(greg-lunarg): Come up with cases to put here :)
 
 }  // namespace
 }  // namespace opt
