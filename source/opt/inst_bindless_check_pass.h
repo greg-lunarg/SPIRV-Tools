@@ -30,7 +30,11 @@
 namespace spvtools {
 namespace opt {
 
-// See optimizer.hpp for documentation.
+// This class/pass is designed to support the bindless (descriptor indexing)
+// GPU-assisted validation layer of
+// https://github.com/KhronosGroup/Vulkan-ValidationLayers. Its internal and
+// external design may change as the layer evolves.
+// See optimizer.hpp for pass user documentation.
 class InstBindlessCheckPass : public InstrumentPass {
  public:
    // For test harness only
@@ -54,9 +58,9 @@ class InstBindlessCheckPass : public InstrumentPass {
    // into the descriptor array is in-bounds. If the check passes, execute
    // the remainder of the reference, otherwise write a record to the debug
    // output buffer stream including |function_idx, instruction_idx, stage_idx|
-   // and replace the reference with 0. The block at
-   // |ref_block_itr| can just be replaced with the blocks in |new_blocks|,
-   // which will contain at least two blocks. The last block will
+   // and replace the reference with the null value of the original type. The
+   // block at |ref_block_itr| can just be replaced with the blocks in
+   // |new_blocks|, which will contain at least two blocks. The last block will
    // comprise all instructions following |ref_inst_itr|,
    // preceded by a phi instruction.
    //
