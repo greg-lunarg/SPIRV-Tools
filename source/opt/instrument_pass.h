@@ -81,7 +81,6 @@ class InstrumentPass : public Pass {
     UptrVectorIterator<BasicBlock>,
     uint32_t,
     uint32_t,
-    uint32_t,
     std::vector<std::unique_ptr<BasicBlock>>*)>;
 
   virtual ~InstrumentPass() = default;
@@ -159,7 +158,6 @@ class InstrumentPass : public Pass {
   //
   //     Record Size
   //     Shader ID
-  //     Function Index
   //     Instruction Index
   //     Stage
   //     Stage-specific Word 0
@@ -180,8 +178,8 @@ class InstrumentPass : public Pass {
   // Shader ID is a value that identifies which shader has generated the
   // validation error. It is passed when the instrumentation pass is created.
   //
-  // The Function and Instruction Index are the ordinal indices of the function
-  // and the instruction within the function which is in error.
+  // The Instruction Index is the position of the instruction within the
+  // SPIR-V file which is in error.
   //
   // The Stage is the pipeline stage which has generated the error as defined
   // by the SpvExecutionModel_ enumeration. This is used to interpret the
@@ -208,7 +206,6 @@ class InstrumentPass : public Pass {
   // before writing, the size of the debug out buffer can be used by the
   // validation layer to control the number of error records that are written.
   void GenDebugStreamWrite(
-    uint32_t func_idx,
     uint32_t instruction_idx,
     uint32_t stage_idx,
     const std::vector<uint32_t> &validation_ids,
@@ -279,7 +276,6 @@ class InstrumentPass : public Pass {
   // |base_off|.
   void GenCommonStreamWriteCode(
     uint32_t record_sz,
-    uint32_t func_idx,
     uint32_t instruction_idx,
     uint32_t stage_idx,
     uint32_t base_off,
@@ -345,6 +341,9 @@ class InstrumentPass : public Pass {
   // Map from block's label id to block. TODO(dnovillo): This is superfluous wrt
   // CFG. It has functionality not present in CFG. Consolidate.
   std::unordered_map<uint32_t, BasicBlock*> id2block_;
+
+  // Map from function's position index to the offset of its first instruction
+  std::unordered_map<uint32_t, uint32_t> funcIdx2offset_;
 
   // result id for OpConstantFalse
   uint32_t validation_id_;

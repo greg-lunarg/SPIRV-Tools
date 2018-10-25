@@ -27,37 +27,36 @@ static const int kDebugOutputDataOffset = 1;
 // Common Output Record Offsets
 static const int kInstCommonOutSize = 0;
 static const int kInstCommonOutShaderId = 1;
-static const int kInstCommonOutFunctionIdx = 2;
-static const int kInstCommonOutInstructionIdx = 3;
-static const int kInstCommonOutStageIdx = 4;
+static const int kInstCommonOutInstructionIdx = 2;
+static const int kInstCommonOutStageIdx = 3;
+static const int kInstCommonOutCnt = 4;
 
 // Common Parameter Positions
-static const int kInstCommonParamFuncIdx = 0;
-static const int kInstCommonParamInstIdx = 1;
-static const int kInstCommonParamCnt = 2;
+static const int kInstCommonParamInstIdx = 0;
+static const int kInstCommonParamCnt = 1;
 
 // Vertex Shader Output Record Offsets
-static const int kInstVertOutVertexId = 5;
-static const int kInstVertOutInstanceId = 6;
+static const int kInstVertOutVertexId = kInstCommonOutCnt;
+static const int kInstVertOutInstanceId = kInstCommonOutCnt + 1;
 
 // Frag Shader Output Record Offsets
-static const int kInstFragOutFragCoordX = 5;
-static const int kInstFragOutFragCoordY = 6;
+static const int kInstFragOutFragCoordX = kInstCommonOutCnt;
+static const int kInstFragOutFragCoordY = kInstCommonOutCnt + 1;
 
 // Compute Shader Output Record Offsets
-static const int kInstCompOutGlobalInvocationId = 5;
-static const int kInstCompOutUnused = 6;
+static const int kInstCompOutGlobalInvocationId = kInstCommonOutCnt;
+static const int kInstCompOutUnused = kInstCommonOutCnt + 1;
 
 // Tessellation Shader Output Record Offsets
-static const int kInstTessOutInvocationId = 5;
-static const int kInstTessOutUnused = 6;
+static const int kInstTessOutInvocationId = kInstCommonOutCnt;
+static const int kInstTessOutUnused = kInstCommonOutCnt + 1;
 
 // Geometry Shader Output Record Offsets
-static const int kInstGeomOutPrimitiveId = 5;
-static const int kInstGeomOutInvocationId = 6;
+static const int kInstGeomOutPrimitiveId = kInstCommonOutCnt;
+static const int kInstGeomOutInvocationId = kInstCommonOutCnt + 1;
 
 // Size of Common and Stage-specific Members
-static const int kInstStageOutRecordSize = 7;
+static const int kInstStageOutRecordSize = kInstCommonOutCnt + 2;
 
 // Indices of operands in SPIR-V instructions
 static const int kSpvFunctionCallFunctionId = 2;
@@ -161,7 +160,6 @@ void InstrumentPass::GenDebugOutputFieldCode(
 
 void InstrumentPass::GenCommonStreamWriteCode(
     uint32_t record_sz,
-    uint32_t func_id,
     uint32_t inst_id,
     uint32_t stage_idx,
     uint32_t base_offset_id,
@@ -172,9 +170,6 @@ void InstrumentPass::GenCommonStreamWriteCode(
   // Store Shader Id
   GenDebugOutputFieldCode(base_offset_id, kInstCommonOutShaderId,
       builder->GetUintConstantId(shader_id_), builder);
-  // Store Function Idx
-  GenDebugOutputFieldCode(base_offset_id, kInstCommonOutFunctionIdx,
-      func_id, builder);
   // Store Instruction Idx
   GenDebugOutputFieldCode(base_offset_id, kInstCommonOutInstructionIdx,
       inst_id, builder);
@@ -267,7 +262,6 @@ void InstrumentPass::GenStageStreamWriteCode(
 }
 
 void InstrumentPass::GenDebugStreamWrite(
-    uint32_t func_idx,
     uint32_t instruction_idx,
     uint32_t stage_idx,
     const std::vector<uint32_t> &validation_ids,
@@ -277,7 +271,6 @@ void InstrumentPass::GenDebugStreamWrite(
   uint32_t val_id_cnt = static_cast<uint32_t>(validation_ids.size());
   uint32_t output_func_id = GetStreamWriteFunctionId(stage_idx, val_id_cnt);
   std::vector<uint32_t> args = { output_func_id,
-      builder->GetUintConstantId(func_idx),
       builder->GetUintConstantId(instruction_idx) };
   (void) args.insert(args.end(), validation_ids.begin(), validation_ids.end());
   (void) builder->AddNaryOp(GetVoidId(), SpvOpFunctionCall, args);
@@ -541,13 +534,13 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     builder.SetInsertPoint(&*new_blk_ptr);
     // Generate common and stage-specific debug record members
     GenCommonStreamWriteCode(obuf_record_sz,
-        param_vec[kInstCommonParamFuncIdx], param_vec[kInstCommonParamInstIdx],
+        param_vec[kInstCommonParamInstIdx],
         stage_idx, obuf_curr_sz_id, &builder);
     GenStageStreamWriteCode(stage_idx, obuf_curr_sz_id, &builder);
     // Gen writes of validation specific data
     for (uint32_t i = 0; i < val_spec_param_cnt; ++i) {
       GenDebugOutputFieldCode(obuf_curr_sz_id, kInstStageOutRecordSize + i,
-          param_vec[kInstCommonOutFunctionIdx + i], &builder);
+          param_vec[kInstCommonParamCnt + i], &builder);
     }
     // Close write block and gen merge block
     (void) builder.AddBranch(merge_blk_id);
@@ -582,8 +575,8 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
     ++function_idx;
   }
   std::vector<std::unique_ptr<BasicBlock>> new_blks;
-  // Count function instruction
-  uint32_t instruction_idx = 1;
+  // Start count after function instruction
+  uint32_t instruction_idx = funcIdx2offset_[function_idx] + 1;
   // Using block iterators here because of block erasures and insertions.
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
     // Count block's label
@@ -592,7 +585,7 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
       // Bump instruction count if debug instructions
       instruction_idx += static_cast<uint32_t>(ii->dbg_line_insts().size());
       // Generate instrumentation if warranted
-      pfn(ii, bi, function_idx, instruction_idx, stage_idx, &new_blks);
+      pfn(ii, bi, instruction_idx, stage_idx, &new_blks);
       if (new_blks.size() == 0) {
         ++ii;
         continue;
@@ -694,12 +687,51 @@ void InstrumentPass::InitializeInstrument() {
   id2function_.clear();
   id2block_.clear();
 
+  // Initialize function and block maps.
   for (auto& fn : *get_module()) {
-    // Initialize function and block maps.
     id2function_[fn.result_id()] = &fn;
     for (auto& blk : fn) {
       id2block_[blk.id()] = &blk;
     }
+  }
+
+  // Calculate instruction offset of first function
+  uint32_t pre_func_size = 0;
+  Module* module = get_module();
+  for (auto& i : context()->capabilities()) ++pre_func_size;
+  for (auto& i : module->extensions()) ++pre_func_size;
+  for (auto& i : module->ext_inst_imports()) ++pre_func_size;
+  ++pre_func_size; // memory_model
+  for (auto& i : module->entry_points()) ++pre_func_size;
+  for (auto& i : module->execution_modes()) ++pre_func_size;
+  for (auto& i : module->debugs1()) ++pre_func_size;
+  for (auto& i : module->debugs2()) ++pre_func_size;
+  for (auto& i : module->debugs3()) ++pre_func_size;
+  for (auto& i : module->annotations()) ++pre_func_size;
+  for (auto& i : module->types_values()) {
+    pre_func_size += 1;
+    pre_func_size += static_cast<uint32_t>(i.dbg_line_insts().size());
+  }
+  funcIdx2offset_[0] = pre_func_size;
+
+  // Set instruction offsets for all other functions. 
+  uint32_t func_idx = 1;
+  auto prev_fn = get_module()->begin();
+  auto curr_fn = prev_fn;
+  for (++curr_fn; curr_fn != get_module()->end(); ++curr_fn) {
+    // Count function and end instructions
+    uint32_t func_size = 2;
+    for (auto& blk : *prev_fn) {
+      // Count label
+      func_size += 1;
+      for (auto& inst : blk) {
+        func_size += 1;
+        func_size += static_cast<uint32_t>(inst.dbg_line_insts().size());
+      }
+    }
+    funcIdx2offset_[func_idx] = func_size;
+    ++prev_fn;
+    ++func_idx;
   }
 }
 

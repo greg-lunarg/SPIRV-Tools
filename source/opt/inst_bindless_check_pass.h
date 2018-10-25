@@ -80,7 +80,6 @@ class InstBindlessCheckPass : public InstrumentPass {
    void GenBindlessCheckCode(
      BasicBlock::iterator ref_inst_itr,
      UptrVectorIterator<BasicBlock> ref_block_itr,
-     uint32_t function_idx,
      uint32_t instruction_idx,
      uint32_t stage_idx,
      std::vector<std::unique_ptr<BasicBlock>>* new_blocks);

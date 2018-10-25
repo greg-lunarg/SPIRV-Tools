@@ -44,7 +44,6 @@ namespace opt {
 void InstBindlessCheckPass::GenBindlessCheckCode(
     BasicBlock::iterator ref_inst_itr,
     UptrVectorIterator<BasicBlock> ref_block_itr,
-    uint32_t function_idx,
     uint32_t instruction_idx,
     uint32_t stage_idx,
   std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
@@ -208,7 +207,7 @@ void InstBindlessCheckPass::GenBindlessCheckCode(
   new_blk_ptr.reset(new BasicBlock(std::move(invalid_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
   uint32_t u_index_id = GenUintCastCode(index_id, &builder);
-  GenDebugStreamWrite(function_idx, instruction_idx,
+  GenDebugStreamWrite(instruction_idx,
       stage_idx, { error_id, u_index_id, length_id }, &builder);
   // Remember last invalid block id
   uint32_t last_invalid_blk_id = new_blk_ptr->GetLabelInst()->result_id();
@@ -253,12 +252,11 @@ Pass::Status InstBindlessCheckPass::ProcessImpl() {
   InstProcessFunction pfn = [this](
       BasicBlock::iterator ref_inst_itr,
       UptrVectorIterator<BasicBlock> ref_block_itr,
-      uint32_t function_idx,
       uint32_t instruction_idx,
       uint32_t stage_idx,
     std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
     return GenBindlessCheckCode(ref_inst_itr, ref_block_itr,
-        function_idx, instruction_idx, stage_idx, new_blocks); };
+        instruction_idx, stage_idx, new_blocks); };
   bool modified = InstProcessEntryPointCallTree(pfn);
   // This pass does not update inst->blk info
   context()->InvalidateAnalyses(IRContext::kAnalysisInstrToBlockMapping);
