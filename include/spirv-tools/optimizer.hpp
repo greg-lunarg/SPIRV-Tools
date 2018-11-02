@@ -499,6 +499,20 @@ Optimizer::PassToken CreateCommonUniformElimPass();
 // eliminated with standard dead code elimination.
 Optimizer::PassToken CreateAggressiveDCEPass();
 
+// Create line propagation pass
+// This pass propagates line information based on the rules for OpLine and
+// OpNoline and clones an appropriate line instruction into every instruction
+// which does not already have debug line instructions. The one exception is
+// OpLabel: if it's debug instruction vector is empty, it is left empty as
+// an implicit OpNoLine since no instruction can preceed it.
+//
+// This pass is intended to maximize preservation of source line information
+// through passes which delete, move and clone instructions. Ideally it should
+// be run before any such pass. It is a bookend pass with EliminateDeadLines
+// which can be used to remove redundant line instructions at the end of a
+// run of such passes and reduce final output file size.
+Optimizer::PassToken CreatePropagateLinesPass();
+
 // Creates a compact ids pass.
 // The pass remaps result ids to a compact and gapless range starting from %1.
 Optimizer::PassToken CreateCompactIdsPass();
