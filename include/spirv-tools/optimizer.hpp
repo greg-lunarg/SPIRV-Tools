@@ -502,9 +502,7 @@ Optimizer::PassToken CreateAggressiveDCEPass();
 // Create line propagation pass
 // This pass propagates line information based on the rules for OpLine and
 // OpNoline and clones an appropriate line instruction into every instruction
-// which does not already have debug line instructions. The one exception is
-// OpLabel: if it's debug instruction vector is empty, it is left empty as
-// an implicit OpNoLine since no instruction can preceed it.
+// which does not already have debug line instructions.
 //
 // This pass is intended to maximize preservation of source line information
 // through passes which delete, move and clone instructions. Ideally it should
