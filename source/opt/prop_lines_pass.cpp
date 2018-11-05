@@ -43,9 +43,10 @@ Pass::Status PropagateLinesPass::Process() {
   // Process functions
   for (Function& function : *get_module()) {
     modified |= PropagateLine(&function.DefInst(), &file_id, &line, &col);
-    //function.ForEachParam([&modified, &file_id, &line, &col](const Instruction* param) {
-    //  modified |= PropagateLine(param, &file_id, &line, &col);
-    //});
+    function.ForEachParam(
+        [this, &modified, &file_id, &line, &col](Instruction* param) {
+      modified |= PropagateLine(param, &file_id, &line, &col);
+    });
     for (BasicBlock& block : function) {
       modified |= PropagateLine(block.GetLabelInst(), &file_id, &line, &col);
       for (Instruction& inst : block) {
