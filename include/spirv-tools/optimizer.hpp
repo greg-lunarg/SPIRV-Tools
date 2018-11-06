@@ -511,6 +511,18 @@ Optimizer::PassToken CreateAggressiveDCEPass();
 // run of such passes and reduce final output file size.
 Optimizer::PassToken CreatePropagateLinesPass();
 
+// Create dead line elimination pass
+// This pass eliminates redundant line instructions based on the rules for
+// OpLine and OpNoline. Its main purpose is to reduce the size of the file
+// need to store the SPIR-V without losing line information.
+//
+// This is a bookend pass with PropagateLines which attaches line instructions
+// to every instruction to preserve line information during passes which
+// delete, move and clone instructions. DeadLineElim should be run after
+// PropagateLines and all such subsequent passes. Normally it would be one
+// of the last passes to be run.
+Optimizer::PassToken CreateDeadLineElimPass();
+
 // Creates a compact ids pass.
 // The pass remaps result ids to a compact and gapless range starting from %1.
 Optimizer::PassToken CreateCompactIdsPass();

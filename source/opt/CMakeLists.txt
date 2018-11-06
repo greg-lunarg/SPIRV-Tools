@@ -28,6 +28,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   copy_prop_arrays.h
   dead_branch_elim_pass.h
   dead_insert_elim_pass.h
+  dead_line_elim_pass.h
   dead_variable_elimination.h
   decoration_manager.h
   def_use_manager.h
@@ -117,6 +118,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   copy_prop_arrays.cpp
   dead_branch_elim_pass.cpp
   dead_insert_elim_pass.cpp
+  dead_line_elim_pass.cpp
   dead_variable_elimination.cpp
   decoration_manager.cpp
   def_use_manager.cpp

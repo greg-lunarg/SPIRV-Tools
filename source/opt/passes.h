@@ -27,6 +27,7 @@
 #include "source/opt/copy_prop_arrays.h"
 #include "source/opt/dead_branch_elim_pass.h"
 #include "source/opt/dead_insert_elim_pass.h"
+#include "source/opt/dead_line_elim_pass.h"
 #include "source/opt/dead_variable_elimination.h"
 #include "source/opt/eliminate_dead_constant_pass.h"
 #include "source/opt/eliminate_dead_functions_pass.h"
