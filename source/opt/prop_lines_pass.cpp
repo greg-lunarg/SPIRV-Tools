@@ -33,9 +33,6 @@ namespace spvtools {
 namespace opt {
 
 Pass::Status PropagateLinesPass::Process() {
-  lpfn_ = [this](
-      Instruction* inst, uint32_t *file_id, uint32_t *line, uint32_t *col) {
-    return PropagateLine(inst, file_id, line, col);};
   bool modified = ProcessLines();
   return (modified ? Status::SuccessWithChange : Status::SuccessWithoutChange);
 }
@@ -101,6 +98,59 @@ bool PropagateLinesPass::PropagateLine(Instruction* inst, uint32_t *file_id,
     }
   }
   return modified;
+}
+
+bool PropagateLinesPass::EliminateDeadLines(Instruction* inst, uint32_t *file_id,
+  uint32_t *line, uint32_t *col) {
+  // If no debug line instructions, return without modifying lines
+  if (inst->dbg_line_insts().empty()) return false;
+  // Only the last debug instruction needs to be considered; delete all others
+  bool modified = inst->dbg_line_insts().size() > 1;
+  Instruction last_inst = inst->dbg_line_insts().back();
+  inst->dbg_line_insts().clear();
+  // If last line is OpNoLine
+  if (last_inst.opcode() == SpvOpNoLine) {
+    // If no propagated line info, throw away redundant OpNoLine
+    if (*file_id == 0) {
+      modified = true;
+      // Else replace OpNoLine and propagate no line info
+    }
+    else {
+      inst->dbg_line_insts().push_back(last_inst);
+      *file_id = 0;
+    }
+    // Else last line is OpLine
+  }
+  else {
+    assert(last_inst.opcode() == SpvOpLine && "unexpected debug inst");
+    // If propagated info matches last line, throw away last line
+    if (*file_id == last_inst.GetSingleWordInOperand(kSpvLineFileInIdx) &&
+      *line == last_inst.GetSingleWordInOperand(kSpvLineLineInIdx) &&
+      *col == last_inst.GetSingleWordInOperand(kSpvLineColInIdx)) {
+      modified = true;
+      // Else replace last line and propagate line info
+    }
+    else {
+      *file_id = last_inst.GetSingleWordInOperand(kSpvLineFileInIdx);
+      *line = last_inst.GetSingleWordInOperand(kSpvLineLineInIdx);
+      *col = last_inst.GetSingleWordInOperand(kSpvLineColInIdx);
+      inst->dbg_line_insts().push_back(last_inst);
+    }
+  }
+  return modified;
+}
+
+PropagateLinesPass::PropagateLinesPass(uint32_t func_id) {
+  if (func_id == kLinesPropagateLines) {
+    lpfn_ = [this](
+        Instruction* inst, uint32_t *file_id, uint32_t *line, uint32_t *col) {
+      return PropagateLine(inst, file_id, line, col); };
+  } else {
+    assert(func_id == kLinesEliminateDeadLines && "unknown Lines param");
+    lpfn_ = [this](
+        Instruction* inst, uint32_t *file_id, uint32_t *line, uint32_t *col) {
+      return EliminateDeadLines(inst, file_id, line, col); };
+  }
 }
 
 }  // namespace opt

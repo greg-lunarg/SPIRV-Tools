@@ -24,12 +24,24 @@
 namespace spvtools {
 namespace opt {
 
+namespace {
+
+// Constructor Parameters
+static const int kLinesPropagateLines = 0;
+static const int kLinesEliminateDeadLines = 1;
+
+} // anonymous namespace
+
 // See optimizer.hpp for documentation.
 class PropagateLinesPass : public Pass {
+
  using LineProcessFunction = std::function<bool(
      Instruction*, uint32_t*, uint32_t*, uint32_t*)>;
 
  public:
+  PropagateLinesPass(uint32_t func_id);
+  ~PropagateLinesPass() = default;
+
   const char* name() const override { return "propagate-lines"; }
   Status Process() override;
 
@@ -45,6 +57,10 @@ class PropagateLinesPass : public Pass {
   // Line propagation is performed on |inst|
   bool PropagateLine(Instruction* inst, uint32_t *file_id, uint32_t *line, 
                      uint32_t *col);
+
+  // Dead line elimination is performed on |inst|
+  bool EliminateDeadLines(Instruction* inst, uint32_t *file_id, uint32_t *line,
+                          uint32_t *col);
 
   bool PropagateLinesPass::ProcessLines();
 
