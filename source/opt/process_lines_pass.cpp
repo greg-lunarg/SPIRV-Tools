@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "source/opt/prop_lines_pass.h"
+#include "source/opt/process_lines_pass.h"
 
 #include <set>
 #include <unordered_set>
