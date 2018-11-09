@@ -43,6 +43,8 @@ class ProcessLinesPass : public Pass {
   ~ProcessLinesPass() = default;
 
   const char* name() const override { return "propagate-lines"; }
+
+  // See optimizer.hpp for this pass' user documentation.
   Status Process() override;
 
   IRContext::Analysis GetPreservedAnalyses() override {
@@ -54,16 +56,26 @@ class ProcessLinesPass : public Pass {
   }
 
  private:
-  // Line propagation is performed on |inst|
+  // If |inst| has no debug line instruction, create one with
+  // |file_id, line, col|. If |inst| has debug line instructions, set
+  // |file_id, line, col| from the last. Return true if |inst| modified.
   bool PropagateLine(Instruction* inst, uint32_t *file_id, uint32_t *line, 
                      uint32_t *col);
 
-  // Dead line elimination is performed on |inst|
+  // If last debug line instruction of |inst| matches |file_id, line, col|,
+  // delete all debug line instructions of |inst|. If they do not match,
+  // replace all debug line instructions of |inst| with new line instruction
+  // set from |file_id, line, col|. If |inst| has no debug line instructions,
+  // do not modify |inst|. Return true if |inst| modified.
   bool EliminateDeadLines(Instruction* inst, uint32_t *file_id, uint32_t *line,
                           uint32_t *col);
 
+  // Apply lpfn() to all type, constant, global variable and function
+  // instructions in their physical order.
   bool ProcessLines();
 
+  // A function that calls either PropagateLine or EliminateDeadLines.
+  // Initialized by the class constructor.
   LineProcessFunction lpfn_;
 };
 

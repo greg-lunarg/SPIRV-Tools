@@ -22,10 +22,10 @@
 
 namespace {
 
-  // Input Operand Indices
-  static const int kSpvLineFileInIdx = 0;
-  static const int kSpvLineLineInIdx = 1;
-  static const int kSpvLineColInIdx = 2;
+// Input Operand Indices
+static const int kSpvLineFileInIdx = 0;
+static const int kSpvLineLineInIdx = 1;
+static const int kSpvLineColInIdx = 2;
 
 }  // anonymous namespace
 
