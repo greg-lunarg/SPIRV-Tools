@@ -33,14 +33,14 @@ static const int kLinesEliminateDeadLines = 1;
 } // anonymous namespace
 
 // See optimizer.hpp for documentation.
-class PropagateLinesPass : public Pass {
+class ProcessLinesPass : public Pass {
 
  using LineProcessFunction = std::function<bool(
      Instruction*, uint32_t*, uint32_t*, uint32_t*)>;
 
  public:
-  PropagateLinesPass(uint32_t func_id);
-  ~PropagateLinesPass() = default;
+   ProcessLinesPass(uint32_t func_id);
+  ~ProcessLinesPass() = default;
 
   const char* name() const override { return "propagate-lines"; }
   Status Process() override;
@@ -62,7 +62,7 @@ class PropagateLinesPass : public Pass {
   bool EliminateDeadLines(Instruction* inst, uint32_t *file_id, uint32_t *line,
                           uint32_t *col);
 
-  bool PropagateLinesPass::ProcessLines();
+  bool ProcessLines();
 
   LineProcessFunction lpfn_;
 };

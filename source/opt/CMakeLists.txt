@@ -28,7 +28,6 @@ set(SPIRV_TOOLS_OPT_SOURCES
   copy_prop_arrays.h
   dead_branch_elim_pass.h
   dead_insert_elim_pass.h
-  dead_line_elim_pass.h
   dead_variable_elimination.h
   decoration_manager.h
   def_use_manager.h
@@ -76,7 +75,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   pass.h
   pass_manager.h
   private_to_local_pass.h
-  prop_lines_pass.h
+  process_lines_pass.h
   propagator.h
   reduce_load_size.h
   redundancy_elimination.h
@@ -118,7 +117,6 @@ set(SPIRV_TOOLS_OPT_SOURCES
   copy_prop_arrays.cpp
   dead_branch_elim_pass.cpp
   dead_insert_elim_pass.cpp
-  dead_line_elim_pass.cpp
   dead_variable_elimination.cpp
   decoration_manager.cpp
   def_use_manager.cpp
@@ -164,7 +162,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   pass.cpp
   pass_manager.cpp
   private_to_local_pass.cpp
-  prop_lines_pass.cpp
+  process_lines_pass.cpp
   propagator.cpp
   reduce_load_size.cpp
   redundancy_elimination.cpp

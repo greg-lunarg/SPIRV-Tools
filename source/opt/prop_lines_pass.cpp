@@ -32,12 +32,12 @@ namespace {
 namespace spvtools {
 namespace opt {
 
-Pass::Status PropagateLinesPass::Process() {
+Pass::Status ProcessLinesPass::Process() {
   bool modified = ProcessLines();
   return (modified ? Status::SuccessWithChange : Status::SuccessWithoutChange);
 }
 
-bool PropagateLinesPass::ProcessLines() {
+bool ProcessLinesPass::ProcessLines() {
   bool modified = false;
   uint32_t file_id = 0;
   uint32_t line = 0;
@@ -69,7 +69,7 @@ bool PropagateLinesPass::ProcessLines() {
   return modified;
 }
 
-bool PropagateLinesPass::PropagateLine(Instruction* inst, uint32_t *file_id,
+bool ProcessLinesPass::PropagateLine(Instruction* inst, uint32_t *file_id,
                                        uint32_t *line, uint32_t *col) {
   bool modified = false;
   // only the last debug instruction needs to be considered
@@ -100,7 +100,7 @@ bool PropagateLinesPass::PropagateLine(Instruction* inst, uint32_t *file_id,
   return modified;
 }
 
-bool PropagateLinesPass::EliminateDeadLines(Instruction* inst, uint32_t *file_id,
+bool ProcessLinesPass::EliminateDeadLines(Instruction* inst, uint32_t *file_id,
   uint32_t *line, uint32_t *col) {
   // If no debug line instructions, return without modifying lines
   if (inst->dbg_line_insts().empty()) return false;
@@ -140,7 +140,7 @@ bool PropagateLinesPass::EliminateDeadLines(Instruction* inst, uint32_t *file_id
   return modified;
 }
 
-PropagateLinesPass::PropagateLinesPass(uint32_t func_id) {
+ProcessLinesPass::ProcessLinesPass(uint32_t func_id) {
   if (func_id == kLinesPropagateLines) {
     lpfn_ = [this](
         Instruction* inst, uint32_t *file_id, uint32_t *line, uint32_t *col) {
