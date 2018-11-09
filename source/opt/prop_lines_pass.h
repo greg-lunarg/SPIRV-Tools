@@ -26,6 +26,9 @@ namespace opt {
 
 // See optimizer.hpp for documentation.
 class PropagateLinesPass : public Pass {
+ using LineProcessFunction = std::function<bool(
+     Instruction*, uint32_t*, uint32_t*, uint32_t*)>;
+
  public:
   const char* name() const override { return "propagate-lines"; }
   Status Process() override;
@@ -42,6 +45,10 @@ class PropagateLinesPass : public Pass {
   // Line propagation is performed on |inst|
   bool PropagateLine(Instruction* inst, uint32_t *file_id, uint32_t *line, 
                      uint32_t *col);
+
+  bool PropagateLinesPass::ProcessLines();
+
+  LineProcessFunction lpfn_;
 };
 
 }  // namespace opt

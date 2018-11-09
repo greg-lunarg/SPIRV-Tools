@@ -33,35 +33,43 @@ namespace spvtools {
 namespace opt {
 
 Pass::Status PropagateLinesPass::Process() {
+  lpfn_ = [this](
+      Instruction* inst, uint32_t *file_id, uint32_t *line, uint32_t *col) {
+    return PropagateLine(inst, file_id, line, col);};
+  bool modified = ProcessLines();
+  return (modified ? Status::SuccessWithChange : Status::SuccessWithoutChange);
+}
+
+bool PropagateLinesPass::ProcessLines() {
   bool modified = false;
   uint32_t file_id = 0;
   uint32_t line = 0;
   uint32_t col = 0;
   // Process types, globals, constants
   for (Instruction& inst : get_module()->types_values())
-    modified |= PropagateLine(&inst, &file_id, &line, &col);
+    modified |= lpfn_(&inst, &file_id, &line, &col);
   // Process functions
   for (Function& function : *get_module()) {
-    modified |= PropagateLine(&function.DefInst(), &file_id, &line, &col);
+    modified |= lpfn_(&function.DefInst(), &file_id, &line, &col);
     function.ForEachParam(
-        [this, &modified, &file_id, &line, &col](Instruction* param) {
-      modified |= PropagateLine(param, &file_id, &line, &col);
+      [this, &modified, &file_id, &line, &col](Instruction* param) {
+      modified |= lpfn_(param, &file_id, &line, &col);
     });
     for (BasicBlock& block : function) {
-      modified |= PropagateLine(block.GetLabelInst(), &file_id, &line, &col);
+      modified |= lpfn_(block.GetLabelInst(), &file_id, &line, &col);
       for (Instruction& inst : block) {
-        modified |= PropagateLine(&inst, &file_id, &line, &col);
+        modified |= lpfn_(&inst, &file_id, &line, &col);
         // Don't process terminal instruction if preceeded by merge
-        if (inst.opcode() == SpvOpSelectionMerge || 
-            inst.opcode() == SpvOpLoopMerge)
+        if (inst.opcode() == SpvOpSelectionMerge ||
+          inst.opcode() == SpvOpLoopMerge)
           break;
       }
       // Nullify line info after each block.
       file_id = 0;
     }
-    modified |= PropagateLine(function.EndInst(), &file_id, &line, &col);
+    modified |= lpfn_(function.EndInst(), &file_id, &line, &col);
   }
-  return (modified ? Status::SuccessWithChange : Status::SuccessWithoutChange);
+  return modified;
 }
 
 bool PropagateLinesPass::PropagateLine(Instruction* inst, uint32_t *file_id,
