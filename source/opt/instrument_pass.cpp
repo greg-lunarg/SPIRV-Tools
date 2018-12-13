@@ -400,6 +400,36 @@ uint32_t InstrumentPass::GetVoidId() {
   return void_id_;
 }
 
+uint32_t InstrumentPass::GetDisableConstId() {
+  if (disable_const_id_ == 0) {
+    // search for largest unused spec id
+    uint32_t spec_id = UINT32_MAX;
+    bool found = true;
+    while (found) {
+      found = false;
+      for (auto& a : context()->annotations()) {
+        if (a.opcode() != SpvOpDecorate) continue;
+        if (a.GetSingleWordInOperand(1) != SpvDecorationSpecId) continue;
+        if (a.GetSingleWordInOperand(2) == spec_id) {
+          found = true;
+          --spec_id;
+          break;
+        }
+      }
+    }
+    // Create new spec-const with default value of zero and decorate it with
+    // spec_id
+    disable_const_id_ = TakeNextId();
+    std::unique_ptr<Instruction> spec_inst(new Instruction(
+        context(), SpvOpSpecConstant, GetUintId(), disable_const_id_,
+        {{spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER, {0}}}));
+    context()->AddGlobalValue(std::move(spec_inst));
+    get_decoration_mgr()->AddDecorationVal(disable_const_id_,
+                                           SpvDecorationSpecId, spec_id);
+  }
+  return disable_const_id_;
+}
+
 uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
                                                   uint32_t val_spec_param_cnt) {
   // Total param count is common params plus validation-specific
@@ -442,6 +472,31 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     InstructionBuilder builder(
         context(), &*new_blk_ptr,
         IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+    // Gen test of disable spec const
+    uint32_t disable_const_id = GetDisableConstId();
+    uint32_t zero_id = builder.GetUintConstantId(0);
+    Instruction* disable_test = builder.AddBinaryOp(GetBoolId(), SpvOpINotEqual,
+                                                    disable_const_id, zero_id);
+    uint32_t disable_return_blk_id = TakeNextId();
+    uint32_t disable_merge_blk_id = TakeNextId();
+    std::unique_ptr<Instruction> disable_merge_label(
+        NewLabel(disable_merge_blk_id));
+    std::unique_ptr<Instruction> disable_return_label(
+        NewLabel(disable_return_blk_id));
+    (void)builder.AddConditionalBranch(disable_test->result_id(),
+        disable_return_blk_id, disable_merge_blk_id, disable_merge_blk_id,
+        SpvSelectionControlMaskNone);
+    // Close disable test block and gen disable return block
+    new_blk_ptr->SetParent(&*output_func);
+    output_func->AddBasicBlock(std::move(new_blk_ptr));
+    new_blk_ptr = MakeUnique<BasicBlock>(std::move(disable_return_label));
+    builder.SetInsertPoint(&*new_blk_ptr);
+    (void)builder.AddNullaryOp(0, SpvOpReturn);
+    // Close disable return block and gen disable merge block
+    new_blk_ptr->SetParent(&*output_func);
+    output_func->AddBasicBlock(std::move(new_blk_ptr));
+    new_blk_ptr = MakeUnique<BasicBlock>(std::move(disable_merge_label));
+    builder.SetInsertPoint(&*new_blk_ptr);
     // Gen test if debug output buffer size will not be exceeded.
     uint32_t obuf_record_sz = kInstStageOutCnt + val_spec_param_cnt;
     uint32_t buf_id = GetOutputBufferId();
@@ -626,6 +681,7 @@ void InstrumentPass::InitializeInstrument() {
   v4uint_id_ = 0;
   bool_id_ = 0;
   void_id_ = 0;
+  disable_const_id_ = 0;
 
   // clear collections
   id2function_.clear();

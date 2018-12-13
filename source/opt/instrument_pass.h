@@ -225,6 +225,11 @@ class InstrumentPass : public Pass {
   // Return id for v4uint type
   uint32_t GetVec4UintId();
 
+  // Return id for spec-constant which is used to disable writing and
+  // reading of debug buffers. This is disabled by the validation layer
+  // when the debug descriptor set is subscribed by the user app.
+  uint32_t GetDisableConstId();
+
   // Return id for output function. Define if it doesn't exist with
   // |val_spec_arg_cnt| validation-specific uint32 arguments.
   uint32_t GetStreamWriteFunctionId(uint32_t stage_idx,
@@ -342,6 +347,9 @@ class InstrumentPass : public Pass {
 
   // id for void type
   uint32_t void_id_;
+
+  // id for disable spec-const
+  uint32_t disable_const_id_;
 
   // Pre-instrumentation same-block insts
   std::unordered_map<uint32_t, Instruction*> same_block_pre_;
