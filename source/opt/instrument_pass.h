@@ -190,6 +190,13 @@ class InstrumentPass : public Pass {
   // Because the code that is generated checks against the size of the buffer
   // before writing, the size of the debug out buffer can be used by the
   // validation layer to control the number of error records that are written.
+  //
+  // Writing of the buffer can be disabled through a specially generated
+  // spec-constant using the largest available spec-id. If the validation
+  // layer to a non-zero value, writing to the debug buffer is disabled.
+  // This is done in the case that the user app subscribes the debug descriptor
+  // set. This control will be removed when the debug buffer can be passed
+  // to the shader in a way that does not use a user descriptor set.
   void GenDebugStreamWrite(uint32_t instruction_idx, uint32_t stage_idx,
                            const std::vector<uint32_t>& validation_ids,
                            InstructionBuilder* builder);
