@@ -42,6 +42,13 @@ class InstBindlessCheckPass : public InstrumentPass {
   const char* name() const override { return "inst-bindless-check-pass"; }
 
  private:
+  // Generate instructions into |builder| to read length of runtime descriptor
+  // array |image_id| from debug input buffer for |stage_idx| and return id of value. 
+ uint32_t InstBindlessCheckPass::GenDebugReadLength(
+     uint32_t stage_idx,
+     uint32_t image_id,
+     InstructionBuilder* builder);
+
   // Initialize state for instrumenting bindless checking
   void InitializeInstBindlessCheck();
 
@@ -85,6 +92,9 @@ class InstBindlessCheckPass : public InstrumentPass {
 
   // True if VK_EXT_descriptor_indexing is defined
   bool ext_descriptor_indexing_defined_;
+
+  // Mapping from variable to descriptor set
+  std::unordered_map<uint32_t, uint32_t> var2desc_set_;
 };
 
 }  // namespace opt

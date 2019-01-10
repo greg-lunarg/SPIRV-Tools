@@ -193,6 +193,9 @@ class InstrumentPass : public Pass {
   void GenDebugStreamWrite(uint32_t instruction_idx, uint32_t stage_idx,
                            const std::vector<uint32_t>& validation_ids,
                            InstructionBuilder* builder);
+  
+  uint32_t GenDebugDirectRead(uint32_t stage_idx, uint32_t image_id,
+                              InstructionBuilder* builder);
 
   // Generate code to cast |value_id| to unsigned, if needed. Return
   // an id to the unsigned equivalent.
@@ -210,14 +213,23 @@ class InstrumentPass : public Pass {
   // Return id for void type
   uint32_t GetVoidId();
 
-  // Return id for output buffer uint type
-  uint32_t GetOutputBufferUintPtrId();
+  // Return id for buffer uint type
+  uint32_t GetBufferUintPtrId();
 
   // Return binding for output buffer for current validation.
   uint32_t GetOutputBufferBinding();
 
+  // Return binding for input buffer for |stage_idx| for current validation.
+  uint32_t GetInputBufferBinding(uint32_t stage_idx);
+  
+  // Add storage buffer extension if needed
+  void AddStorageBufferExt();
+
   // Return id for debug output buffer
   uint32_t GetOutputBufferId();
+
+  // Return id for debug input buffer
+  uint32_t GetInputBufferId(uint32_t stage_idx);
 
   // Return id for v4float type
   uint32_t GetVec4FloatId();
@@ -320,13 +332,16 @@ class InstrumentPass : public Pass {
   uint32_t output_buffer_id_;
 
   // type id for output buffer element
-  uint32_t output_buffer_uint_ptr_id_;
+  uint32_t buffer_uint_ptr_id_;
 
   // id for debug output function
   uint32_t output_func_id_;
 
   // param count for output function
   uint32_t output_func_param_cnt_;
+
+  // id for input buffer variable
+  uint32_t input_buffer_id_;
 
   // id for v4float type
   uint32_t v4float_id_;

@@ -107,7 +107,7 @@ void InstrumentPass::GenDebugOutputFieldCode(uint32_t base_offset_id,
       builder->AddBinaryOp(GetUintId(), SpvOpIAdd, base_offset_id,
                            builder->GetUintConstantId(field_offset));
   uint32_t buf_id = GetOutputBufferId();
-  uint32_t buf_uint_ptr_id = GetOutputBufferUintPtrId();
+  uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
   Instruction* achain_inst =
       builder->AddTernaryOp(buf_uint_ptr_id, SpvOpAccessChain, buf_id,
                             builder->GetUintConstantId(kDebugOutputDataOffset),
@@ -222,6 +222,19 @@ void InstrumentPass::GenDebugStreamWrite(
   (void)builder->AddNaryOp(GetVoidId(), SpvOpFunctionCall, args);
 }
 
+uint32_t InstrumentPass::GenDebugDirectRead(
+    uint32_t stage_idx, uint32_t idx, InstructionBuilder* builder) {
+  uint32_t input_buf_id = GetInputBufferId(stage_idx);
+  uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
+  Instruction* ibuf_ac_inst =
+      builder->AddTernaryOp(buf_uint_ptr_id, SpvOpAccessChain, input_buf_id,
+                            builder->GetUintConstantId(kDebugInputDataOffset),
+                            builder->GetUintConstantId(idx));
+  Instruction* load_inst =
+      builder->AddUnaryOp(GetUintId(), SpvOpLoad, ibuf_ac_inst->result_id());
+  return load_inst->result_id();
+}
+
 bool InstrumentPass::IsSameBlockOp(const Instruction* inst) const {
   return inst->opcode() == SpvOpSampledImage || inst->opcode() == SpvOpImage;
 }
@@ -280,12 +293,12 @@ void InstrumentPass::UpdateSucceedingPhis(
 }
 
 // Return id for output buffer uint ptr type
-uint32_t InstrumentPass::GetOutputBufferUintPtrId() {
-  if (output_buffer_uint_ptr_id_ == 0) {
-    output_buffer_uint_ptr_id_ = context()->get_type_mgr()->FindPointerToType(
+uint32_t InstrumentPass::GetBufferUintPtrId() {
+  if (buffer_uint_ptr_id_ == 0) {
+    buffer_uint_ptr_id_ = context()->get_type_mgr()->FindPointerToType(
         GetUintId(), SpvStorageClassStorageBuffer);
   }
-  return output_buffer_uint_ptr_id_;
+  return buffer_uint_ptr_id_;
 }
 
 uint32_t InstrumentPass::GetOutputBufferBinding() {
@@ -296,6 +309,31 @@ uint32_t InstrumentPass::GetOutputBufferBinding() {
       assert(false && "unexpected validation id");
   }
   return 0;
+}
+
+uint32_t InstrumentPass::GetInputBufferBinding(uint32_t stage_idx) {
+  switch (validation_id_) {
+    case kInstValidationIdBindless:
+      return kDebugInputBindingOffsetBindless + stage_idx;
+    default:
+      assert(false && "unexpected validation id");
+  }
+  return 0;
+}
+
+void InstrumentPass::AddStorageBufferExt() {
+  if (!get_feature_mgr()->HasExtension(
+    kSPV_KHR_storage_buffer_storage_class)) {
+    const std::string ext_name("SPV_KHR_storage_buffer_storage_class");
+    const auto num_chars = ext_name.size();
+    // Compute num words, accommodate the terminating null character.
+    const auto num_words = (num_chars + 1 + 3) / 4;
+    std::vector<uint32_t> ext_words(num_words, 0u);
+    std::memcpy(ext_words.data(), ext_name.data(), num_chars);
+    context()->AddExtension(std::unique_ptr<Instruction>(
+      new Instruction(context(), SpvOpExtension, 0u, 0u,
+      { { SPV_OPERAND_TYPE_LITERAL_STRING, ext_words } })));
+  }
 }
 
 // Return id for output buffer
@@ -329,21 +367,41 @@ uint32_t InstrumentPass::GetOutputBufferId() {
                                desc_set_);
     deco_mgr->AddDecorationVal(output_buffer_id_, SpvDecorationBinding,
                                GetOutputBufferBinding());
-    // Look for storage buffer extension. If none, create one.
-    if (!get_feature_mgr()->HasExtension(
-            kSPV_KHR_storage_buffer_storage_class)) {
-      const std::string ext_name("SPV_KHR_storage_buffer_storage_class");
-      const auto num_chars = ext_name.size();
-      // Compute num words, accommodate the terminating null character.
-      const auto num_words = (num_chars + 1 + 3) / 4;
-      std::vector<uint32_t> ext_words(num_words, 0u);
-      std::memcpy(ext_words.data(), ext_name.data(), num_chars);
-      context()->AddExtension(std::unique_ptr<Instruction>(
-          new Instruction(context(), SpvOpExtension, 0u, 0u,
-                          {{SPV_OPERAND_TYPE_LITERAL_STRING, ext_words}})));
-    }
+    AddStorageBufferExt();
   }
   return output_buffer_id_;
+}
+
+uint32_t InstrumentPass::GetInputBufferId(uint32_t stage_idx) {
+  if (input_buffer_id_ == 0) {
+    // If not created yet, create one
+    analysis::DecorationManager* deco_mgr = get_decoration_mgr();
+    analysis::TypeManager* type_mgr = context()->get_type_mgr();
+    analysis::Integer uint_ty(32, false);
+    analysis::Type* reg_uint_ty = type_mgr->GetRegisteredType(&uint_ty);
+    analysis::RuntimeArray uint_rarr_ty(reg_uint_ty);
+    analysis::Type* reg_uint_rarr_ty =
+      type_mgr->GetRegisteredType(&uint_rarr_ty);
+    analysis::Struct ibuf_ty({ reg_uint_rarr_ty });
+    analysis::Type* reg_ibuf_ty = type_mgr->GetRegisteredType(&ibuf_ty);
+    uint32_t ibufTyId = type_mgr->GetTypeInstruction(reg_ibuf_ty);
+    deco_mgr->AddDecoration(ibufTyId, SpvDecorationBlock);
+    deco_mgr->AddMemberDecoration(ibufTyId, 0, SpvDecorationOffset, 0);
+    uint32_t ibufTyPtrId_ =
+        type_mgr->FindPointerToType(ibufTyId, SpvStorageClassStorageBuffer);
+    input_buffer_id_ = TakeNextId();
+    std::unique_ptr<Instruction> newVarOp(new Instruction(
+        context(), SpvOpVariable, ibufTyPtrId_, input_buffer_id_,
+        { { spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
+        { SpvStorageClassStorageBuffer } } }));
+    context()->AddGlobalValue(std::move(newVarOp));
+    deco_mgr->AddDecorationVal(input_buffer_id_, SpvDecorationDescriptorSet,
+        desc_set_);
+    deco_mgr->AddDecorationVal(input_buffer_id_, SpvDecorationBinding,
+        GetInputBufferBinding(stage_idx));
+    AddStorageBufferExt();
+  }
+  return input_buffer_id_;
 }
 
 uint32_t InstrumentPass::GetVec4FloatId() {
@@ -445,7 +503,7 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
     // Gen test if debug output buffer size will not be exceeded.
     uint32_t obuf_record_sz = kInstStageOutCnt + val_spec_param_cnt;
     uint32_t buf_id = GetOutputBufferId();
-    uint32_t buf_uint_ptr_id = GetOutputBufferUintPtrId();
+    uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
     Instruction* obuf_curr_sz_ac_inst =
         builder.AddBinaryOp(buf_uint_ptr_id, SpvOpAccessChain, buf_id,
                             builder.GetUintConstantId(kDebugOutputSizeOffset));
@@ -618,9 +676,10 @@ bool InstrumentPass::InstProcessEntryPointCallTree(InstProcessFunction& pfn) {
 
 void InstrumentPass::InitializeInstrument() {
   output_buffer_id_ = 0;
-  output_buffer_uint_ptr_id_ = 0;
+  buffer_uint_ptr_id_ = 0;
   output_func_id_ = 0;
   output_func_param_cnt_ = 0;
+  input_buffer_id_ = 0;
   v4float_id_ = 0;
   uint_id_ = 0;
   v4uint_id_ = 0;
