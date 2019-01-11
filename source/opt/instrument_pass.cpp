@@ -312,7 +312,6 @@ uint32_t InstrumentPass::GetOutputBufferId() {
     analysis::Struct obuf_ty({reg_uint_ty, reg_uint_rarr_ty});
     analysis::Type* reg_obuf_ty = type_mgr->GetRegisteredType(&obuf_ty);
     uint32_t obufTyId = type_mgr->GetTypeInstruction(reg_obuf_ty);
-    deco_mgr->AddDecoration(obufTyId, SpvDecorationBlock);
     deco_mgr->AddMemberDecoration(obufTyId, kDebugOutputSizeOffset,
                                   SpvDecorationOffset, 0);
     deco_mgr->AddMemberDecoration(obufTyId, kDebugOutputDataOffset,
@@ -329,6 +328,7 @@ uint32_t InstrumentPass::GetOutputBufferId() {
                                desc_set_);
     deco_mgr->AddDecorationVal(output_buffer_id_, SpvDecorationBinding,
                                GetOutputBufferBinding());
+    deco_mgr->AddDecoration(output_buffer_id_, SpvDecorationBlock);
     // Look for storage buffer extension. If none, create one.
     if (!get_feature_mgr()->HasExtension(
             kSPV_KHR_storage_buffer_storage_class)) {
