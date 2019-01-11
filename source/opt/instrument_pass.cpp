@@ -283,7 +283,7 @@ void InstrumentPass::UpdateSucceedingPhis(
 uint32_t InstrumentPass::GetOutputBufferUintPtrId() {
   if (output_buffer_uint_ptr_id_ == 0) {
     output_buffer_uint_ptr_id_ = context()->get_type_mgr()->FindPointerToType(
-        GetUintId(), SpvStorageClassStorageBuffer);
+        GetUintId(), SpvStorageClassUniform);
   }
   return output_buffer_uint_ptr_id_;
 }
@@ -317,18 +317,18 @@ uint32_t InstrumentPass::GetOutputBufferId() {
     deco_mgr->AddMemberDecoration(obufTyId, kDebugOutputDataOffset,
                                   SpvDecorationOffset, 4);
     uint32_t obufTyPtrId_ =
-        type_mgr->FindPointerToType(obufTyId, SpvStorageClassStorageBuffer);
+        type_mgr->FindPointerToType(obufTyId, SpvStorageClassUniform);
     output_buffer_id_ = TakeNextId();
     std::unique_ptr<Instruction> newVarOp(new Instruction(
         context(), SpvOpVariable, obufTyPtrId_, output_buffer_id_,
         {{spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
-          {SpvStorageClassStorageBuffer}}}));
+          {SpvStorageClassUniform}}}));
     context()->AddGlobalValue(std::move(newVarOp));
     deco_mgr->AddDecorationVal(output_buffer_id_, SpvDecorationDescriptorSet,
                                desc_set_);
     deco_mgr->AddDecorationVal(output_buffer_id_, SpvDecorationBinding,
                                GetOutputBufferBinding());
-    deco_mgr->AddDecoration(output_buffer_id_, SpvDecorationBlock);
+    deco_mgr->AddDecoration(output_buffer_id_, SpvDecorationBufferBlock);
     // Look for storage buffer extension. If none, create one.
     if (!get_feature_mgr()->HasExtension(
             kSPV_KHR_storage_buffer_storage_class)) {
