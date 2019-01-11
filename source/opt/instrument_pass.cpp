@@ -464,8 +464,10 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
                             builder.GetUintConstantId(obuf_record_sz));
     // Fetch the data bound
     Instruction* obuf_bnd_inst =
-        builder.AddIdLiteralOp(GetUintId(), SpvOpArrayLength,
-                               GetOutputBufferId(), kDebugOutputDataOffset);
+    //    builder.AddIdLiteralOp(GetUintId(), SpvOpArrayLength,
+    //                           GetOutputBufferId(), kDebugOutputDataOffset);
+    // DEBUG: set data bound to 10
+          builder.GetUintConstant(10u);
     // Test that new written size is less than or equal to debug output
     // data bound
     Instruction* obuf_safe_inst = builder.AddBinaryOp(
