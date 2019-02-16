@@ -50,6 +50,18 @@ class InstBindlessCheckPass : public InstrumentPass {
   // array |image_id| from debug input buffer and return id of value.
   uint32_t GenDebugReadLength(uint32_t image_id, InstructionBuilder* builder);
 
+  // Generate instructions into |builder| to read initialization status of descriptor
+  // array |image_id| at |index_id| from debug input buffer and return id of value.
+  uint32_t GenDebugReadInit(uint32_t image_id, uint32_t index_id,
+      InstructionBuilder* builder);
+  
+  // Clone original reference
+  uint32_t CloneOriginalReference(
+      BasicBlock::iterator ref_inst_itr,
+      Instruction* desc_load_inst,
+      Instruction* image_inst,
+      uint32_t image_id, InstructionBuilder* builder);
+
   // Initialize state for instrumenting bindless checking
   void InitializeInstBindlessCheck();
 
@@ -84,7 +96,12 @@ class InstBindlessCheckPass : public InstrumentPass {
   //
   // The Descriptor Array Size is the size of the descriptor array which was
   // indexed.
-  void GenBindlessCheckCode(
+  void GenBoundsCheckCode(
+      BasicBlock::iterator ref_inst_itr,
+      UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
+      uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks);
+
+  void GenInitCheckCode(
       BasicBlock::iterator ref_inst_itr,
       UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
       uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks);
