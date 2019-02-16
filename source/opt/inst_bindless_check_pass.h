@@ -31,12 +31,14 @@ class InstBindlessCheckPass : public InstrumentPass {
   // For test harness only
   InstBindlessCheckPass()
       : InstrumentPass(7, 23, kInstValidationIdBindless),
-        runtime_array_enabled_(true) {}
+        input_length_enabled_(true),
+        input_init_enabled_(true) {}
   // For all other interfaces
   InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
-                        bool runtime_array_enable)
+                        bool input_length_enable, bool input_init_enable)
       : InstrumentPass(desc_set, shader_id, kInstValidationIdBindless),
-        runtime_array_enabled_(runtime_array_enable) {}
+        input_length_enabled_(input_length_enable),
+        input_init_enabled_(input_init_enable) {}
 
   ~InstBindlessCheckPass() override = default;
 
@@ -49,6 +51,18 @@ class InstBindlessCheckPass : public InstrumentPass {
   // Generate instructions into |builder| to read length of runtime descriptor
   // array |var_id| from debug input buffer and return id of value.
   uint32_t GenDebugReadLength(uint32_t var_id, InstructionBuilder* builder);
+
+  // Generate instructions into |builder| to read initialization status of descriptor
+  // array |image_id| at |index_id| from debug input buffer and return id of value.
+  uint32_t GenDebugReadInit(uint32_t image_id, uint32_t index_id,
+      InstructionBuilder* builder);
+  
+  // Clone original reference
+  uint32_t CloneOriginalReference(
+      BasicBlock::iterator ref_inst_itr,
+      Instruction* desc_load_inst,
+      Instruction* image_inst,
+      uint32_t image_id, InstructionBuilder* builder);
 
   // Initialize state for instrumenting bindless checking
   void InitializeInstBindlessCheck();
@@ -84,9 +98,14 @@ class InstBindlessCheckPass : public InstrumentPass {
   //
   // The Descriptor Array Size is the size of the descriptor array which was
   // indexed.
-  void GenBindlessCheckCode(
+  void GenBoundsCheckCode(
       BasicBlock::iterator ref_inst_itr,
-      UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
+      UptrVectorIterator<BasicBlock> ref_block_itr,
+      uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks);
+
+  void GenInitCheckCode(
+      BasicBlock::iterator ref_inst_itr,
+      UptrVectorIterator<BasicBlock> ref_block_itr,
       uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks);
 
   Pass::Status ProcessImpl();
@@ -94,8 +113,11 @@ class InstBindlessCheckPass : public InstrumentPass {
   // True if VK_EXT_descriptor_indexing is defined
   bool ext_descriptor_indexing_defined_;
 
-  // Enable instrumentation of runtime arrays
-  bool runtime_array_enabled_;
+  // Enable instrumentation of runtime array length checking
+  bool input_length_enabled_;
+
+  // Enable instrumentation of descriptor initialization checking
+  bool input_init_enabled_;
 
   // Mapping from variable to descriptor set
   std::unordered_map<uint32_t, uint32_t> var2desc_set_;
