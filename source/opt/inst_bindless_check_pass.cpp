@@ -207,7 +207,7 @@ void InstBindlessCheckPass::GenBoundsCheckCode(
         index_inst->GetSingleWordInOperand(kSpvConstantValueInIdx) <
             length_inst->GetSingleWordInOperand(kSpvConstantValueInIdx))
       return;
-  } else if (!runtime_array_enabled_ ||
+  } else if (!input_length_enabled_ ||
              ptr_type_inst->opcode() != SpvOpTypeRuntimeArray) {
     return;
   }
@@ -398,7 +398,7 @@ void InstBindlessCheckPass::GenInitCheckCode(
   new_blocks->push_back(std::move(new_blk_ptr));
   new_blk_ptr.reset(new BasicBlock(std::move(valid_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
-  uint32_t new_ref_id = CloneOriginalReference(ref_inst_itr, ptr_inst,
+  uint32_t new_ref_id = CloneOriginalReference(ref_inst_itr, load_inst,
       image_inst, image_id, &builder);
   // Close valid bounds branch and gen invalid bounds block
   (void)builder.AddBranch(merge_blk_id);
@@ -447,9 +447,10 @@ void InstBindlessCheckPass::InitializeInstBindlessCheck() {
       break;
     }
   }
-  // If descriptor indexing extension and runtime array support enabled,
-  // create variable mappings.
-  if (ext_descriptor_indexing_defined_ && runtime_array_enabled_)
+  // If descriptor indexing extension and runtime array length support enabled,
+  // create variable mappings. Length support is always enabled if descriptor
+  // init check is enabled.
+  if (ext_descriptor_indexing_defined_ && input_length_enabled_)
     for (auto& anno : get_module()->annotations())
       if (anno.opcode() == SpvOpDecorate) {
         if (anno.GetSingleWordInOperand(1u) == SpvDecorationDescriptorSet)
@@ -472,7 +473,7 @@ Pass::Status InstBindlessCheckPass::ProcessImpl() {
                                   instruction_idx, stage_idx, new_blocks);
       };
   bool modified = InstProcessEntryPointCallTree(pfn);
-  if (ext_descriptor_indexing_defined_) {
+  if (ext_descriptor_indexing_defined_  && input_init_enabled_) {
     // Perform descriptor initialization check on each entry point function in
     // module
     pfn = [this](BasicBlock::iterator ref_inst_itr,

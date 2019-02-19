@@ -629,6 +629,9 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
         ++ii;
         continue;
       }
+      // Add new blocks to label id map
+      for (auto& blk : new_blks)
+        id2block_[blk->id()] = &*blk;
       // If there are new blocks we know there will always be two or
       // more, so update succeeding phis with label of new last block.
       size_t newBlocksSize = new_blks.size();
@@ -658,6 +661,9 @@ bool InstrumentPass::InstProcessCallTreeFromRoots(InstProcessFunction& pfn,
                                                   uint32_t stage_idx) {
   bool modified = false;
   std::unordered_set<uint32_t> done;
+  // Don't process output function if it is already created
+  if (output_func_id_ != 0)
+    done.insert(output_func_id_);
   // Process all functions from roots
   while (!roots->empty()) {
     const uint32_t fi = roots->front();

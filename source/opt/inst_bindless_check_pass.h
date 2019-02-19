@@ -31,12 +31,14 @@ class InstBindlessCheckPass : public InstrumentPass {
   // For test harness only
   InstBindlessCheckPass()
       : InstrumentPass(7, 23, kInstValidationIdBindless),
-        runtime_array_enabled_(true) {}
+        input_length_enabled_(true),
+        input_init_enabled_(true) {}
   // For all other interfaces
   InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
-                        bool runtime_array_enable)
+                        bool input_length_enable, bool input_init_enable)
       : InstrumentPass(desc_set, shader_id, kInstValidationIdBindless),
-        runtime_array_enabled_(runtime_array_enable) {}
+        input_length_enabled_(input_length_enable),
+        input_init_enabled_(input_init_enable) {}
 
   ~InstBindlessCheckPass() override = default;
 
@@ -111,8 +113,11 @@ class InstBindlessCheckPass : public InstrumentPass {
   // True if VK_EXT_descriptor_indexing is defined
   bool ext_descriptor_indexing_defined_;
 
-  // Enable instrumentation of runtime arrays
-  bool runtime_array_enabled_;
+  // Enable instrumentation of runtime array length checking
+  bool input_length_enabled_;
+
+  // Enable instrumentation of descriptor initialization checking
+  bool input_init_enabled_;
 
   // Mapping from variable to descriptor set
   std::unordered_map<uint32_t, uint32_t> var2desc_set_;
