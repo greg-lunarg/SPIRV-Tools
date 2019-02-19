@@ -100,12 +100,12 @@ class InstBindlessCheckPass : public InstrumentPass {
   // indexed.
   void GenBoundsCheckCode(
       BasicBlock::iterator ref_inst_itr,
-      UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
+      UptrVectorIterator<BasicBlock> ref_block_itr,
       uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks);
 
   void GenInitCheckCode(
       BasicBlock::iterator ref_inst_itr,
-      UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
+      UptrVectorIterator<BasicBlock> ref_block_itr,
       uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks);
 
   Pass::Status ProcessImpl();

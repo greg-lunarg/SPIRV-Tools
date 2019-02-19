@@ -66,7 +66,7 @@ class InstrumentPass : public Pass {
 
  public:
   using InstProcessFunction = std::function<void(
-      BasicBlock::iterator, UptrVectorIterator<BasicBlock>, uint32_t, uint32_t,
+      BasicBlock::iterator, UptrVectorIterator<BasicBlock>, uint32_t,
       std::vector<std::unique_ptr<BasicBlock>>*)>;
 
   ~InstrumentPass() override = default;
@@ -330,8 +330,8 @@ class InstrumentPass : public Pass {
   // CFG. It has functionality not present in CFG. Consolidate.
   std::unordered_map<uint32_t, BasicBlock*> id2block_;
 
-  // Map from function's position index to the offset of its first instruction
-  std::unordered_map<uint32_t, uint32_t> funcIdx2offset_;
+  // Map from instruction's unique id to offset in original file.
+  std::unordered_map<uint32_t, uint32_t> uid2offset_;
 
   // result id for OpConstantFalse
   uint32_t validation_id_;

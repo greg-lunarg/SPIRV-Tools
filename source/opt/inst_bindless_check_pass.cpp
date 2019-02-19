@@ -74,6 +74,8 @@ uint32_t InstBindlessCheckPass::CloneOriginalReference(
   // Clone descriptor load
   Instruction* new_load_inst = builder->AddLoad(desc_load_inst->type_id(),
       desc_load_inst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx));
+  uid2offset_[new_load_inst->unique_id()] =
+      uid2offset_[desc_load_inst->unique_id()];
   uint32_t new_load_id = new_load_inst->result_id();
   get_decoration_mgr()->CloneDecorations(desc_load_inst->result_id(),
       new_load_id);
@@ -84,12 +86,16 @@ uint32_t InstBindlessCheckPass::CloneOriginalReference(
       Instruction* new_image_inst = builder->AddBinaryOp(
           image_inst->type_id(), SpvOpSampledImage, new_load_id,
           image_inst->GetSingleWordInOperand(kSpvSampledImageSamplerIdInIdx));
+      uid2offset_[new_image_inst->unique_id()] =
+          uid2offset_[image_inst->unique_id()];
       new_image_id = new_image_inst->result_id();
     }
     else {
       assert(image_inst->opcode() == SpvOp::SpvOpImage && "expecting OpImage");
       Instruction* new_image_inst =
           builder->AddUnaryOp(image_inst->type_id(), SpvOpImage, new_load_id);
+      uid2offset_[new_image_inst->unique_id()] =
+          uid2offset_[image_inst->unique_id()];
       new_image_id = new_image_inst->result_id();
     }
     get_decoration_mgr()->CloneDecorations(image_id, new_image_id);
@@ -104,7 +110,9 @@ uint32_t InstBindlessCheckPass::CloneOriginalReference(
   }
   new_ref_inst->SetInOperand(kSpvImageSampleImageIdInIdx, {new_image_id});
   // Register new reference and add to new block
-  builder->AddInstruction(std::move(new_ref_inst));
+  Instruction* added_inst = builder->AddInstruction(std::move(new_ref_inst));
+  uid2offset_[added_inst->unique_id()] =
+      uid2offset_[ref_inst_itr->unique_id()];
   if (new_ref_id != 0)
     get_decoration_mgr()->CloneDecorations(ref_result_id, new_ref_id);
   return new_ref_id;
@@ -112,7 +120,7 @@ uint32_t InstBindlessCheckPass::CloneOriginalReference(
 
 void InstBindlessCheckPass::GenBoundsCheckCode(
     BasicBlock::iterator ref_inst_itr,
-    UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
+    UptrVectorIterator<BasicBlock> ref_block_itr,
     uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
   // Look for reference through bindless descriptor. If not, return.
   std::unique_ptr<BasicBlock> new_blk_ptr;
@@ -249,7 +257,7 @@ void InstBindlessCheckPass::GenBoundsCheckCode(
   new_blk_ptr.reset(new BasicBlock(std::move(invalid_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
   uint32_t u_index_id = GenUintCastCode(index_id, &builder);
-  GenDebugStreamWrite(instruction_idx, stage_idx,
+  GenDebugStreamWrite(uid2offset_[ref_inst_itr->unique_id()], stage_idx,
                       {error_id, u_index_id, length_id}, &builder);
   // Remember last invalid block id
   uint32_t last_invalid_blk_id = new_blk_ptr->GetLabelInst()->result_id();
@@ -278,7 +286,7 @@ void InstBindlessCheckPass::GenBoundsCheckCode(
 
 void InstBindlessCheckPass::GenInitCheckCode(
   BasicBlock::iterator ref_inst_itr,
-  UptrVectorIterator<BasicBlock> ref_block_itr, uint32_t instruction_idx,
+  UptrVectorIterator<BasicBlock> ref_block_itr,
   uint32_t stage_idx, std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
   // Look for reference through bindless descriptor. If not, return.
   std::unique_ptr<BasicBlock> new_blk_ptr;
@@ -407,7 +415,7 @@ void InstBindlessCheckPass::GenInitCheckCode(
   builder.SetInsertPoint(&*new_blk_ptr);
   uint32_t u_index_id = GenUintCastCode(index_id, &builder);
   uint32_t error_id = builder.GetUintConstantId(kInstErrorBindlessUninit);
-  GenDebugStreamWrite(instruction_idx, stage_idx,
+  GenDebugStreamWrite(uid2offset_[ref_inst_itr->unique_id()], stage_idx,
                       {error_id, u_index_id, zero_id}, &builder);
   // Remember last invalid block id
   uint32_t last_invalid_blk_id = new_blk_ptr->GetLabelInst()->result_id();
@@ -467,10 +475,10 @@ Pass::Status InstBindlessCheckPass::ProcessImpl() {
   InstProcessFunction pfn =
       [this](BasicBlock::iterator ref_inst_itr,
              UptrVectorIterator<BasicBlock> ref_block_itr,
-             uint32_t instruction_idx, uint32_t stage_idx,
+             uint32_t stage_idx,
              std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
         return GenBoundsCheckCode(ref_inst_itr, ref_block_itr,
-                                  instruction_idx, stage_idx, new_blocks);
+                                  stage_idx, new_blocks);
       };
   bool modified = InstProcessEntryPointCallTree(pfn);
   if (ext_descriptor_indexing_defined_  && input_init_enabled_) {
@@ -478,10 +486,10 @@ Pass::Status InstBindlessCheckPass::ProcessImpl() {
     // module
     pfn = [this](BasicBlock::iterator ref_inst_itr,
                  UptrVectorIterator<BasicBlock> ref_block_itr,
-                 uint32_t instruction_idx, uint32_t stage_idx,
+                 uint32_t stage_idx,
                  std::vector<std::unique_ptr<BasicBlock>>* new_blocks) {
             return GenInitCheckCode(ref_inst_itr, ref_block_itr,
-                                    instruction_idx, stage_idx, new_blocks);
+                                    stage_idx, new_blocks);
           };
     modified |= InstProcessEntryPointCallTree(pfn);
   }

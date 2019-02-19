@@ -614,17 +614,11 @@ bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,
     ++function_idx;
   }
   std::vector<std::unique_ptr<BasicBlock>> new_blks;
-  // Start count after function instruction
-  uint32_t instruction_idx = funcIdx2offset_[function_idx] + 1;
   // Using block iterators here because of block erasures and insertions.
   for (auto bi = func->begin(); bi != func->end(); ++bi) {
-    // Count block's label
-    ++instruction_idx;
-    for (auto ii = bi->begin(); ii != bi->end(); ++instruction_idx) {
-      // Bump instruction count if debug instructions
-      instruction_idx += static_cast<uint32_t>(ii->dbg_line_insts().size());
+    for (auto ii = bi->begin(); ii != bi->end(); ) {
       // Generate instrumentation if warranted
-      pfn(ii, bi, instruction_idx, stage_idx, &new_blks);
+      pfn(ii, bi, stage_idx, &new_blks);
       if (new_blks.size() == 0) {
         ++ii;
         continue;
@@ -739,70 +733,66 @@ void InstrumentPass::InitializeInstrument() {
     }
   }
 
-  // Calculate instruction offset of first function
-  uint32_t pre_func_size = 0;
+  // Remember original instruction offsets
+  uint32_t module_offset = 0;
   Module* module = get_module();
   for (auto& i : context()->capabilities()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->extensions()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->ext_inst_imports()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
-  ++pre_func_size;  // memory_model
+  ++module_offset;  // memory_model
   for (auto& i : module->entry_points()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->execution_modes()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->debugs1()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->debugs2()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->debugs3()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->annotations()) {
     (void)i;
-    ++pre_func_size;
+    ++module_offset;
   }
   for (auto& i : module->types_values()) {
-    pre_func_size += 1;
-    pre_func_size += static_cast<uint32_t>(i.dbg_line_insts().size());
+    module_offset += 1;
+    module_offset += static_cast<uint32_t>(i.dbg_line_insts().size());
   }
-  funcIdx2offset_[0] = pre_func_size;
 
-  // Set instruction offsets for all other functions.
-  uint32_t func_idx = 1;
-  auto prev_fn = get_module()->begin();
-  auto curr_fn = prev_fn;
-  for (++curr_fn; curr_fn != get_module()->end(); ++curr_fn) {
-    // Count function and end instructions
-    uint32_t func_size = 2;
-    for (auto& blk : *prev_fn) {
+  auto curr_fn = get_module()->begin();
+  for (; curr_fn != get_module()->end(); ++curr_fn) {
+    // Count function instruction
+    module_offset += 1;
+    for (auto& blk : *curr_fn) {
       // Count label
-      func_size += 1;
+      module_offset += 1;
       for (auto& inst : blk) {
-        func_size += 1;
-        func_size += static_cast<uint32_t>(inst.dbg_line_insts().size());
+        module_offset += static_cast<uint32_t>(inst.dbg_line_insts().size());
+        uid2offset_[inst.unique_id()] = module_offset;
+        module_offset += 1;
       }
     }
-    funcIdx2offset_[func_idx] = func_size;
-    ++prev_fn;
-    ++func_idx;
+    // Count function end instruction
+    module_offset += 1;
   }
 }
 
