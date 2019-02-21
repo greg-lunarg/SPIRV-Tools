@@ -1988,15 +1988,15 @@ OpDecorate %g_sAniso Binding 0
 OpDecorate %i_vTextureCoords Location 0
 OpDecorate %_entryPointOutput_vColor Location 0
 OpDecorate %_runtimearr_uint ArrayStride 4
-OpDecorate %_struct_41 Block
-OpMemberDecorate %_struct_41 0 Offset 0
-OpDecorate %43 DescriptorSet 7
-OpDecorate %43 Binding 1
-OpDecorate %_struct_65 Block
-OpMemberDecorate %_struct_65 0 Offset 0
-OpMemberDecorate %_struct_65 1 Offset 4
-OpDecorate %67 DescriptorSet 7
-OpDecorate %67 Binding 0
+OpDecorate %_struct_46 Block
+OpMemberDecorate %_struct_46 0 Offset 0
+OpDecorate %48 DescriptorSet 7
+OpDecorate %48 Binding 1
+OpDecorate %_struct_71 Block
+OpMemberDecorate %_struct_71 0 Offset 0
+OpMemberDecorate %_struct_71 1 Offset 4
+OpDecorate %73 DescriptorSet 7
+OpDecorate %73 Binding 0
 OpDecorate %gl_FragCoord BuiltIn FragCoord
 %void = OpTypeVoid
 %10 = OpTypeFunction %void
@@ -2026,16 +2026,17 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 %_entryPointOutput_vColor = OpVariable %_ptr_Output_v4float Output
 %uint_0 = OpConstant %uint 0
 %uint_2 = OpConstant %uint 2
+%41 = OpTypeFunction %uint %uint %uint
 %_runtimearr_uint = OpTypeRuntimeArray %uint
-%_struct_41 = OpTypeStruct %_runtimearr_uint
-%_ptr_StorageBuffer__struct_41 = OpTypePointer StorageBuffer %_struct_41
-%43 = OpVariable %_ptr_StorageBuffer__struct_41 StorageBuffer
+%_struct_46 = OpTypeStruct %_runtimearr_uint
+%_ptr_StorageBuffer__struct_46 = OpTypePointer StorageBuffer %_struct_46
+%48 = OpVariable %_ptr_StorageBuffer__struct_46 StorageBuffer
 %_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
 %bool = OpTypeBool
-%59 = OpTypeFunction %void %uint %uint %uint %uint
-%_struct_65 = OpTypeStruct %uint %_runtimearr_uint
-%_ptr_StorageBuffer__struct_65 = OpTypePointer StorageBuffer %_struct_65
-%67 = OpVariable %_ptr_StorageBuffer__struct_65 StorageBuffer
+%65 = OpTypeFunction %void %uint %uint %uint %uint
+%_struct_71 = OpTypeStruct %uint %_runtimearr_uint
+%_ptr_StorageBuffer__struct_71 = OpTypePointer StorageBuffer %_struct_71
+%73 = OpVariable %_ptr_StorageBuffer__struct_71 StorageBuffer
 %uint_9 = OpConstant %uint 9
 %uint_4 = OpConstant %uint 4
 %uint_23 = OpConstant %uint 23
@@ -2048,7 +2049,8 @@ OpDecorate %gl_FragCoord BuiltIn FragCoord
 %uint_7 = OpConstant %uint 7
 %uint_8 = OpConstant %uint 8
 %uint_59 = OpConstant %uint 59
-%110 = OpConstantNull %v4float
+%116 = OpConstantNull %v4float
+%119 = OpTypeFunction %uint %uint %uint %uint %uint
 )";
 
   const std::string func_before =
@@ -2077,84 +2079,123 @@ OpFunctionEnd
 %34 = OpLoad %16 %33
 %35 = OpLoad %24 %g_sAniso
 %36 = OpSampledImage %26 %34 %35
-%45 = OpAccessChain %_ptr_StorageBuffer_uint %43 %uint_0 %uint_2
-%46 = OpLoad %uint %45
-%47 = OpIAdd %uint %46 %uint_1
-%48 = OpAccessChain %_ptr_StorageBuffer_uint %43 %uint_0 %47
-%49 = OpLoad %uint %48
-%51 = OpULessThan %bool %32 %49
-OpSelectionMerge %52 None
-OpBranchConditional %51 %53 %54
-%53 = OpLabel
-%55 = OpLoad %16 %33
-%56 = OpSampledImage %26 %55 %35
-%57 = OpImageSampleImplicitLod %v4float %56 %30
-OpBranch %52
-%54 = OpLabel
-%109 = OpFunctionCall %void %58 %uint_59 %uint_0 %32 %49
-OpBranch %52
-%52 = OpLabel
-%111 = OpPhi %v4float %57 %53 %110 %54
-OpStore %_entryPointOutput_vColor %111
+%55 = OpFunctionCall %uint %40 %uint_2 %uint_1
+%57 = OpULessThan %bool %32 %55
+OpSelectionMerge %58 None
+OpBranchConditional %57 %59 %60
+%59 = OpLabel
+%61 = OpLoad %16 %33
+%62 = OpSampledImage %26 %61 %35
+%136 = OpFunctionCall %uint %118 %uint_0 %uint_1 %uint_1 %32
+%137 = OpINotEqual %bool %136 %uint_0
+OpSelectionMerge %138 None
+OpBranchConditional %137 %139 %140
+%139 = OpLabel
+%141 = OpLoad %16 %33
+%142 = OpSampledImage %26 %141 %35
+%143 = OpImageSampleImplicitLod %v4float %142 %30
+OpBranch %138
+%140 = OpLabel
+%144 = OpFunctionCall %void %64 %uint_59 %uint_1 %32 %uint_0
+OpBranch %138
+%138 = OpLabel
+%145 = OpPhi %v4float %143 %139 %116 %140
+OpBranch %58
+%60 = OpLabel
+%115 = OpFunctionCall %void %64 %uint_59 %uint_0 %32 %55
+OpBranch %58
+%58 = OpLabel
+%117 = OpPhi %v4float %145 %138 %116 %60
+OpStore %_entryPointOutput_vColor %117
 OpReturn
 OpFunctionEnd
 )";
 
-  const std::string output_func =
-      R"(%58 = OpFunction %void None %59
-%60 = OpFunctionParameter %uint
-%61 = OpFunctionParameter %uint
-%62 = OpFunctionParameter %uint
-%63 = OpFunctionParameter %uint
-%64 = OpLabel
-%68 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_0
-%71 = OpAtomicIAdd %uint %68 %uint_4 %uint_0 %uint_9
-%72 = OpIAdd %uint %71 %uint_9
-%73 = OpArrayLength %uint %67 1
-%74 = OpULessThanEqual %bool %72 %73
-OpSelectionMerge %75 None
-OpBranchConditional %74 %76 %75
-%76 = OpLabel
-%77 = OpIAdd %uint %71 %uint_0
-%78 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %77
-OpStore %78 %uint_9
-%80 = OpIAdd %uint %71 %uint_1
-%81 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %80
-OpStore %81 %uint_23
-%82 = OpIAdd %uint %71 %uint_2
-%83 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %82
-OpStore %83 %60
-%85 = OpIAdd %uint %71 %uint_3
-%86 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %85
-OpStore %86 %uint_4
-%89 = OpLoad %v4float %gl_FragCoord
-%91 = OpBitcast %v4uint %89
-%92 = OpCompositeExtract %uint %91 0
-%93 = OpIAdd %uint %71 %uint_4
-%94 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %93
-OpStore %94 %92
-%95 = OpCompositeExtract %uint %91 1
-%97 = OpIAdd %uint %71 %uint_5
-%98 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %97
-OpStore %98 %95
-%100 = OpIAdd %uint %71 %uint_6
-%101 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %100
-OpStore %101 %61
-%103 = OpIAdd %uint %71 %uint_7
-%104 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %103
-OpStore %104 %62
-%106 = OpIAdd %uint %71 %uint_8
-%107 = OpAccessChain %_ptr_StorageBuffer_uint %67 %uint_1 %106
-OpStore %107 %63
-OpBranch %75
-%75 = OpLabel
+  const std::string new_funcs =
+      R"(%40 = OpFunction %uint None %41
+%42 = OpFunctionParameter %uint
+%43 = OpFunctionParameter %uint
+%44 = OpLabel
+%50 = OpAccessChain %_ptr_StorageBuffer_uint %48 %uint_0 %42
+%51 = OpLoad %uint %50
+%52 = OpIAdd %uint %51 %43
+%53 = OpAccessChain %_ptr_StorageBuffer_uint %48 %uint_0 %52
+%54 = OpLoad %uint %53
+OpReturnValue %54
+OpFunctionEnd
+%64 = OpFunction %void None %65
+%66 = OpFunctionParameter %uint
+%67 = OpFunctionParameter %uint
+%68 = OpFunctionParameter %uint
+%69 = OpFunctionParameter %uint
+%70 = OpLabel
+%74 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_0
+%77 = OpAtomicIAdd %uint %74 %uint_4 %uint_0 %uint_9
+%78 = OpIAdd %uint %77 %uint_9
+%79 = OpArrayLength %uint %73 1
+%80 = OpULessThanEqual %bool %78 %79
+OpSelectionMerge %81 None
+OpBranchConditional %80 %82 %81
+%82 = OpLabel
+%83 = OpIAdd %uint %77 %uint_0
+%84 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %83
+OpStore %84 %uint_9
+%86 = OpIAdd %uint %77 %uint_1
+%87 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %86
+OpStore %87 %uint_23
+%88 = OpIAdd %uint %77 %uint_2
+%89 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %88
+OpStore %89 %66
+%91 = OpIAdd %uint %77 %uint_3
+%92 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %91
+OpStore %92 %uint_4
+%95 = OpLoad %v4float %gl_FragCoord
+%97 = OpBitcast %v4uint %95
+%98 = OpCompositeExtract %uint %97 0
+%99 = OpIAdd %uint %77 %uint_4
+%100 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %99
+OpStore %100 %98
+%101 = OpCompositeExtract %uint %97 1
+%103 = OpIAdd %uint %77 %uint_5
+%104 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %103
+OpStore %104 %101
+%106 = OpIAdd %uint %77 %uint_6
+%107 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %106
+OpStore %107 %67
+%109 = OpIAdd %uint %77 %uint_7
+%110 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %109
+OpStore %110 %68
+%112 = OpIAdd %uint %77 %uint_8
+%113 = OpAccessChain %_ptr_StorageBuffer_uint %73 %uint_1 %112
+OpStore %113 %69
+OpBranch %81
+%81 = OpLabel
 OpReturn
+OpFunctionEnd
+%118 = OpFunction %uint None %119
+%120 = OpFunctionParameter %uint
+%121 = OpFunctionParameter %uint
+%122 = OpFunctionParameter %uint
+%123 = OpFunctionParameter %uint
+%124 = OpLabel
+%125 = OpAccessChain %_ptr_StorageBuffer_uint %48 %uint_0 %120
+%126 = OpLoad %uint %125
+%127 = OpIAdd %uint %126 %121
+%128 = OpAccessChain %_ptr_StorageBuffer_uint %48 %uint_0 %127
+%129 = OpLoad %uint %128
+%130 = OpIAdd %uint %129 %122
+%131 = OpAccessChain %_ptr_StorageBuffer_uint %48 %uint_0 %130
+%132 = OpLoad %uint %131
+%133 = OpIAdd %uint %132 %123
+%134 = OpAccessChain %_ptr_StorageBuffer_uint %48 %uint_0 %133
+%135 = OpLoad %uint %134
+OpReturnValue %135
 OpFunctionEnd
 )";
 
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
-      defs_before + func_before, defs_after + func_after + output_func, true,
+      defs_before + func_before, defs_after + func_after + new_funcs, true,
       true);
 }
 
