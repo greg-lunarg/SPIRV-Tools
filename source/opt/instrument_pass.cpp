@@ -612,7 +612,7 @@ uint32_t InstrumentPass::GetDirectReadFunctionId(uint32_t param_cnt) {
   std::vector<const analysis::Type*> param_types;
   for (uint32_t c = 0; c < param_cnt; ++c)
     param_types.push_back(type_mgr->GetType(GetUintId()));
-  analysis::Function func_ty(type_mgr->GetType(GetVoidId()), param_types);
+  analysis::Function func_ty(type_mgr->GetType(GetUintId()), param_types);
   analysis::Type* reg_func_ty = type_mgr->GetRegisteredType(&func_ty);
   std::unique_ptr<Instruction> func_inst(new Instruction(
       get_module()->context(), SpvOpFunction, GetUintId(), func_id,
