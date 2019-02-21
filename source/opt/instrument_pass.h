@@ -195,11 +195,15 @@ class InstrumentPass : public Pass {
                            InstructionBuilder* builder);
 
   // Generate in |builder| instructions to read the unsigned integer from the
-  // input buffer at offset |idx_id|. Return the result id.
+  // input buffer specified by the offsets in |offset_ids|. Given offsets
+  // o0, o1, ... oN, and input buffer ibuf, return the id for the value:
+  // 
+  // ibuf[...ibuf[ibuf[o0]+o1]...+oN]
   //
   // The binding and the format of the input buffer is determined by each
   // specific validation, which is specified at the creation of the pass.
-  uint32_t GenDebugDirectRead(uint32_t idx_id, InstructionBuilder* builder);
+  uint32_t GenDebugDirectRead(const std::vector<uint32_t>& offset_ids,
+      InstructionBuilder* builder);
 
   // Generate code to cast |value_id| to unsigned, if needed. Return
   // an id to the unsigned equivalent.
@@ -246,9 +250,13 @@ class InstrumentPass : public Pass {
   uint32_t GetVec4UintId();
 
   // Return id for output function. Define if it doesn't exist with
-  // |val_spec_arg_cnt| validation-specific uint32 arguments.
+  // |val_spec_param_cnt| validation-specific uint32 parameters.
   uint32_t GetStreamWriteFunctionId(uint32_t stage_idx,
                                     uint32_t val_spec_param_cnt);
+
+  // Return id for input function taking |param_cnt| uint32 parameters. Define
+  // if it doesn't exist.
+  uint32_t GetDirectReadFunctionId(uint32_t param_cnt);
 
   // Apply instrumentation function |pfn| to every instruction in |func|.
   // If code is generated for an instruction, replace the instruction's
@@ -344,6 +352,9 @@ class InstrumentPass : public Pass {
 
   // id for debug output function
   uint32_t output_func_id_;
+
+  // ids for debug input functions
+  std::unordered_map<uint32_t, uint32_t> param2input_func_id_;
 
   // param count for output function
   uint32_t output_func_param_cnt_;

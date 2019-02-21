@@ -222,16 +222,14 @@ void InstrumentPass::GenDebugStreamWrite(
   (void)builder->AddNaryOp(GetVoidId(), SpvOpFunctionCall, args);
 }
 
-uint32_t InstrumentPass::GenDebugDirectRead(uint32_t idx_id,
-                                            InstructionBuilder* builder) {
-  uint32_t input_buf_id = GetInputBufferId();
-  uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
-  Instruction* ibuf_ac_inst = builder->AddTernaryOp(
-      buf_uint_ptr_id, SpvOpAccessChain, input_buf_id,
-      builder->GetUintConstantId(kDebugInputDataOffset), idx_id);
-  Instruction* load_inst =
-      builder->AddUnaryOp(GetUintId(), SpvOpLoad, ibuf_ac_inst->result_id());
-  return load_inst->result_id();
+uint32_t InstrumentPass::GenDebugDirectRead(
+    const std::vector<uint32_t>& offset_ids, InstructionBuilder* builder) {
+  // Call debug input function. Pass func_idx and offset ids as args.
+  uint32_t off_id_cnt = static_cast<uint32_t>(offset_ids.size());
+  uint32_t input_func_id = GetDirectReadFunctionId(off_id_cnt);
+  std::vector<uint32_t> args = {input_func_id};
+  (void)args.insert(args.end(), offset_ids.begin(), offset_ids.end());
+  return builder->AddNaryOp(GetUintId(), SpvOpFunctionCall, args)->result_id();
 }
 
 bool InstrumentPass::IsSameBlockOp(const Instruction* inst) const {
@@ -602,6 +600,83 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
   }
   assert(param_cnt == output_func_param_cnt_ && "bad arg count");
   return output_func_id_;
+}
+
+uint32_t InstrumentPass::GetDirectReadFunctionId(uint32_t param_cnt) {
+  uint32_t func_id = param2input_func_id_[param_cnt];
+  if (func_id != 0)
+    return func_id;
+  // Create input function for param_cnt
+  func_id = TakeNextId();
+  analysis::TypeManager* type_mgr = context()->get_type_mgr();
+  std::vector<const analysis::Type*> param_types;
+  for (uint32_t c = 0; c < param_cnt; ++c)
+    param_types.push_back(type_mgr->GetType(GetUintId()));
+  analysis::Function func_ty(type_mgr->GetType(GetVoidId()), param_types);
+  analysis::Type* reg_func_ty = type_mgr->GetRegisteredType(&func_ty);
+  std::unique_ptr<Instruction> func_inst(new Instruction(
+      get_module()->context(), SpvOpFunction, GetUintId(), output_func_id_,
+      {{spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
+       {SpvFunctionControlMaskNone}},
+      {spv_operand_type_t::SPV_OPERAND_TYPE_ID,
+       {type_mgr->GetTypeInstruction(reg_func_ty)}}}));
+  get_def_use_mgr()->AnalyzeInstDefUse(&*func_inst);
+  std::unique_ptr<Function> input_func =
+      MakeUnique<Function>(std::move(func_inst));
+  // Add parameters
+  std::vector<uint32_t> param_vec;
+  for (uint32_t c = 0; c < param_cnt; ++c) {
+    uint32_t pid = TakeNextId();
+    param_vec.push_back(pid);
+    std::unique_ptr<Instruction> param_inst(
+        new Instruction(get_module()->context(), SpvOpFunctionParameter,
+                        GetUintId(), pid, {}));
+    get_def_use_mgr()->AnalyzeInstDefUse(&*param_inst);
+    input_func->AddParameter(std::move(param_inst));
+  }
+  // Create block
+  uint32_t blk_id = TakeNextId();
+  std::unique_ptr<Instruction> blk_label(NewLabel(blk_id));
+  std::unique_ptr<BasicBlock> new_blk_ptr =
+       MakeUnique<BasicBlock>(std::move(blk_label));
+  InstructionBuilder builder(
+      context(), &*new_blk_ptr,
+      IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+  // For each offset parameter, generate new offset with parameter, adding last
+  // loaded value if it exists, and load value from input buffer at new offset.
+  // Return last loaded value.
+  uint32_t buf_id = GetInputBufferId();
+  uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
+  uint32_t last_value_id;
+  for (uint32_t p = 0; p < param_cnt; ++p) {
+    uint32_t offset_id;
+    if (p == 0) {
+      offset_id = param_vec[0];
+    } else {
+      Instruction* offset_inst =
+          builder.AddBinaryOp(GetUintId(), SpvOpIAdd, last_value_id,
+                              param_vec[p]);
+      offset_id = offset_inst->result_id();
+    }
+    Instruction* ac_inst =
+        builder.AddTernaryOp(buf_uint_ptr_id, SpvOpAccessChain, buf_id,
+                            builder.GetUintConstantId(kDebugInputDataOffset),
+                            offset_id);
+    Instruction* load_inst =
+        builder.AddUnaryOp(GetUintId(), SpvOpLoad, ac_inst->result_id());
+    last_value_id = load_inst->result_id();
+  }
+  (void)builder.AddUnaryOp(GetUintId(), SpvOpReturnValue, last_value_id);
+  // Close block and function and add function to module
+  new_blk_ptr->SetParent(&*input_func);
+  input_func->AddBasicBlock(std::move(new_blk_ptr));
+  std::unique_ptr<Instruction> func_end_inst(
+    new Instruction(get_module()->context(), SpvOpFunctionEnd, 0, 0, {}));
+  get_def_use_mgr()->AnalyzeInstDefUse(&*func_end_inst);
+  input_func->SetFunctionEnd(std::move(func_end_inst));
+  context()->AddFunction(std::move(input_func));
+  param2input_func_id_[param_cnt] = func_id;
+  return func_id;
 }
 
 bool InstrumentPass::InstrumentFunction(Function* func, uint32_t stage_idx,

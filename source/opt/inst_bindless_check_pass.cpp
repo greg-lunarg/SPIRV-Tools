@@ -40,30 +40,19 @@ uint32_t InstBindlessCheckPass::GenDebugReadLength(
   uint32_t desc_set_idx =
       var2desc_set_[image_id] + kDebugInputBindlessOffsetLengths;
   uint32_t desc_set_idx_id = builder->GetUintConstantId(desc_set_idx);
-  uint32_t desc_set_offset_id = GenDebugDirectRead(desc_set_idx_id, builder);
-  Instruction* binding_idx_inst =
-      builder->AddBinaryOp(GetUintId(), SpvOpIAdd, desc_set_offset_id,
-                           builder->GetUintConstantId(var2binding_[image_id]));
-  return GenDebugDirectRead(binding_idx_inst->result_id(), builder);
+  uint32_t binding_idx_id =
+      builder->GetUintConstantId(var2binding_[image_id]);
+  return GenDebugDirectRead({desc_set_idx_id, binding_idx_id}, builder);
 }
 
 uint32_t InstBindlessCheckPass::GenDebugReadInit(
     uint32_t var_id, uint32_t desc_idx_id, InstructionBuilder* builder) {
-  uint32_t desc_set_base_id = GenDebugDirectRead(
-      builder->GetUintConstantId(kDebugInputBindlessInitOffset), builder);
+  uint32_t desc_set_base_id =
+      builder->GetUintConstantId(kDebugInputBindlessInitOffset);
   uint32_t desc_set_idx_id = builder->GetUintConstantId(var2binding_[var_id]);
-  Instruction* desc_set_offset_inst = builder->AddBinaryOp(
-      GetUintId(), SpvOpIAdd, desc_set_base_id, desc_set_idx_id);
-  uint32_t binding_base_id = GenDebugDirectRead(
-      desc_set_offset_inst->result_id(), builder);
   uint32_t binding_idx_id = builder->GetUintConstantId(var2binding_[var_id]);
-  Instruction* binding_offset_inst = builder->AddBinaryOp(
-      GetUintId(), SpvOpIAdd, binding_base_id, binding_idx_id);
-  uint32_t desc_base_id = GenDebugDirectRead(
-      binding_offset_inst->result_id(), builder);
-  Instruction* desc_offset_inst = builder->AddBinaryOp(
-      GetUintId(), SpvOpIAdd, desc_base_id, desc_idx_id);
-  return GenDebugDirectRead(desc_offset_inst->result_id(), builder);
+  return GenDebugDirectRead(
+      {desc_set_base_id, desc_set_idx_id, binding_idx_id, desc_idx_id}, builder);
 }
 
 uint32_t InstBindlessCheckPass::CloneOriginalReference(
