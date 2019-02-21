@@ -861,6 +861,8 @@ void InstrumentPass::InitializeInstrument() {
   for (; curr_fn != get_module()->end(); ++curr_fn) {
     // Count function instruction
     module_offset += 1;
+    curr_fn->ForEachParam(
+        [&module_offset](const Instruction*) { module_offset += 1; }, true);
     for (auto& blk : *curr_fn) {
       // Count label
       module_offset += 1;
