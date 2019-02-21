@@ -615,7 +615,7 @@ uint32_t InstrumentPass::GetDirectReadFunctionId(uint32_t param_cnt) {
   analysis::Function func_ty(type_mgr->GetType(GetVoidId()), param_types);
   analysis::Type* reg_func_ty = type_mgr->GetRegisteredType(&func_ty);
   std::unique_ptr<Instruction> func_inst(new Instruction(
-      get_module()->context(), SpvOpFunction, GetUintId(), output_func_id_,
+      get_module()->context(), SpvOpFunction, GetUintId(), func_id,
       {{spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
        {SpvFunctionControlMaskNone}},
       {spv_operand_type_t::SPV_OPERAND_TYPE_ID,
@@ -666,7 +666,9 @@ uint32_t InstrumentPass::GetDirectReadFunctionId(uint32_t param_cnt) {
         builder.AddUnaryOp(GetUintId(), SpvOpLoad, ac_inst->result_id());
     last_value_id = load_inst->result_id();
   }
-  (void)builder.AddUnaryOp(GetUintId(), SpvOpReturnValue, last_value_id);
+  (void)builder.AddInstruction(MakeUnique<Instruction>(
+      context(), SpvOpReturnValue, 0, 0,
+      std::initializer_list<Operand>{ {SPV_OPERAND_TYPE_ID, {last_value_id}}}));
   // Close block and function and add function to module
   new_blk_ptr->SetParent(&*input_func);
   input_func->AddBasicBlock(std::move(new_blk_ptr));
@@ -730,7 +732,9 @@ bool InstrumentPass::InstProcessCallTreeFromRoots(InstProcessFunction& pfn,
                                                   uint32_t stage_idx) {
   bool modified = false;
   std::unordered_set<uint32_t> done;
-  // Don't process output function if it is already created
+  // Don't process input and output functions
+  for (auto& ifn : param2input_func_id_)
+    done.insert(ifn.second);
   if (output_func_id_ != 0)
     done.insert(output_func_id_);
   // Process all functions from roots
