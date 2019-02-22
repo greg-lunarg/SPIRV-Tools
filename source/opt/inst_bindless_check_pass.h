@@ -67,25 +67,35 @@ class InstBindlessCheckPass : public InstrumentPass {
   // Initialize state for instrumenting bindless checking
   void InitializeInstBindlessCheck();
 
-  // This function does bindless checking instrumentation on a single
-  // instruction. It is designed to be passed to
+  // These functions do bindless checking instrumentation on a single
+  // instruction which references through a descriptor. GenBoundsCheckCode
+  // checks that a index into a descriptor array is in-bounds. GenInitCheckCode
+  // checks that the descriptor has been initialized if the
+  // SPV_EXT_descriptor_indexing extension is enabled.
+  //
+  // The functions are designed to be passed to
   // InstrumentPass::InstProcessEntryPointCallTree(), which applies the
   // function to each instruction in a module and replaces the instruction
   // if warranted.
   //
   // If |ref_inst_itr| is a bindless reference, return in |new_blocks| the
   // result of instrumenting it with validation code within its block at
-  // |ref_block_itr|. Specifically, generate code to check that the index
-  // into the descriptor array is in-bounds. If the check passes, execute
-  // the remainder of the reference, otherwise write a record to the debug
+  // |ref_block_itr|.  The validation code first executes a check for the
+  // specific condition called for. If the check passes, it executes
+  // the remainder of the reference, otherwise writes a record to the debug
   // output buffer stream including |function_idx, instruction_idx, stage_idx|
-  // and replace the reference with the null value of the original type. The
+  // and replaces the reference with the null value of the original type. The
   // block at |ref_block_itr| can just be replaced with the blocks in
   // |new_blocks|, which will contain at least two blocks. The last block will
   // comprise all instructions following |ref_inst_itr|,
   // preceded by a phi instruction.
   //
-  // This instrumentation pass utilizes GenDebugStreamWrite() to write its
+  // These instrumentation functions utilize GenDebugDirectRead() to read data
+  // from the debug input buffer, specifically the lengths of variable length
+  // descriptor arrays, and the initialization status of each descriptor.
+  // The format of the debug input buffer is documented in instrument.hpp.
+  //
+  // These instrumentation functions utilize GenDebugStreamWrite() to write its
   // error records. The validation-specific part of the error record will
   // have the format:
   //
