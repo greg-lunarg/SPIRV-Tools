@@ -152,11 +152,8 @@ static const int kDebugInputDataOffset = 0;
 // and possibly other future validations.
 static const int kDebugOutputBindingStream = 0;
 
-// The binding for the input buffer for InstBindlessCheckPass. The input
-// buffer needs only be created if the shaders being validated contain a
-// descriptor array of runtime size, and validation of runtime size descriptor
-// arrays have been enabled at the time of the bindless validation pass
-// creation.
+// The binding for the input buffer read by InstBindlessCheckPass and
+// possibly other future validations.
 static const int kDebugInputBindingBindless = 1;
 
 // Bindless Validation Input Buffer Format
@@ -164,9 +161,9 @@ static const int kDebugInputBindingBindless = 1;
 // An input buffer for bindless validation consists of a single array of
 // unsigned integers we will call Data[]. This array is formatted as follows.
 //
-// At the beginning of the Data array is a single uint which gives an offset
-// to the start of the bindless initialization data. More specifically, if the
-// following value is zero, we know that the descriptor at
+// At offset kDebugInputBindlessInitOffset in Data[] is a single uint which
+// gives an offset to the start of the bindless initialization data. More
+// specifically, if the following value is zero, we know that the descriptor at
 // (set = s, binding = b, index = i) is not initialized:
 // Data[ i + Data[ b + Data[ s + Data[ kDebugInputBindlessInitOffset ] ] ] ]
 static const int kDebugInputBindlessInitOffset = 0;
@@ -174,9 +171,9 @@ static const int kDebugInputBindlessInitOffset = 0;
 // DEPRECATED
 static const int kDebugInputBindlessOffsetReserved = 0;
 
-// Following the reserved uint is some number of uints which provide the
-// bindless length data. More specifically, the number of descriptors at
-// (set=s, binding=b) is:
+// At offset kDebugInputBindlessOffsetLengths is some number of uints which
+// provide the bindless length data. More specifically, the number of
+// descriptors at (set=s, binding=b) is:
 // Data[ Data[ s + kDebugInputBindlessOffsetLengths ] + b ]
 static const int kDebugInputBindlessOffsetLengths = 1;
 
