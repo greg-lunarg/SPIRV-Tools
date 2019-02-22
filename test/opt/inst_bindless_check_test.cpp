@@ -2199,6 +2199,83 @@ OpFunctionEnd
       true);
 }
 
+TEST_F(InstBindlessTest, NoInstrumentNonBindless) {
+  // This test verifies that the pass will correctly not instrument vanilla
+  // texture sample.
+  //
+  // Texture2D g_tColor;
+  //
+  // SamplerState g_sAniso;
+  //
+  // struct PS_INPUT
+  // {
+  //   float2 vTextureCoords : TEXCOORD2;
+  // };
+  //
+  // struct PS_OUTPUT
+  // {
+  //   float4 vColor : SV_Target0;
+  // };
+  //
+  // PS_OUTPUT MainPs(PS_INPUT i)
+  // {
+  //   PS_OUTPUT ps_output;
+  //   ps_output.vColor =
+  //       g_tColor.Sample(g_sAniso, i.vTextureCoords.xy);
+  //   return ps_output;
+  // }
+
+  const std::string whole_file =
+      R"(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %MainPs "MainPs" %i_vTextureCoords %_entryPointOutput_vColor
+OpExecutionMode %MainPs OriginUpperLeft
+OpSource HLSL 500
+OpName %MainPs "MainPs"
+OpName %g_tColor "g_tColor"
+OpName %g_sAniso "g_sAniso"
+OpName %i_vTextureCoords "i.vTextureCoords"
+OpName %_entryPointOutput_vColor "@entryPointOutput.vColor"
+OpDecorate %g_tColor DescriptorSet 0
+OpDecorate %g_tColor Binding 0
+OpDecorate %g_sAniso DescriptorSet 0
+OpDecorate %g_sAniso Binding 0
+OpDecorate %i_vTextureCoords Location 0
+OpDecorate %_entryPointOutput_vColor Location 0
+%void = OpTypeVoid
+%8 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%v2float = OpTypeVector %float 2
+%v4float = OpTypeVector %float 4
+%12 = OpTypeImage %float 2D 0 0 0 1 Unknown
+%_ptr_UniformConstant_12 = OpTypePointer UniformConstant %12
+%g_tColor = OpVariable %_ptr_UniformConstant_12 UniformConstant
+%14 = OpTypeSampler
+%_ptr_UniformConstant_14 = OpTypePointer UniformConstant %14
+%g_sAniso = OpVariable %_ptr_UniformConstant_14 UniformConstant
+%16 = OpTypeSampledImage %12
+%_ptr_Input_v2float = OpTypePointer Input %v2float
+%i_vTextureCoords = OpVariable %_ptr_Input_v2float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput_vColor = OpVariable %_ptr_Output_v4float Output
+%MainPs = OpFunction %void None %8
+%19 = OpLabel
+%20 = OpLoad %v2float %i_vTextureCoords
+%21 = OpLoad %12 %g_tColor
+%22 = OpLoad %14 %g_sAniso
+%23 = OpSampledImage %16 %21 %22
+%24 = OpImageSampleImplicitLod %v4float %23 %20
+OpStore %_entryPointOutput_vColor %24
+OpReturn
+OpFunctionEnd
+)";
+
+  // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<InstBindlessCheckPass>(
+      whole_file, whole_file, true, true);
+}
+
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
 //
 //   Compute shader
