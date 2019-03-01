@@ -29,6 +29,7 @@ static const int kSpvAccessChainIndex0IdInIdx = 1;
 static const int kSpvTypePointerTypeIdInIdx = 1;
 static const int kSpvTypeArrayLengthIdInIdx = 1;
 static const int kSpvConstantValueInIdx = 0;
+static const int kSpvVariableStorageClassInIdx = 0;
 
 }  // anonymous namespace
 
@@ -58,35 +59,39 @@ uint32_t InstBindlessCheckPass::GenDebugReadInit(uint32_t var_id,
 
 uint32_t InstBindlessCheckPass::CloneOriginalReference(
     InstructionBuilder* builder) {
-  // Clone descriptor load
-  Instruction* new_load_inst =
-      builder->AddLoad(load_inst_->type_id(),
-                       load_inst_->GetSingleWordInOperand(kSpvLoadPtrIdInIdx));
-  uid2offset_[new_load_inst->unique_id()] =
-      uid2offset_[load_inst_->unique_id()];
-  uint32_t new_load_id = new_load_inst->result_id();
-  get_decoration_mgr()->CloneDecorations(load_inst_->result_id(), new_load_id);
-  uint32_t new_image_id = new_load_id;
-  // Clone Image/SampledImage with new load, if needed
-  if (image_id_ != 0) {
-    if (image_inst_->opcode() == SpvOp::SpvOpSampledImage) {
-      Instruction* new_image_inst = builder->AddBinaryOp(
+  // If original is image based, start by cloning descriptor load
+  uint32_t new_image_id = 0;
+  if (desc_load_inst_ != nullptr) {
+    Instruction* new_load_inst =
+      builder->AddLoad(desc_load_inst_->type_id(),
+        desc_load_inst_->GetSingleWordInOperand(kSpvLoadPtrIdInIdx));
+    uid2offset_[new_load_inst->unique_id()] =
+      uid2offset_[desc_load_inst_->unique_id()];
+    uint32_t new_load_id = new_load_inst->result_id();
+    get_decoration_mgr()->CloneDecorations(desc_load_inst_->result_id(), new_load_id);
+    new_image_id = new_load_id;
+    // Clone Image/SampledImage with new load, if needed
+    if (image_id_ != 0) {
+      if (image_inst_->opcode() == SpvOp::SpvOpSampledImage) {
+        Instruction* new_image_inst = builder->AddBinaryOp(
           image_inst_->type_id(), SpvOpSampledImage, new_load_id,
           image_inst_->GetSingleWordInOperand(kSpvSampledImageSamplerIdInIdx));
-      uid2offset_[new_image_inst->unique_id()] =
+        uid2offset_[new_image_inst->unique_id()] =
           uid2offset_[image_inst_->unique_id()];
-      new_image_id = new_image_inst->result_id();
-    } else {
-      assert(image_inst_->opcode() == SpvOp::SpvOpImage && "expecting OpImage");
-      Instruction* new_image_inst =
+        new_image_id = new_image_inst->result_id();
+      }
+      else {
+        assert(image_inst_->opcode() == SpvOp::SpvOpImage && "expecting OpImage");
+        Instruction* new_image_inst =
           builder->AddUnaryOp(image_inst_->type_id(), SpvOpImage, new_load_id);
-      uid2offset_[new_image_inst->unique_id()] =
+        uid2offset_[new_image_inst->unique_id()] =
           uid2offset_[image_inst_->unique_id()];
-      new_image_id = new_image_inst->result_id();
+        new_image_id = new_image_inst->result_id();
+      }
+      get_decoration_mgr()->CloneDecorations(image_id_, new_image_id);
     }
-    get_decoration_mgr()->CloneDecorations(image_id_, new_image_id);
   }
-  // Clone original reference using new image code
+  // Clone original reference
   std::unique_ptr<Instruction> new_ref_inst(ref_inst_->Clone(context()));
   uint32_t ref_result_id = ref_inst_->result_id();
   uint32_t new_ref_id = 0;
@@ -94,7 +99,9 @@ uint32_t InstBindlessCheckPass::CloneOriginalReference(
     new_ref_id = TakeNextId();
     new_ref_inst->SetResultId(new_ref_id);
   }
-  new_ref_inst->SetInOperand(kSpvImageSampleImageIdInIdx, {new_image_id});
+  // Update new ref with new image if created
+  if (new_image_id != 0)
+    new_ref_inst->SetInOperand(kSpvImageSampleImageIdInIdx, {new_image_id});
   // Register new reference and add to new block
   Instruction* added_inst = builder->AddInstruction(std::move(new_ref_inst));
   uid2offset_[added_inst->unique_id()] = uid2offset_[ref_inst_->unique_id()];
@@ -103,7 +110,7 @@ uint32_t InstBindlessCheckPass::CloneOriginalReference(
   return new_ref_id;
 }
 
-uint32_t InstBindlessCheckPass::GetDescriptorValueId(Instruction* inst) {
+uint32_t InstBindlessCheckPass::GetImageId(Instruction* inst) {
   switch (inst->opcode()) {
     case SpvOp::SpvOpImageSampleImplicitLod:
     case SpvOp::SpvOpImageSampleExplicitLod:
@@ -145,28 +152,80 @@ uint32_t InstBindlessCheckPass::GetDescriptorValueId(Instruction* inst) {
   return 0;
 }
 
+Instruction* InstBindlessCheckPass::GetDescriptorTypeInst(
+    Instruction* var_inst) {
+  uint32_t var_type_id = var_inst_->type_id();
+  Instruction* var_type_inst = get_def_use_mgr()->GetDef(var_type_id);
+  uint32_t desc_type_id =
+    var_type_inst->GetSingleWordInOperand(kSpvTypePointerTypeIdInIdx);
+  return get_def_use_mgr()->GetDef(desc_type_id);
+}
+
 bool InstBindlessCheckPass::AnalyzeDescriptorReference(Instruction* ref_inst) {
-  image_id_ = GetDescriptorValueId(ref_inst);
+  ref_inst_ = ref_inst;
+  if (ref_inst->opcode() == SpvOpLoad || ref_inst->opcode() == SpvOpStore) {
+    desc_load_id_ = 0;
+    desc_load_inst_ = nullptr;
+    ptr_id_ = ref_inst->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
+    ptr_inst_ = get_def_use_mgr()->GetDef(ptr_id_);
+    if (ptr_inst_->opcode() != SpvOp::SpvOpAccessChain)
+      return false;
+    // A load through a descriptor will have at least 3 operands. We do not
+    // want to instrument loads of descriptors here which are part of
+    // image-based references.
+    if (ptr_inst_->NumInOperands() < 3) {
+      return false;
+    }
+    var_id_ = ptr_inst_->GetSingleWordInOperand(kSpvAccessChainBaseIdInIdx);
+    var_inst_ = get_def_use_mgr()->GetDef(var_id_);
+    if (var_inst_->opcode() != SpvOp::SpvOpVariable)
+      return false;
+    uint32_t storage_class =
+        var_inst_->GetSingleWordInOperand(kSpvVariableStorageClassInIdx);
+    switch (storage_class) {
+      case SpvStorageClassUniform:
+      case SpvStorageClassUniformConstant:
+      case SpvStorageClassStorageBuffer:
+        break;
+      default:
+        return false;
+        break;
+    }
+    Instruction* desc_type_inst = GetDescriptorTypeInst(var_inst_);
+    switch (desc_type_inst->opcode()) {
+    case SpvOpTypeArray:
+    case SpvOpTypeRuntimeArray:
+      index_id_ =
+          ptr_inst_->GetSingleWordInOperand(kSpvAccessChainIndex0IdInIdx);
+      break;
+    default:
+      index_id_ = 0;
+      break;
+    }
+    return true;
+  }
+  // Reference is not load or store. If not an image-based reference, return.
+  image_id_ = GetImageId(ref_inst);
   if (image_id_ == 0) return false;
   image_inst_ = get_def_use_mgr()->GetDef(image_id_);
   if (image_inst_->opcode() == SpvOp::SpvOpSampledImage) {
-    load_id_ =
-        image_inst_->GetSingleWordInOperand(kSpvSampledImageImageIdInIdx);
-    load_inst_ = get_def_use_mgr()->GetDef(load_id_);
+    desc_load_id_ =
+      image_inst_->GetSingleWordInOperand(kSpvSampledImageImageIdInIdx);
+    desc_load_inst_ = get_def_use_mgr()->GetDef(desc_load_id_);
   } else if (image_inst_->opcode() == SpvOp::SpvOpImage) {
-    load_id_ =
-        image_inst_->GetSingleWordInOperand(kSpvImageSampledImageIdInIdx);
-    load_inst_ = get_def_use_mgr()->GetDef(load_id_);
+    desc_load_id_ =
+      image_inst_->GetSingleWordInOperand(kSpvImageSampledImageIdInIdx);
+    desc_load_inst_ = get_def_use_mgr()->GetDef(desc_load_id_);
   } else {
-    load_id_ = image_id_;
-    load_inst_ = image_inst_;
+    desc_load_id_ = image_id_;
+    desc_load_inst_ = image_inst_;
     image_id_ = 0;
   }
-  if (load_inst_->opcode() != SpvOp::SpvOpLoad) {
+  if (desc_load_inst_->opcode() != SpvOp::SpvOpLoad) {
     // TODO(greg-lunarg): Handle additional possibilities?
     return false;
   }
-  ptr_id_ = load_inst_->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
+  ptr_id_ = desc_load_inst_->GetSingleWordInOperand(kSpvLoadPtrIdInIdx);
   ptr_inst_ = get_def_use_mgr()->GetDef(ptr_id_);
   if (ptr_inst_->opcode() == SpvOp::SpvOpVariable) {
     index_id_ = 0;
@@ -188,7 +247,6 @@ bool InstBindlessCheckPass::AnalyzeDescriptorReference(Instruction* ref_inst) {
     // TODO(greg-lunarg): Handle additional possibilities?
     return false;
   }
-  ref_inst_ = ref_inst;
   return true;
 }
 
@@ -253,11 +311,7 @@ void InstBindlessCheckPass::GenBoundsCheckCode(
   if (ptr_inst_->opcode() != SpvOp::SpvOpAccessChain) return;
   // If index and bound both compile-time constants and index < bound,
   // return without changing
-  uint32_t var_type_id = var_inst_->type_id();
-  Instruction* var_type_inst = get_def_use_mgr()->GetDef(var_type_id);
-  uint32_t desc_type_id =
-      var_type_inst->GetSingleWordInOperand(kSpvTypePointerTypeIdInIdx);
-  Instruction* desc_type_inst = get_def_use_mgr()->GetDef(desc_type_id);
+  Instruction* desc_type_inst = GetDescriptorTypeInst(var_inst_);
   uint32_t length_id = 0;
   if (desc_type_inst->opcode() == SpvOpTypeArray) {
     length_id =

@@ -112,9 +112,12 @@ class InstBindlessCheckPass : public InstrumentPass {
   // Clone original reference
   uint32_t CloneOriginalReference(InstructionBuilder* builder);
 
-  // If |inst| references through a descriptor, return the id of the value it
+  // If |inst| references through an image, return the id of the image it
   // references through. Else return 0.
-  uint32_t GetDescriptorValueId(Instruction* inst);
+  uint32_t GetImageId(Instruction* inst);
+  
+  // Get descriptor type inst of variable |var_inst|.
+  Instruction* InstBindlessCheckPass::GetDescriptorTypeInst(Instruction* var_inst);
 
   // Analyze descriptor reference |ref_inst| and save components for later use.
   bool AnalyzeDescriptorReference(Instruction* ref_inst);
@@ -159,9 +162,9 @@ class InstBindlessCheckPass : public InstrumentPass {
   uint32_t image_id_;
   Instruction* image_inst_;
   // Descriptor load
-  uint32_t load_id_;
-  Instruction* load_inst_;
-  // Descriptor pointer
+  uint32_t desc_load_id_;
+  Instruction* desc_load_inst_;
+  // Descriptor pointer for image reference or pointer for load/store
   uint32_t ptr_id_;
   Instruction* ptr_inst_;
   // Base descriptor variable
