@@ -171,12 +171,6 @@ bool InstBindlessCheckPass::AnalyzeDescriptorReference(Instruction* ref_inst) {
     ptr_inst_ = get_def_use_mgr()->GetDef(ptr_id_);
     if (ptr_inst_->opcode() != SpvOp::SpvOpAccessChain)
       return false;
-    // A load through a descriptor will have at least 3 operands. We do not
-    // want to instrument loads of descriptors here which are part of
-    // image-based references.
-    if (ptr_inst_->NumInOperands() < 3) {
-      return false;
-    }
     var_id_ = ptr_inst_->GetSingleWordInOperand(kSpvAccessChainBaseIdInIdx);
     var_inst_ = get_def_use_mgr()->GetDef(var_id_);
     if (var_inst_->opcode() != SpvOp::SpvOpVariable)
@@ -196,6 +190,11 @@ bool InstBindlessCheckPass::AnalyzeDescriptorReference(Instruction* ref_inst) {
     switch (desc_type_inst->opcode()) {
     case SpvOpTypeArray:
     case SpvOpTypeRuntimeArray:
+      // A load through a descriptor array will have at least 3 operands. We do
+      // not want to instrument loads of descriptors here which are part of an
+      // image-based reference.
+      if (ptr_inst_->NumInOperands() < 3)
+        return false;
       index_id_ =
           ptr_inst_->GetSingleWordInOperand(kSpvAccessChainIndex0IdInIdx);
       break;
