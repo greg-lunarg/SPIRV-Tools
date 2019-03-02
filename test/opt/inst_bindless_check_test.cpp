@@ -3569,7 +3569,7 @@ OpFunctionEnd
       true);
 }
 
-TEST_F(InstBindlessTest, InstBoundsInitStoreUBOArray) {
+TEST_F(InstBindlessTest, InstBoundsInitStoreUnsizedSSBOArray) {
   // #version 450
   // #extension GL_EXT_nonuniform_qualifier : enable
   // 
@@ -3834,6 +3834,275 @@ OpFunctionEnd
 %117 = OpAccessChain %_ptr_StorageBuffer_uint %33 %uint_0 %116
 %118 = OpLoad %uint %117
 OpReturnValue %118
+OpFunctionEnd
+)";
+
+  // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndCheck<InstBindlessCheckPass>(
+      defs_before + func_before, defs_after + func_after + new_funcs, true,
+      true);
+}
+
+TEST_F(InstBindlessTest, InstBoundsInitLoadSizedUBOArray) {
+  // #version 450
+  // #extension GL_EXT_nonuniform_qualifier : enable
+  // 
+  // layout(location=0) in nonuniformEXT flat int nu_ii;
+  // layout(location=0) out float b;
+  // 
+  // layout(binding=3)  uniform uname { float a; }  uniformBuffer[128];
+  // 
+  // void main()
+  // {
+  //     b = uniformBuffer[nu_ii].a;
+  // }
+
+  const std::string defs_before =
+      R"(OpCapability Shader
+OpCapability ShaderNonUniformEXT
+OpCapability UniformBufferArrayNonUniformIndexingEXT
+OpExtension "SPV_EXT_descriptor_indexing"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %b %nu_ii
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 450
+OpSourceExtension "GL_EXT_nonuniform_qualifier"
+OpName %main "main"
+OpName %b "b"
+OpName %uname "uname"
+OpMemberName %uname 0 "a"
+OpName %uniformBuffer "uniformBuffer"
+OpName %nu_ii "nu_ii"
+OpDecorate %b Location 0
+OpMemberDecorate %uname 0 Offset 0
+OpDecorate %uname Block
+OpDecorate %uniformBuffer DescriptorSet 0
+OpDecorate %uniformBuffer Binding 3
+OpDecorate %nu_ii Flat
+OpDecorate %nu_ii Location 0
+OpDecorate %nu_ii NonUniformEXT
+OpDecorate %18 NonUniformEXT
+OpDecorate %22 NonUniformEXT
+%void = OpTypeVoid
+%3 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%_ptr_Output_float = OpTypePointer Output %float
+%b = OpVariable %_ptr_Output_float Output
+%uname = OpTypeStruct %float
+%uint = OpTypeInt 32 0
+%uint_128 = OpConstant %uint 128
+%_arr_uname_uint_128 = OpTypeArray %uname %uint_128
+%_ptr_Uniform__arr_uname_uint_128 = OpTypePointer Uniform %_arr_uname_uint_128
+%uniformBuffer = OpVariable %_ptr_Uniform__arr_uname_uint_128 Uniform
+%int = OpTypeInt 32 1
+%_ptr_Input_int = OpTypePointer Input %int
+%nu_ii = OpVariable %_ptr_Input_int Input
+%int_0 = OpConstant %int 0
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+)";
+
+  const std::string defs_after =
+      R"(OpCapability Shader
+OpCapability ShaderNonUniformEXT
+OpCapability UniformBufferArrayNonUniformIndexingEXT
+OpExtension "SPV_EXT_descriptor_indexing"
+OpExtension "SPV_KHR_storage_buffer_storage_class"
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Fragment %main "main" %b %nu_ii %gl_FragCoord
+OpExecutionMode %main OriginUpperLeft
+OpSource GLSL 450
+OpSourceExtension "GL_EXT_nonuniform_qualifier"
+OpName %main "main"
+OpName %b "b"
+OpName %uname "uname"
+OpMemberName %uname 0 "a"
+OpName %uniformBuffer "uniformBuffer"
+OpName %nu_ii "nu_ii"
+OpDecorate %b Location 0
+OpMemberDecorate %uname 0 Offset 0
+OpDecorate %uname Block
+OpDecorate %uniformBuffer DescriptorSet 0
+OpDecorate %uniformBuffer Binding 3
+OpDecorate %nu_ii Flat
+OpDecorate %nu_ii Location 0
+OpDecorate %nu_ii NonUniformEXT
+OpDecorate %7 NonUniformEXT
+OpDecorate %89 NonUniformEXT
+OpDecorate %120 NonUniformEXT
+OpDecorate %_runtimearr_uint ArrayStride 4
+OpDecorate %_struct_39 Block
+OpMemberDecorate %_struct_39 0 Offset 0
+OpMemberDecorate %_struct_39 1 Offset 4
+OpDecorate %41 DescriptorSet 7
+OpDecorate %41 Binding 0
+OpDecorate %gl_FragCoord BuiltIn FragCoord
+OpDecorate %_struct_98 Block
+OpMemberDecorate %_struct_98 0 Offset 0
+OpDecorate %100 DescriptorSet 7
+OpDecorate %100 Binding 1
+OpDecorate %117 NonUniformEXT
+%void = OpTypeVoid
+%10 = OpTypeFunction %void
+%float = OpTypeFloat 32
+%_ptr_Output_float = OpTypePointer Output %float
+%b = OpVariable %_ptr_Output_float Output
+%uname = OpTypeStruct %float
+%uint = OpTypeInt 32 0
+%uint_128 = OpConstant %uint 128
+%_arr_uname_uint_128 = OpTypeArray %uname %uint_128
+%_ptr_Uniform__arr_uname_uint_128 = OpTypePointer Uniform %_arr_uname_uint_128
+%uniformBuffer = OpVariable %_ptr_Uniform__arr_uname_uint_128 Uniform
+%int = OpTypeInt 32 1
+%_ptr_Input_int = OpTypePointer Input %int
+%nu_ii = OpVariable %_ptr_Input_int Input
+%int_0 = OpConstant %int 0
+%_ptr_Uniform_float = OpTypePointer Uniform %float
+%uint_0 = OpConstant %uint 0
+%bool = OpTypeBool
+%32 = OpTypeFunction %void %uint %uint %uint %uint
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+%_struct_39 = OpTypeStruct %uint %_runtimearr_uint
+%_ptr_StorageBuffer__struct_39 = OpTypePointer StorageBuffer %_struct_39
+%41 = OpVariable %_ptr_StorageBuffer__struct_39 StorageBuffer
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+%uint_9 = OpConstant %uint 9
+%uint_4 = OpConstant %uint 4
+%uint_1 = OpConstant %uint 1
+%uint_23 = OpConstant %uint 23
+%uint_2 = OpConstant %uint 2
+%uint_3 = OpConstant %uint 3
+%v4float = OpTypeVector %float 4
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%gl_FragCoord = OpVariable %_ptr_Input_v4float Input
+%v4uint = OpTypeVector %uint 4
+%uint_5 = OpConstant %uint 5
+%uint_6 = OpConstant %uint 6
+%uint_7 = OpConstant %uint 7
+%uint_8 = OpConstant %uint 8
+%uint_46 = OpConstant %uint 46
+%88 = OpConstantNull %float
+%92 = OpTypeFunction %uint %uint %uint %uint %uint
+%_struct_98 = OpTypeStruct %_runtimearr_uint
+%_ptr_StorageBuffer__struct_98 = OpTypePointer StorageBuffer %_struct_98
+%100 = OpVariable %_ptr_StorageBuffer__struct_98 StorageBuffer
+)";
+
+  const std::string func_before =
+      R"(%main = OpFunction %void None %3
+%5 = OpLabel
+%18 = OpLoad %int %nu_ii
+%21 = OpAccessChain %_ptr_Uniform_float %uniformBuffer %18 %int_0
+%22 = OpLoad %float %21
+OpStore %b %22
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string func_after =
+      R"(%main = OpFunction %void None %10
+%21 = OpLabel
+%7 = OpLoad %int %nu_ii
+%22 = OpAccessChain %_ptr_Uniform_float %uniformBuffer %7 %int_0
+%25 = OpULessThan %bool %7 %uint_128
+OpSelectionMerge %26 None
+OpBranchConditional %25 %27 %28
+%27 = OpLabel
+%90 = OpBitcast %uint %7
+%112 = OpFunctionCall %uint %91 %uint_0 %uint_0 %uint_3 %90
+%113 = OpINotEqual %bool %112 %uint_0
+OpSelectionMerge %114 None
+OpBranchConditional %113 %115 %116
+%115 = OpLabel
+%117 = OpLoad %float %22
+OpBranch %114
+%116 = OpLabel
+%118 = OpBitcast %uint %7
+%119 = OpFunctionCall %void %31 %uint_46 %uint_1 %118 %uint_0
+OpBranch %114
+%114 = OpLabel
+%120 = OpPhi %float %117 %115 %88 %116
+OpBranch %26
+%28 = OpLabel
+%30 = OpBitcast %uint %7
+%87 = OpFunctionCall %void %31 %uint_46 %uint_0 %30 %uint_128
+OpBranch %26
+%26 = OpLabel
+%89 = OpPhi %float %120 %114 %88 %28
+OpStore %b %89
+OpReturn
+OpFunctionEnd
+)";
+
+  const std::string new_funcs =
+      R"(%31 = OpFunction %void None %32
+%33 = OpFunctionParameter %uint
+%34 = OpFunctionParameter %uint
+%35 = OpFunctionParameter %uint
+%36 = OpFunctionParameter %uint
+%37 = OpLabel
+%43 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_0
+%46 = OpAtomicIAdd %uint %43 %uint_4 %uint_0 %uint_9
+%47 = OpIAdd %uint %46 %uint_9
+%48 = OpArrayLength %uint %41 1
+%49 = OpULessThanEqual %bool %47 %48
+OpSelectionMerge %50 None
+OpBranchConditional %49 %51 %50
+%51 = OpLabel
+%52 = OpIAdd %uint %46 %uint_0
+%54 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %52
+OpStore %54 %uint_9
+%56 = OpIAdd %uint %46 %uint_1
+%57 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %56
+OpStore %57 %uint_23
+%59 = OpIAdd %uint %46 %uint_2
+%60 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %59
+OpStore %60 %33
+%62 = OpIAdd %uint %46 %uint_3
+%63 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %62
+OpStore %63 %uint_4
+%67 = OpLoad %v4float %gl_FragCoord
+%69 = OpBitcast %v4uint %67
+%70 = OpCompositeExtract %uint %69 0
+%71 = OpIAdd %uint %46 %uint_4
+%72 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %71
+OpStore %72 %70
+%73 = OpCompositeExtract %uint %69 1
+%75 = OpIAdd %uint %46 %uint_5
+%76 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %75
+OpStore %76 %73
+%78 = OpIAdd %uint %46 %uint_6
+%79 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %78
+OpStore %79 %34
+%81 = OpIAdd %uint %46 %uint_7
+%82 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %81
+OpStore %82 %35
+%84 = OpIAdd %uint %46 %uint_8
+%85 = OpAccessChain %_ptr_StorageBuffer_uint %41 %uint_1 %84
+OpStore %85 %36
+OpBranch %50
+%50 = OpLabel
+OpReturn
+OpFunctionEnd
+%91 = OpFunction %uint None %92
+%93 = OpFunctionParameter %uint
+%94 = OpFunctionParameter %uint
+%95 = OpFunctionParameter %uint
+%96 = OpFunctionParameter %uint
+%97 = OpLabel
+%101 = OpAccessChain %_ptr_StorageBuffer_uint %100 %uint_0 %93
+%102 = OpLoad %uint %101
+%103 = OpIAdd %uint %102 %94
+%104 = OpAccessChain %_ptr_StorageBuffer_uint %100 %uint_0 %103
+%105 = OpLoad %uint %104
+%106 = OpIAdd %uint %105 %95
+%107 = OpAccessChain %_ptr_StorageBuffer_uint %100 %uint_0 %106
+%108 = OpLoad %uint %107
+%109 = OpIAdd %uint %108 %96
+%110 = OpAccessChain %_ptr_StorageBuffer_uint %100 %uint_0 %109
+%111 = OpLoad %uint %110
+OpReturnValue %111
 OpFunctionEnd
 )";
 
