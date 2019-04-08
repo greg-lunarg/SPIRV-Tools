@@ -552,6 +552,19 @@ Optimizer::PassToken CreatePropagateLineInfoPass();
 // of the last passes to be run.
 Optimizer::PassToken CreateRedundantLineInfoElimPass();
 
+// Convert graphics shader to compute shader.
+// This pass converts a graphics shader to a compute shader suitable for
+// translation to c++ via spirv-cross. Most significantly, it converts
+// input and output variables into buffer variables. Output variables go
+// into descriptor set 4 and input variables go into descriptor set 5.
+// Their bindings are the same as their input/output location. In addition,
+// all entry points are set to GLCompute with no interface and their Execution
+// Mode is set to LocalSize of 1 1 1.
+//
+// The user should run AggressiveDeadCodeElim after this pass in order to
+// completely remove all input and output variables.
+Optimizer::PassToken CreateIoToBufferPass();
+
 // Creates a compact ids pass.
 // The pass remaps result ids to a compact and gapless range starting from %1.
 Optimizer::PassToken CreateCompactIdsPass();

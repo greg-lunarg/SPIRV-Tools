@@ -308,6 +308,8 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateInlineExhaustivePass());
   } else if (pass_name == "inline-entry-points-opaque") {
     RegisterPass(CreateInlineOpaquePass());
+  } else if (pass_name == "io-to-buffer") {
+    RegisterPass(CreateIoToBufferPass());
   } else if (pass_name == "combine-access-chains") {
     RegisterPass(CreateCombineAccessChainsPass());
   } else if (pass_name == "convert-local-access-chains") {
@@ -697,6 +699,11 @@ Optimizer::PassToken CreatePropagateLineInfoPass() {
 Optimizer::PassToken CreateRedundantLineInfoElimPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::ProcessLinesPass>(opt::kLinesEliminateDeadLines));
+}
+
+Optimizer::PassToken CreateIoToBufferPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+    MakeUnique<opt::IoToBufferPass>());
 }
 
 Optimizer::PassToken CreateCommonUniformElimPass() {

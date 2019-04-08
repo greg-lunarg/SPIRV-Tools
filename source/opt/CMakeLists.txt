@@ -56,6 +56,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   instruction.h
   instruction_list.h
   instrument_pass.h
+  io_to_buffer_pass.h
   ir_builder.h
   ir_context.h
   ir_loader.h
@@ -155,6 +156,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   instruction.cpp
   instruction_list.cpp
   instrument_pass.cpp
+  io_to_buffer_pass.cpp
   ir_context.cpp
   ir_loader.cpp
   licm_pass.cpp
