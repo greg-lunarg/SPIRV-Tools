@@ -1,0 +1,65 @@
+// Copyright (c) 2018 Valve Corporation
+// Copyright (c) 2018 LunarG Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#ifndef LIBSPIRV_OPT_CONVERT_TO_HALF_PASS_H_
+#define LIBSPIRV_OPT_CONVERT_TO_HALF_PASS_H_
+
+#include "source/opt/pass.h"
+
+namespace spvtools {
+namespace opt {
+
+class ConvertToHalfPass : public Pass {
+ public:
+  ConvertToHalfPass() : Pass() {}
+
+  ~ConvertToHalfPass() override = default;
+
+  // See optimizer.hpp for pass user documentation.
+  Status Process() override;
+
+  const char* name() const override { return "convert-to-half-pass"; }
+
+ private:
+   // If |inst| is a gpu instruction of float type, append to |new_insts|
+   // the result of relaxing its precision to half. Specifically, generate code
+   // to convert any operands to half, execute the instruction with type half,
+   // and convert the result back to float.
+   void GenHalfCode(
+     Instruction* inst,
+     InstructionList* new_insts);
+
+  // Call GenHalfCode on every instruction in |func|.
+  // If code is generated for an instruction, replace the instruction
+  // with the new instructions that are generated.
+  bool ProcessFunction(Function* func);
+
+  // Process all functions in the call tree of the function ids in |roots|.
+  bool ProcessCallTreeFromRoots(
+    std::queue<uint32_t>* roots);
+
+  Pass::Status ProcessImpl();
+
+  // Initialize state for converting to half
+  void Initialize();
+
+  // Map from function id to function pointer.
+  std::unordered_map<uint32_t, Function*> id2function_;
+};
+
+}  // namespace opt
+}  // namespace spvtools
+
+#endif  // LIBSPIRV_OPT_CONVERT_TO_HALF_PASS_H_

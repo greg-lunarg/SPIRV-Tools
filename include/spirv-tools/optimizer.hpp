@@ -668,6 +668,15 @@ Optimizer::PassToken CreateLoopUnrollPass(bool fully_unroll, int factor = 0);
 // processed (see IsSSATargetVar for details).
 Optimizer::PassToken CreateSSARewritePass();
 
+// Create convert to half pass.
+// This pass converts as many full precision float operations to half as
+// possible. Converts operands to half precision (as necessary) and converts
+// result back to full. Best if run late since some optimizations may not
+// handle half precision. Best if followed by instruction simplification,
+// redundancy elimination and DCE to eliminate excess conversions created by
+// this pass.
+Optimizer::PassToken CreateConvertToHalfPass();
+
 // Create copy propagate arrays pass.
 // This pass looks to copy propagate memory references for arrays.  It looks
 // for specific code patterns to recognize array copies.
