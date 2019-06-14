@@ -136,6 +136,16 @@ Options (in lexicographical order):)",
                and constant index access chains in entry point call tree
                functions.)");
   printf(R"(
+  --convert-relaxed-to-half
+               Convert all RelaxedPrecision operations to half precision,
+               inserting conversion operations where needed.
+               Best to run near end since some optimizations may not handle
+               half. Also should run simplify-instructions, redundancy-
+               elimination and DCE to eliminate excess conversions. This
+               conversion is useful when the target platform does not support
+               RelaxedPrecision or ignores it. This pass also removes all
+               RelaxedPrecision decorations.)");
+  printf(R"(
   --copy-propagate-arrays
                Does propagation of memory references when an array is a copy of
                another.  It will only propagate an array if the source is never
@@ -387,6 +397,10 @@ Options (in lexicographical order):)",
   --redundancy-elimination
                Looks for instructions in the same function that compute the
                same value, and deletes the redundant ones.)");
+  printf(R"(
+  --relax-float-ops
+               Decorate all float operations with RelaxedPrecision if not already
+               so decorated. This does not decorate types or variables.)");
   printf(R"(
   --relax-struct-store
                Allow store from one struct type to a different type with
