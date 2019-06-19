@@ -33,13 +33,27 @@ class ConvertToHalfPass : public Pass {
   const char* name() const override { return "convert-to-half-pass"; }
 
  private:
+   // Return true if |inst| is an arithmetic op that can be of type float16
+   bool is_arithmetic(Instruction* inst);
+
+   // Return base type of |inst| type
+   Instruction* get_base_type(Instruction* inst);
+
+   // Return true if |inst| returns scalar, vector or matrix type with base
+   // float and |width|
+   bool is_float(Instruction* inst, uint32_t width);
+
+   // Return true if |inst| is decorated with RelaxedPrecision
+   bool is_relaxed(Instruction* inst);
+
+   // Return equivalent to float type |ty_id| with |width|
+   uint32_t get_equiv_float_ty_id(uint32_t ty_id, uint32_t width);
+
    // If |inst| is a gpu instruction of float type, append to |new_insts|
    // the result of relaxing its precision to half. Specifically, generate code
    // to convert any operands to half, execute the instruction with type half,
    // and convert the result back to float.
-   void GenHalfCode(
-     Instruction* inst,
-     InstructionList* new_insts);
+   bool GenHalfCode(Instruction* inst);
 
   // Call GenHalfCode on every instruction in |func|.
   // If code is generated for an instruction, replace the instruction
@@ -57,6 +71,18 @@ class ConvertToHalfPass : public Pass {
 
   // Map from function id to function pointer.
   std::unordered_map<uint32_t, Function*> id2function_;
+
+  // Set of core operations to be processed
+  std::unordered_set<uint32_t> target_ops_core_;
+
+  // Set of 450 extension operations to be processed
+  std::unordered_set<uint32_t> target_ops_450_;
+
+  // Set of typed operations
+  std::unordered_set<uint32_t> typed_ops_;
+
+  // GLSL 540 extension id
+  uint32_t glsl450_ext_id_;
 };
 
 }  // namespace opt
