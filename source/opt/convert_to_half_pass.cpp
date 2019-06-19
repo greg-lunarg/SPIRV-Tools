@@ -35,22 +35,23 @@ namespace opt {
          target_ops_450_.count(inst->GetSingleWordInOperand(1)) != 0);
   }
 
-  Instruction* ConvertToHalfPass::get_base_type(Instruction* inst) {
-    uint32_t ty_id = inst->type_id();
+  Instruction* ConvertToHalfPass::get_base_type(uint32_t ty_id) {
     Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
     if (ty_inst->opcode() == SpvOpTypeMatrix) {
-      ty_id = ty_inst->GetSingleWordInOperand(0);
-      ty_inst = get_def_use_mgr()->GetDef(ty_id);
+      uint32_t vty_id = ty_inst->GetSingleWordInOperand(0);
+      ty_inst = get_def_use_mgr()->GetDef(vty_id);
     }
     if (ty_inst->opcode() == SpvOpTypeVector) {
-      ty_id = ty_inst->GetSingleWordInOperand(0);
-      ty_inst = get_def_use_mgr()->GetDef(ty_id);
+      uint32_t cty_id = ty_inst->GetSingleWordInOperand(0);
+      ty_inst = get_def_use_mgr()->GetDef(cty_id);
     }
     return ty_inst;
   }
 
   bool ConvertToHalfPass::is_float(Instruction* inst, uint32_t width) {
-    Instruction* ty_inst = get_base_type(inst);
+    uint32_t ty_id = inst->type_id();
+    if (ty_id == 0) return false;
+    Instruction* ty_inst = get_base_type(ty_id);
     if (ty_inst->opcode() != SpvOpTypeFloat)
       return false;
     return ty_inst->GetSingleWordInOperand(0) == width;
@@ -111,25 +112,27 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
       modified = true;
     }
-  } else if (inst->opcode() == SpvOpPhi && is_float(inst, 32) && is_relaxed(inst)) {
+  }
+  else if (inst->opcode() == SpvOpPhi && is_float(inst, 32) && is_relaxed(inst)) {
     // Add converts of operands and change type to half. Converts need to
     // be added to preceeding blocks
     uint32_t ocnt = 0;
-    uint32_t oid;
-    inst->ForEachInId([&modified,&ocnt,&oid,this](uint32_t* idp) {
+    uint32_t* prev_idp;
+    inst->ForEachInId([&modified, &ocnt, &prev_idp, this](uint32_t* idp) {
       if (ocnt % 2 == 0) {
-        oid = *idp;
-      } else {
-        Instruction* op_inst = get_def_use_mgr()->GetDef(*idp);
-        if (!is_float(op_inst, 32)) return;
+        prev_idp = idp;
+      }
+      else {
+        Instruction* val_inst = get_def_use_mgr()->GetDef(*prev_idp);
+        if (!is_float(val_inst, 32)) return;
         BasicBlock* bp = context()->get_instr_block(*idp);
         Instruction* insert_before = bp->terminator();
         InstructionBuilder builder(
-            context(), insert_before,
-            IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-        uint32_t ty16_id = get_equiv_float_ty_id(op_inst->type_id(), 16);
-        Instruction* cvt_inst = builder.AddUnaryOp(ty16_id, SpvOpFConvert, *idp);
-        *idp = cvt_inst->result_id();
+          context(), insert_before,
+          IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+        uint32_t ty16_id = get_equiv_float_ty_id(val_inst->type_id(), 16);
+        Instruction* cvt_inst = builder.AddUnaryOp(ty16_id, SpvOpFConvert, *prev_idp);
+        *prev_idp = cvt_inst->result_id();
         modified = true;
       }
       ++ocnt;
@@ -138,6 +141,15 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       get_def_use_mgr()->AnalyzeInstUse(inst);
     inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
     modified = true;
+  } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && is_relaxed(inst)) {
+    // If the composite is a relaxed half type, change the type of the instruction
+    // to half
+    uint32_t comp_id = inst->GetSingleWordInOperand(0);
+    Instruction* comp_inst = get_def_use_mgr()->GetDef(comp_id);
+    if (is_float(comp_inst, 16) && is_relaxed(comp_inst)) {
+      inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
+      modified = true;
+    }
   } else {
     // If non-relaxed instruction has float16 relaxed operands, need to convert
     // them back to float32
@@ -227,7 +239,7 @@ void ConvertToHalfPass::Initialize() {
     SpvOpVectorInsertDynamic,
     SpvOpVectorShuffle,
     SpvOpCompositeConstruct,
-    SpvOpCompositeExtract,
+    // SpvOpCompositeExtract,
     SpvOpCompositeInsert,
     SpvOpCopyObject,
     SpvOpTranspose,

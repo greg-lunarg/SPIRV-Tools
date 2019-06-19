@@ -36,8 +36,8 @@ class ConvertToHalfPass : public Pass {
    // Return true if |inst| is an arithmetic op that can be of type float16
    bool is_arithmetic(Instruction* inst);
 
-   // Return base type of |inst| type
-   Instruction* get_base_type(Instruction* inst);
+   // Return base type of |ty_id| type
+   Instruction* get_base_type(uint32_t ty_id);
 
    // Return true if |inst| returns scalar, vector or matrix type with base
    // float and |width|
