@@ -16,6 +16,7 @@
 #ifndef LIBSPIRV_OPT_CONVERT_TO_HALF_PASS_H_
 #define LIBSPIRV_OPT_CONVERT_TO_HALF_PASS_H_
 
+#include "source/opt/ir_builder.h"
 #include "source/opt/pass.h"
 
 namespace spvtools {
@@ -48,6 +49,8 @@ class ConvertToHalfPass : public Pass {
 
    // Return equivalent to float type |ty_id| with |width|
    uint32_t get_equiv_float_ty_id(uint32_t ty_id, uint32_t width);
+
+   void GenConvert(uint32_t ty_id, uint32_t width, uint32_t* val_idp, InstructionBuilder* builder);
 
    // If |inst| is a gpu instruction of float type, append to |new_insts|
    // the result of relaxing its precision to half. Specifically, generate code

@@ -28,68 +28,79 @@ namespace {
 namespace spvtools {
 namespace opt {
 
-  bool ConvertToHalfPass::is_arithmetic(Instruction* inst) {
-    return target_ops_core_.count(inst->opcode()) != 0 ||
-        (inst->opcode() == SpvOpExtInst &&
-         inst->GetSingleWordInOperand(0) == glsl450_ext_id_ &&
-         target_ops_450_.count(inst->GetSingleWordInOperand(1)) != 0);
-  }
+bool ConvertToHalfPass::is_arithmetic(Instruction* inst) {
+  return target_ops_core_.count(inst->opcode()) != 0 ||
+      (inst->opcode() == SpvOpExtInst &&
+        inst->GetSingleWordInOperand(0) == glsl450_ext_id_ &&
+        target_ops_450_.count(inst->GetSingleWordInOperand(1)) != 0);
+}
 
-  Instruction* ConvertToHalfPass::get_base_type(uint32_t ty_id) {
-    Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
-    if (ty_inst->opcode() == SpvOpTypeMatrix) {
-      uint32_t vty_id = ty_inst->GetSingleWordInOperand(0);
-      ty_inst = get_def_use_mgr()->GetDef(vty_id);
-    }
-    if (ty_inst->opcode() == SpvOpTypeVector) {
-      uint32_t cty_id = ty_inst->GetSingleWordInOperand(0);
-      ty_inst = get_def_use_mgr()->GetDef(cty_id);
-    }
-    return ty_inst;
+Instruction* ConvertToHalfPass::get_base_type(uint32_t ty_id) {
+  Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
+  if (ty_inst->opcode() == SpvOpTypeMatrix) {
+    uint32_t vty_id = ty_inst->GetSingleWordInOperand(0);
+    ty_inst = get_def_use_mgr()->GetDef(vty_id);
   }
+  if (ty_inst->opcode() == SpvOpTypeVector) {
+    uint32_t cty_id = ty_inst->GetSingleWordInOperand(0);
+    ty_inst = get_def_use_mgr()->GetDef(cty_id);
+  }
+  return ty_inst;
+}
 
-  bool ConvertToHalfPass::is_float(Instruction* inst, uint32_t width) {
-    uint32_t ty_id = inst->type_id();
-    if (ty_id == 0) return false;
-    Instruction* ty_inst = get_base_type(ty_id);
-    if (ty_inst->opcode() != SpvOpTypeFloat)
-      return false;
-    return ty_inst->GetSingleWordInOperand(0) == width;
-  }
+bool ConvertToHalfPass::is_float(Instruction* inst, uint32_t width) {
+  uint32_t ty_id = inst->type_id();
+  if (ty_id == 0) return false;
+  Instruction* ty_inst = get_base_type(ty_id);
+  if (ty_inst->opcode() != SpvOpTypeFloat)
+    return false;
+  return ty_inst->GetSingleWordInOperand(0) == width;
+}
 
-  bool ConvertToHalfPass::is_relaxed(Instruction* inst) {
-    // TODO(greg-lunarg): Currently assumes all float variables
-    // and instructions are relaxed. Add mode to only return true if
-    // instruction is truly decorated relaxed.
-    (void)inst;
-    return true;
-  }
+bool ConvertToHalfPass::is_relaxed(Instruction* inst) {
+  // TODO(greg-lunarg): Currently assumes all float variables
+  // and instructions are relaxed. Add mode to only return true if
+  // instruction is truly decorated relaxed.
+  (void)inst;
+  return true;
+}
 
-  uint32_t ConvertToHalfPass::get_equiv_float_ty_id(
-      uint32_t ty_id, uint32_t width) {
-    Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
-    // Discover vector count and length
-    uint32_t v_cnt = 0;
-    uint32_t v_len = 0;
-    if (ty_inst->opcode() == SpvOpTypeMatrix) {
-      uint32_t vty_id = ty_inst->GetSingleWordInOperand(0);
-      v_cnt = ty_inst->GetSingleWordInOperand(1);
-      ty_inst = get_def_use_mgr()->GetDef(vty_id);
-    }
-    if (ty_inst->opcode() == SpvOpTypeVector)
-      v_len = ty_inst->GetSingleWordInOperand(1);
-    // Build type
-    analysis::TypeManager* type_mgr = context()->get_type_mgr();
-    analysis::Float float_ty(width);
-    analysis::Type* reg_float_ty = type_mgr->GetRegisteredType(&float_ty);
-    if (v_len == 0) return type_mgr->GetTypeInstruction(reg_float_ty);
-    analysis::Vector vec_ty(reg_float_ty, v_len);
-    analysis::Type* reg_vec_ty = type_mgr->GetRegisteredType(&vec_ty);
-    if (v_cnt == 0) return type_mgr->GetTypeInstruction(reg_vec_ty);
-    analysis::Matrix mat_ty(reg_vec_ty, v_cnt);
-    analysis::Type* reg_mat_ty = type_mgr->GetRegisteredType(&mat_ty);
-    return type_mgr->GetTypeInstruction(reg_mat_ty);
+uint32_t ConvertToHalfPass::get_equiv_float_ty_id(
+    uint32_t ty_id, uint32_t width) {
+  Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
+  // Discover vector count and length
+  uint32_t v_cnt = 0;
+  uint32_t v_len = 0;
+  if (ty_inst->opcode() == SpvOpTypeMatrix) {
+    uint32_t vty_id = ty_inst->GetSingleWordInOperand(0);
+    v_cnt = ty_inst->GetSingleWordInOperand(1);
+    ty_inst = get_def_use_mgr()->GetDef(vty_id);
   }
+  if (ty_inst->opcode() == SpvOpTypeVector)
+    v_len = ty_inst->GetSingleWordInOperand(1);
+  // Build type
+  analysis::TypeManager* type_mgr = context()->get_type_mgr();
+  analysis::Float float_ty(width);
+  analysis::Type* reg_float_ty = type_mgr->GetRegisteredType(&float_ty);
+  if (v_len == 0) return type_mgr->GetTypeInstruction(reg_float_ty);
+  analysis::Vector vec_ty(reg_float_ty, v_len);
+  analysis::Type* reg_vec_ty = type_mgr->GetRegisteredType(&vec_ty);
+  if (v_cnt == 0) return type_mgr->GetTypeInstruction(reg_vec_ty);
+  analysis::Matrix mat_ty(reg_vec_ty, v_cnt);
+  analysis::Type* reg_mat_ty = type_mgr->GetRegisteredType(&mat_ty);
+  return type_mgr->GetTypeInstruction(reg_mat_ty);
+}
+
+void ConvertToHalfPass::GenConvert(uint32_t ty_id, uint32_t width, uint32_t* val_idp, InstructionBuilder* builder) {
+  uint32_t nty_id = get_equiv_float_ty_id(ty_id, width);
+  Instruction* val_inst = get_def_use_mgr()->GetDef(*val_idp);
+  Instruction* cvt_inst;
+  if (val_inst->opcode() == SpvOpUndef)
+    cvt_inst = builder->AddNullaryOp(nty_id, SpvOpUndef);
+  else
+    cvt_inst = builder->AddUnaryOp(nty_id, SpvOpFConvert, *val_idp);
+  *val_idp = cvt_inst->result_id();
+}
 
 bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
   bool modified = false;
@@ -101,9 +112,7 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
     inst->ForEachInId([&builder,&modified,this](uint32_t* idp) {
       Instruction* op_inst = get_def_use_mgr()->GetDef(*idp);
       if (!is_float(op_inst, 32)) return;
-      uint32_t ty16_id = get_equiv_float_ty_id(op_inst->type_id(), 16);
-      Instruction* cvt_inst = builder.AddUnaryOp(ty16_id, SpvOpFConvert, *idp);
-      *idp = cvt_inst->result_id();
+      GenConvert(op_inst->type_id(), 16, idp, &builder);
       modified = true;
     });
     if (modified)
@@ -126,13 +135,15 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
         Instruction* val_inst = get_def_use_mgr()->GetDef(*prev_idp);
         if (!is_float(val_inst, 32)) return;
         BasicBlock* bp = context()->get_instr_block(*idp);
-        Instruction* insert_before = bp->terminator();
+        auto insert_before = bp->tail();
+        --insert_before;
+        if (insert_before->opcode() != SpvOpSelectionMerge &&
+            insert_before->opcode() != SpvOpLoopMerge)
+          ++insert_before;
         InstructionBuilder builder(
-          context(), insert_before,
+          context(), &*insert_before,
           IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-        uint32_t ty16_id = get_equiv_float_ty_id(val_inst->type_id(), 16);
-        Instruction* cvt_inst = builder.AddUnaryOp(ty16_id, SpvOpFConvert, *prev_idp);
-        *prev_idp = cvt_inst->result_id();
+        GenConvert(val_inst->type_id(), 16, prev_idp, &builder);
         modified = true;
       }
       ++ocnt;
@@ -150,6 +161,14 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
       modified = true;
     }
+  } else if (inst->opcode() == SpvOpFConvert) {
+    uint32_t val_id = inst->GetSingleWordInOperand(0);
+    Instruction* val_inst = get_def_use_mgr()->GetDef(val_id);
+    if (inst->type_id() == val_inst->type_id()) {
+      context()->ReplaceAllUsesWith(inst->result_id(), val_id);
+      inst->SetOpcode(SpvOpCopyObject);
+      modified = true;
+    }
   } else {
     // If non-relaxed instruction has float16 relaxed operands, need to convert
     // them back to float32
@@ -160,9 +179,7 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       Instruction* op_inst = get_def_use_mgr()->GetDef(*idp);
       if (!is_float(op_inst, 16)) return;
       if (!is_relaxed(op_inst)) return;
-      uint32_t ty32_id = get_equiv_float_ty_id(op_inst->type_id(), 32);
-      Instruction* cvt_inst = builder.AddUnaryOp(ty32_id, SpvOpFConvert, *idp);
-      *idp = cvt_inst->result_id();
+      GenConvert(op_inst->type_id(), 32, idp, &builder);
       modified = true;
     });
     if (modified)
