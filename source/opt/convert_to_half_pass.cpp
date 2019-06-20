@@ -153,10 +153,20 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
     inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
     modified = true;
   } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && is_relaxed(inst)) {
-    // If the composite is a relaxed half type, change the type of the instruction
-    // to half
     uint32_t comp_id = inst->GetSingleWordInOperand(0);
     Instruction* comp_inst = get_def_use_mgr()->GetDef(comp_id);
+    // If the composite is a relaxed float type, convert it to half
+    if (is_float(comp_inst, 32) && is_relaxed(comp_inst)) {
+      InstructionBuilder builder(
+          context(), inst,
+          IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+      GenConvert(comp_inst->type_id(), 16, &comp_id, &builder);
+      inst->SetInOperand(0, {comp_id});
+      get_def_use_mgr()->AnalyzeInstUse(inst);
+      comp_inst = get_def_use_mgr()->GetDef(comp_id);
+    }
+    // If the composite is a relaxed half type, change the type of the instruction
+    // to half
     if (is_float(comp_inst, 16) && is_relaxed(comp_inst)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
       modified = true;
