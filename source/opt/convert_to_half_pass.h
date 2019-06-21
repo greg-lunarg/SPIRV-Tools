@@ -58,6 +58,12 @@ class ConvertToHalfPass : public Pass {
    // and convert the result back to float.
    bool GenHalfCode(Instruction* inst);
 
+   // If |inst| is an FConvert of a matrix type, decompose it to a series
+   // of vector extracts, converts and inserts into an Undef. These are generated
+   // by GenHalfCode because they are easier to optimize, but we need to clean
+   // them up before leaving.
+   bool MatConvertCleanup(Instruction* inst);
+
   // Call GenHalfCode on every instruction in |func|.
   // If code is generated for an instruction, replace the instruction
   // with the new instructions that are generated.

@@ -91,7 +91,8 @@ uint32_t ConvertToHalfPass::get_equiv_float_ty_id(
   return type_mgr->GetTypeInstruction(reg_mat_ty);
 }
 
-void ConvertToHalfPass::GenConvert(uint32_t ty_id, uint32_t width, uint32_t* val_idp, InstructionBuilder* builder) {
+void ConvertToHalfPass::GenConvert(uint32_t ty_id, uint32_t width,
+    uint32_t* val_idp, InstructionBuilder* builder) {
   uint32_t nty_id = get_equiv_float_ty_id(ty_id, width);
   Instruction* val_inst = get_def_use_mgr()->GetDef(*val_idp);
   Instruction* cvt_inst;
@@ -100,6 +101,42 @@ void ConvertToHalfPass::GenConvert(uint32_t ty_id, uint32_t width, uint32_t* val
   else
     cvt_inst = builder->AddUnaryOp(nty_id, SpvOpFConvert, *val_idp);
   *val_idp = cvt_inst->result_id();
+}
+
+bool ConvertToHalfPass::MatConvertCleanup(Instruction* inst) {
+  if (inst->opcode() != SpvOpFConvert)
+    return false;
+  uint32_t mty_id = inst->type_id();
+  Instruction* mty_inst = get_def_use_mgr()->GetDef(mty_id);
+  if (mty_inst->opcode() != SpvOpTypeMatrix)
+    return false;
+  uint32_t vty_id = mty_inst->GetSingleWordInOperand(0);
+  uint32_t v_cnt = mty_inst->GetSingleWordInOperand(1);
+  Instruction* vty_inst = get_def_use_mgr()->GetDef(vty_id);
+  uint32_t cty_id = vty_inst->GetSingleWordInOperand(0);
+  Instruction* cty_inst = get_def_use_mgr()->GetDef(cty_id);
+  InstructionBuilder builder(
+      context(), inst,
+      IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+  // Create Undef and for each vector in matrix, extract it,
+  // convert it and insert it into Undef.
+  uint32_t orig_width = (cty_inst->GetSingleWordInOperand(0) == 16) ? 32 : 16;
+  uint32_t orig_mat_id = inst->GetSingleWordInOperand(0);
+  uint32_t orig_vty_id = get_equiv_float_ty_id(vty_id, orig_width);
+  Instruction* mat_inst = builder.AddNullaryOp(mty_id, SpvOpUndef);
+  uint32_t mat_id = mat_inst->result_id();
+  for (uint32_t vidx = 0; vidx < v_cnt; ++vidx) {
+    Instruction* ext_inst = builder.AddIdLiteralOp(orig_vty_id, SpvOpCompositeExtract, orig_mat_id, vidx);
+    Instruction* cvt_inst = builder.AddUnaryOp(vty_id, SpvOpFConvert, ext_inst->result_id());
+    mat_inst = builder.AddIdIdLiteralOp(mty_id, SpvOpCompositeInsert, cvt_inst->result_id(), mat_id, vidx);
+    mat_id = mat_inst->result_id();
+  }
+  context()->ReplaceAllUsesWith(inst->result_id(), mat_id);
+  // Turn original instruction into copy so it is valid.
+  inst->SetOpcode(SpvOpCopyObject);
+  inst->SetResultType(get_equiv_float_ty_id(mty_id, orig_width));
+  get_def_use_mgr()->AnalyzeInstUse(inst);
+  return true;
 }
 
 bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
@@ -205,6 +242,12 @@ bool ConvertToHalfPass::ProcessFunction(Function* func) {
       [&modified, this](BasicBlock* bb) {
     for (auto ii = bb->begin(); ii != bb->end(); ++ii)
       modified |= GenHalfCode(&*ii);
+  });
+  cfg()->ForEachBlockInReversePostOrder(
+    func->entry().get(),
+    [&modified, this](BasicBlock* bb) {
+    for (auto ii = bb->begin(); ii != bb->end(); ++ii)
+      modified |= MatConvertCleanup(&*ii);
   });
   return modified;
 }
