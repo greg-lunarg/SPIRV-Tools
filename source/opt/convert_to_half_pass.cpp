@@ -22,6 +22,7 @@ namespace {
 
 // Indices of operands in SPIR-V instructions
   static const int kEntryPointFunctionIdInIdx = 1;
+  static const int kImageSampleDrefIdInIdx = 2;
 
 }  // anonymous namespace
 
@@ -219,6 +220,21 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       inst->SetOpcode(SpvOpCopyObject);
       modified = true;
     }
+  } else if (sample_ops_.count(inst->opcode()) != 0) {
+    // Only need to convert dref args to float32
+    if (dref_sample_ops_.count(inst->opcode()) != 0) {
+      uint32_t dref_id = inst->GetSingleWordInOperand(kImageSampleDrefIdInIdx);
+      Instruction* dref_inst = get_def_use_mgr()->GetDef(dref_id);
+      if (is_float(dref_inst, 16) && is_relaxed(dref_inst)) {
+        InstructionBuilder builder(
+            context(), inst,
+            IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+        GenConvert(dref_inst->type_id(), 32, &dref_id, &builder);
+        inst->SetInOperand(kImageSampleDrefIdInIdx, { dref_id });
+        get_def_use_mgr()->AnalyzeInstUse(inst);
+        modified = true;
+      }
+    }
   } else {
     // If non-relaxed instruction has float16 relaxed operands, need to convert
     // them back to float32
@@ -300,19 +316,11 @@ void ConvertToHalfPass::Initialize() {
   for (auto& fn : *get_module()) {
     id2function_[fn.result_id()] = &fn;
   }
-  std::set<uint32_t> other_typed_ops = {
-    // SpvOpUndef,
-    // SpvOpConstant,
-    // SpvOpConstantComposite,
-    // SpvOpConstantNull,
-    // SpvOpLoad,
-  };
   target_ops_core_ = {
     SpvOpVectorExtractDynamic,
     SpvOpVectorInsertDynamic,
     SpvOpVectorShuffle,
     SpvOpCompositeConstruct,
-    // SpvOpCompositeExtract,
     SpvOpCompositeInsert,
     SpvOpCopyObject,
     SpvOpTranspose,
@@ -400,6 +408,45 @@ void ConvertToHalfPass::Initialize() {
     GLSLstd450NMin,
     GLSLstd450NMax,
     GLSLstd450NClamp
+  };
+  sample_ops_ = {
+    SpvOpImageSampleImplicitLod,
+    SpvOpImageSampleExplicitLod,
+    SpvOpImageSampleDrefImplicitLod,
+    SpvOpImageSampleDrefExplicitLod,
+    SpvOpImageSampleProjImplicitLod,
+    SpvOpImageSampleProjExplicitLod,
+    SpvOpImageSampleProjDrefImplicitLod,
+    SpvOpImageSampleProjDrefExplicitLod,
+    SpvOpImageFetch,
+    SpvOpImageGather,
+    SpvOpImageDrefGather,
+    SpvOpImageRead,
+    SpvOpImageSparseSampleImplicitLod,
+    SpvOpImageSparseSampleExplicitLod,
+    SpvOpImageSparseSampleDrefImplicitLod,
+    SpvOpImageSparseSampleDrefExplicitLod,
+    SpvOpImageSparseSampleProjImplicitLod,
+    SpvOpImageSparseSampleProjExplicitLod,
+    SpvOpImageSparseSampleProjDrefImplicitLod,
+    SpvOpImageSparseSampleProjDrefExplicitLod,
+    SpvOpImageSparseFetch,
+    SpvOpImageSparseGather,
+    SpvOpImageSparseDrefGather,
+    SpvOpImageSparseTexelsResident,
+    SpvOpImageSparseRead
+  };
+  dref_sample_ops_ = {
+    SpvOpImageSampleDrefImplicitLod,
+    SpvOpImageSampleDrefExplicitLod,
+    SpvOpImageSampleProjDrefImplicitLod,
+    SpvOpImageSampleProjDrefExplicitLod,
+    SpvOpImageDrefGather,
+    SpvOpImageSparseSampleDrefImplicitLod,
+    SpvOpImageSparseSampleDrefExplicitLod,
+    SpvOpImageSparseSampleProjDrefImplicitLod,
+    SpvOpImageSparseSampleProjDrefExplicitLod,
+    SpvOpImageSparseDrefGather,
   };
   // Find GLSL 450 extension id
   glsl450_ext_id_ = 0;

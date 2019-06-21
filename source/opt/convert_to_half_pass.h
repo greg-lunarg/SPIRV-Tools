@@ -87,8 +87,11 @@ class ConvertToHalfPass : public Pass {
   // Set of 450 extension operations to be processed
   std::unordered_set<uint32_t> target_ops_450_;
 
-  // Set of typed operations
-  std::unordered_set<uint32_t> typed_ops_;
+  // Set of sample operations
+  std::unordered_set<uint32_t> sample_ops_;
+
+  // Set of dref sample operations
+  std::unordered_set<uint32_t> dref_sample_ops_;
 
   // GLSL 540 extension id
   uint32_t glsl450_ext_id_;
