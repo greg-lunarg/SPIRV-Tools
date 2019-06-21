@@ -170,18 +170,21 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       }
       else {
         Instruction* val_inst = get_def_use_mgr()->GetDef(*prev_idp);
-        if (!is_float(val_inst, 32)) return;
-        BasicBlock* bp = context()->get_instr_block(*idp);
-        auto insert_before = bp->tail();
-        --insert_before;
-        if (insert_before->opcode() != SpvOpSelectionMerge &&
-            insert_before->opcode() != SpvOpLoopMerge)
-          ++insert_before;
-        InstructionBuilder builder(
-          context(), &*insert_before,
-          IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-        GenConvert(val_inst->type_id(), 16, prev_idp, &builder);
-        modified = true;
+        if (is_float(val_inst, 32)) {
+          BasicBlock* bp = context()->get_instr_block(*idp);
+          auto insert_before = bp->tail();
+          if (insert_before != bp->begin()) {
+            --insert_before;
+            if (insert_before->opcode() != SpvOpSelectionMerge &&
+              insert_before->opcode() != SpvOpLoopMerge)
+              ++insert_before;
+          }
+          InstructionBuilder builder(
+            context(), &*insert_before,
+            IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
+          GenConvert(val_inst->type_id(), 16, prev_idp, &builder);
+          modified = true;
+        }
       }
       ++ocnt;
     });
