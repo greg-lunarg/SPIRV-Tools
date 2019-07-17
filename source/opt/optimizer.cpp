@@ -387,6 +387,8 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateAggressiveDCEPass());
   } else if (pass_name == "convert-to-half") {
     RegisterPass(CreateConvertToHalfPass());
+  } else if (pass_name == "relax-float-ops") {
+    RegisterPass(CreateRelaxFloatOpsPass());
   } else if (pass_name == "simplify-instructions") {
     RegisterPass(CreateSimplificationPass());
   } else if (pass_name == "ssa-rewrite") {
@@ -799,6 +801,11 @@ Optimizer::PassToken CreateInstBindlessCheckPass(uint32_t desc_set,
 Optimizer::PassToken CreateConvertToHalfPass() {
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::ConvertToHalfPass>());
+}
+
+Optimizer::PassToken CreateRelaxFloatOpsPass() {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+    MakeUnique<opt::RelaxFloatOpsPass>());
 }
 
 Optimizer::PassToken CreateCodeSinkingPass() {

@@ -677,6 +677,11 @@ Optimizer::PassToken CreateSSARewritePass();
 // this pass.
 Optimizer::PassToken CreateConvertToHalfPass();
 
+// Create relax float ops pass.
+// This pass decorates all float32 result instructions with RelaxedPrecision
+// if not already so decorated.
+Optimizer::PassToken CreateRelaxFloatOpsPass();
+
 // Create copy propagate arrays pass.
 // This pass looks to copy propagate memory references for arrays.  It looks
 // for specific code patterns to recognize array copies.

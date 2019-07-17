@@ -85,6 +85,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   redundancy_elimination.h
   reflect.h
   register_pressure.h
+  relax_float_ops_pass.h
   remove_duplicates_pass.h
   replace_invalid_opc.h
   scalar_analysis.h
@@ -176,6 +177,7 @@ set(SPIRV_TOOLS_OPT_SOURCES
   reduce_load_size.cpp
   redundancy_elimination.cpp
   register_pressure.cpp
+  relax_float_ops_pass.cpp
   remove_duplicates_pass.cpp
   replace_invalid_opc.cpp
   scalar_analysis.cpp

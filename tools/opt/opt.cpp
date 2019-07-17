@@ -123,8 +123,8 @@ Options (in lexicographical order):
                and constant index access chains in entry point call tree
                functions.
   --convert-to-half
-               Convert all full precision float operations as possible to half
-               precision. Convert all operands to half and result back to full.
+               Convert as many full precision float operations as possible to half
+               precision. Add conversions between float and half as needed.
                Best to run near end since some optimizations may not handle
                half. Also should run simplify-instructions, redundancy-
                elimination and DCE to eliminate excess conversions.
@@ -310,6 +310,9 @@ Options (in lexicographical order):
   --redundancy-elimination
                Looks for instructions in the same function that compute the
                same value, and deletes the redundant ones.
+  --relax-float-ops
+               Decorate all float operations with RelaxedPrecision if not already
+               so decorated.
   --relax-struct-store
                Allow store from one struct type to a different type with
                compatible layout and members. This option is forwarded to the
