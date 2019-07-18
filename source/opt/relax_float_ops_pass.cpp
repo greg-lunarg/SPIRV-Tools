@@ -29,62 +29,13 @@ namespace {
 namespace spvtools {
 namespace opt {
 
-#if 0
-
-bool RelaxFloatOpsPass::is_arithmetic(Instruction* inst) {
+bool RelaxFloatOpsPass::is_relaxable(Instruction* inst) {
   return target_ops_core_.count(inst->opcode()) != 0 ||
+      sample_ops_.count(inst->opcode()) != 0 ||
       (inst->opcode() == SpvOpExtInst &&
-        inst->GetSingleWordInOperand(0) == glsl450_ext_id_ &&
-        target_ops_450_.count(inst->GetSingleWordInOperand(1)) != 0);
+          inst->GetSingleWordInOperand(0) == glsl450_ext_id_ &&
+          target_ops_450_.count(inst->GetSingleWordInOperand(1)) != 0);
 }
-
-bool RelaxFloatOpsPass::is_relaxed(Instruction* inst) {
-  // TODO(greg-lunarg): Currently assumes all float variables
-  // and instructions are relaxed. Add mode to only return true if
-  // instruction is truly decorated relaxed.
-  (void)inst;
-  return true;
-}
-
-uint32_t RelaxFloatOpsPass::get_equiv_float_ty_id(
-    uint32_t ty_id, uint32_t width) {
-  Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
-  // Discover vector count and length
-  uint32_t v_cnt = 0;
-  uint32_t v_len = 0;
-  if (ty_inst->opcode() == SpvOpTypeMatrix) {
-    uint32_t vty_id = ty_inst->GetSingleWordInOperand(0);
-    v_cnt = ty_inst->GetSingleWordInOperand(1);
-    ty_inst = get_def_use_mgr()->GetDef(vty_id);
-  }
-  if (ty_inst->opcode() == SpvOpTypeVector)
-    v_len = ty_inst->GetSingleWordInOperand(1);
-  // Build type
-  analysis::TypeManager* type_mgr = context()->get_type_mgr();
-  analysis::Float float_ty(width);
-  analysis::Type* reg_float_ty = type_mgr->GetRegisteredType(&float_ty);
-  if (v_len == 0) return type_mgr->GetTypeInstruction(reg_float_ty);
-  analysis::Vector vec_ty(reg_float_ty, v_len);
-  analysis::Type* reg_vec_ty = type_mgr->GetRegisteredType(&vec_ty);
-  if (v_cnt == 0) return type_mgr->GetTypeInstruction(reg_vec_ty);
-  analysis::Matrix mat_ty(reg_vec_ty, v_cnt);
-  analysis::Type* reg_mat_ty = type_mgr->GetRegisteredType(&mat_ty);
-  return type_mgr->GetTypeInstruction(reg_mat_ty);
-}
-
-void RelaxFloatOpsPass::GenConvert(uint32_t ty_id, uint32_t width,
-    uint32_t* val_idp, InstructionBuilder* builder) {
-  uint32_t nty_id = get_equiv_float_ty_id(ty_id, width);
-  Instruction* val_inst = get_def_use_mgr()->GetDef(*val_idp);
-  Instruction* cvt_inst;
-  if (val_inst->opcode() == SpvOpUndef)
-    cvt_inst = builder->AddNullaryOp(nty_id, SpvOpUndef);
-  else
-    cvt_inst = builder->AddUnaryOp(nty_id, SpvOpFConvert, *val_idp);
-  *val_idp = cvt_inst->result_id();
-}
-
-#endif
 
 Instruction* RelaxFloatOpsPass::get_base_type(uint32_t ty_id) {
   Instruction* ty_inst = get_def_use_mgr()->GetDef(ty_id);
@@ -108,140 +59,37 @@ bool RelaxFloatOpsPass::is_float(Instruction* inst, uint32_t width) {
   return ty_inst->GetSingleWordInOperand(0) == width;
 }
 
-bool RelaxFloatOpsPass::ProcessInst(Instruction* inst) {
-  if (inst->result_id() == 0)
-    return false;
-  if (!is_float(inst, 32))
-    return false;
-  bool modified = false;
-#if 0
-  if (is_arithmetic(inst) && is_relaxed(inst)) {
-    // Convert all float operands to half and change type to half
-    InstructionBuilder builder(
-        context(), inst,
-        IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-    inst->ForEachInId([&builder,&modified,this](uint32_t* idp) {
-      Instruction* op_inst = get_def_use_mgr()->GetDef(*idp);
-      if (!is_float(op_inst, 32)) return;
-      GenConvert(op_inst->type_id(), 16, idp, &builder);
-      modified = true;
-    });
-    if (modified)
-      get_def_use_mgr()->AnalyzeInstUse(inst);
-    if (is_float(inst, 32)) {
-      inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
-      modified = true;
-    }
-  }
-  else if (inst->opcode() == SpvOpPhi && is_float(inst, 32) && is_relaxed(inst)) {
-    // Add converts of operands and change type to half. Converts need to
-    // be added to preceeding blocks
-    uint32_t ocnt = 0;
-    uint32_t* prev_idp;
-    inst->ForEachInId([&modified, &ocnt, &prev_idp, this](uint32_t* idp) {
-      if (ocnt % 2 == 0) {
-        prev_idp = idp;
-      }
-      else {
-        Instruction* val_inst = get_def_use_mgr()->GetDef(*prev_idp);
-        if (is_float(val_inst, 32)) {
-          BasicBlock* bp = context()->get_instr_block(*idp);
-          auto insert_before = bp->tail();
-          if (insert_before != bp->begin()) {
-            --insert_before;
-            if (insert_before->opcode() != SpvOpSelectionMerge &&
-              insert_before->opcode() != SpvOpLoopMerge)
-              ++insert_before;
-          }
-          InstructionBuilder builder(
-            context(), &*insert_before,
-            IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-          GenConvert(val_inst->type_id(), 16, prev_idp, &builder);
-          modified = true;
-        }
-      }
-      ++ocnt;
-    });
-    if (modified)
-      get_def_use_mgr()->AnalyzeInstUse(inst);
-    inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
-    modified = true;
-  } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && is_relaxed(inst)) {
-    uint32_t comp_id = inst->GetSingleWordInOperand(0);
-    Instruction* comp_inst = get_def_use_mgr()->GetDef(comp_id);
-    // If the composite is a relaxed float type, convert it to half
-    if (is_float(comp_inst, 32) && is_relaxed(comp_inst)) {
-      InstructionBuilder builder(
-          context(), inst,
-          IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-      GenConvert(comp_inst->type_id(), 16, &comp_id, &builder);
-      inst->SetInOperand(0, {comp_id});
-      get_def_use_mgr()->AnalyzeInstUse(inst);
-      comp_inst = get_def_use_mgr()->GetDef(comp_id);
-    }
-    // If the composite is a relaxed half type, change the type of the instruction
-    // to half
-    if (is_float(comp_inst, 16) && is_relaxed(comp_inst)) {
-      inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
-      modified = true;
-    }
-  } else if (inst->opcode() == SpvOpFConvert) {
-    uint32_t val_id = inst->GetSingleWordInOperand(0);
-    Instruction* val_inst = get_def_use_mgr()->GetDef(val_id);
-    if (inst->type_id() == val_inst->type_id()) {
-      context()->ReplaceAllUsesWith(inst->result_id(), val_id);
-      inst->SetOpcode(SpvOpCopyObject);
-      modified = true;
-    }
-  } else if (sample_ops_.count(inst->opcode()) != 0) {
-    // Only need to convert dref args to float32
-    if (dref_sample_ops_.count(inst->opcode()) != 0) {
-      uint32_t dref_id = inst->GetSingleWordInOperand(kImageSampleDrefIdInIdx);
-      Instruction* dref_inst = get_def_use_mgr()->GetDef(dref_id);
-      if (is_float(dref_inst, 16) && is_relaxed(dref_inst)) {
-        InstructionBuilder builder(
-            context(), inst,
-            IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-        GenConvert(dref_inst->type_id(), 32, &dref_id, &builder);
-        inst->SetInOperand(kImageSampleDrefIdInIdx, { dref_id });
-        get_def_use_mgr()->AnalyzeInstUse(inst);
-        modified = true;
-      }
-    }
-  } else {
-    // If non-relaxed instruction has float16 relaxed operands, need to convert
-    // them back to float32
-    InstructionBuilder builder(
-        context(), inst,
-        IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
-    inst->ForEachInId([&builder, &modified, this](uint32_t* idp) {
-      Instruction* op_inst = get_def_use_mgr()->GetDef(*idp);
-      if (!is_float(op_inst, 16)) return;
-      if (!is_relaxed(op_inst)) return;
-      GenConvert(op_inst->type_id(), 32, idp, &builder);
-      modified = true;
-    });
-    if (modified)
-      get_def_use_mgr()->AnalyzeInstUse(inst);
-  }
-#endif
-  return modified;
+bool RelaxFloatOpsPass::is_relaxed(uint32_t r_id) {
+  for (auto r_inst : get_decoration_mgr()->GetDecorationsFor(r_id, false))
+    if (r_inst->GetSingleWordInOperand(0) == SpvOpDecorate)
+      return true;
+  return false;
 }
 
-bool RelaxFloatOpsPass::ProcessFunction(Function* func) {
-  bool modified = false;
+void RelaxFloatOpsPass::ProcessInst(Instruction* r_inst) {
+  uint32_t r_id = r_inst->result_id();
+  if (r_id == 0)
+    return;
+  if (!is_float(r_inst, 32))
+    return;
+  if (is_relaxed(r_id))
+    return;
+  if (!is_relaxable(r_inst))
+    return;
+  ids_to_relax_.insert(r_id);
+}
+
+void RelaxFloatOpsPass::ProcessFunction(Function* func) {
   cfg()->ForEachBlockInReversePostOrder(
       func->entry().get(),
-      [&modified, this](BasicBlock* bb) {
+      [this](BasicBlock* bb) {
     for (auto ii = bb->begin(); ii != bb->end(); ++ii)
-      modified |= ProcessInst(&*ii);
+      ProcessInst(&*ii);
   });
-  return modified;
 }
 
-bool RelaxFloatOpsPass::ProcessCallTreeFromRoots(
+void RelaxFloatOpsPass::ProcessCallTreeFromRoots(
     std::queue<uint32_t>* roots) {
-  bool modified = false;
   std::unordered_set<uint32_t> done;
   // Process all functions from roots
   while (!roots->empty()) {
@@ -251,17 +99,9 @@ bool RelaxFloatOpsPass::ProcessCallTreeFromRoots(
       Function* fn = id2function_.at(fi);
       // Add calls first so we don't add new output function
       context()->AddCalls(fn, roots);
-      modified = ProcessFunction(fn) || modified;
+      ProcessFunction(fn);
     }
   }
-  // If modified, make sure module has Float16 capability
-  if (modified && !context()->get_feature_mgr()->HasCapability(SpvCapabilityFloat16)) {
-    get_module()->AddCapability(MakeUnique<Instruction>(
-        context(), SpvOpCapability, 0, 0,
-        std::initializer_list<Operand>{
-          {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityFloat16 }}}));
-  }
-  return modified;
 }
 
 Pass::Status RelaxFloatOpsPass::ProcessImpl() {
@@ -270,8 +110,13 @@ Pass::Status RelaxFloatOpsPass::ProcessImpl() {
   for (auto& e : get_module()->entry_points()) {
     roots.push(e.GetSingleWordInOperand(kEntryPointFunctionIdInIdx));
   }
-  bool modified = ProcessCallTreeFromRoots(&roots);
-  return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
+  ProcessCallTreeFromRoots(&roots);
+  if (ids_to_relax_.empty())
+    return Status::SuccessWithoutChange;
+  auto deco_mgr = get_decoration_mgr();
+  for (auto r_id : ids_to_relax_)
+    deco_mgr->AddDecoration(r_id, SpvDecorationRelaxedPrecision);
+  return Status::SuccessWithChange;
 }
 
 Pass::Status RelaxFloatOpsPass::Process() {
@@ -285,6 +130,7 @@ void RelaxFloatOpsPass::Initialize() {
     id2function_[fn.result_id()] = &fn;
   }
   target_ops_core_ = {
+    SpvOpLoad,
     SpvOpVectorExtractDynamic,
     SpvOpVectorInsertDynamic,
     SpvOpVectorShuffle,
@@ -294,7 +140,7 @@ void RelaxFloatOpsPass::Initialize() {
     SpvOpTranspose,
     SpvOpConvertSToF,
     SpvOpConvertUToF,
-    // SpvOpFConvert,
+    SpvOpFConvert,
     // SpvOpQuantizeToF16,
     SpvOpFNegate,
     SpvOpFAdd,
@@ -403,18 +249,6 @@ void RelaxFloatOpsPass::Initialize() {
     SpvOpImageSparseDrefGather,
     SpvOpImageSparseTexelsResident,
     SpvOpImageSparseRead
-  };
-  dref_sample_ops_ = {
-    SpvOpImageSampleDrefImplicitLod,
-    SpvOpImageSampleDrefExplicitLod,
-    SpvOpImageSampleProjDrefImplicitLod,
-    SpvOpImageSampleProjDrefExplicitLod,
-    SpvOpImageDrefGather,
-    SpvOpImageSparseSampleDrefImplicitLod,
-    SpvOpImageSparseSampleDrefExplicitLod,
-    SpvOpImageSparseSampleProjDrefImplicitLod,
-    SpvOpImageSparseSampleProjDrefExplicitLod,
-    SpvOpImageSparseDrefGather,
   };
   // Find GLSL 450 extension id
   glsl450_ext_id_ = 0;

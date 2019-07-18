@@ -35,20 +35,9 @@ class RelaxFloatOpsPass : public Pass {
 
  private:
 
-#if 0
-
-   // Return true if |inst| is an arithmetic op that can be of type float16
-   bool is_arithmetic(Instruction* inst);
-
-   // Return true if |inst| is decorated with RelaxedPrecision
-   bool is_relaxed(Instruction* inst);
-
-   // Return equivalent to float type |ty_id| with |width|
-   uint32_t get_equiv_float_ty_id(uint32_t ty_id, uint32_t width);
-
-   void GenConvert(uint32_t ty_id, uint32_t width, uint32_t* val_idp, InstructionBuilder* builder);
-
-#endif
+   // Return true if |inst| can have the RelaxedPrecision decoration applied
+   // to it.
+   bool is_relaxable(Instruction* inst);
 
    // Return base type of |ty_id| type
    Instruction* get_base_type(uint32_t ty_id);
@@ -57,18 +46,18 @@ class RelaxFloatOpsPass : public Pass {
    // float and |width|
    bool is_float(Instruction* inst, uint32_t width);
 
-   // If |inst| is an instruction of float32-based type and is not decorated 
-   // RelaxedPrecision, add it to ops_to_relax_.
-   bool ProcessInst(Instruction* inst);
+   // Return true if |r_id| is decorated with RelaxedPrecision
+   bool is_relaxed(uint32_t r_id);
 
-  // Call GenHalfCode on every instruction in |func|.
-  // If code is generated for an instruction, replace the instruction
-  // with the new instructions that are generated.
-  bool ProcessFunction(Function* func);
+   // If |inst| is an instruction of float32-based type and is not decorated 
+   // RelaxedPrecision, add it's id to ids_to_relax_.
+   void ProcessInst(Instruction* inst);
+
+  // Call ProcessInst on every instruction in |func|.
+  void ProcessFunction(Function* func);
 
   // Process all functions in the call tree of the function ids in |roots|.
-  bool ProcessCallTreeFromRoots(
-    std::queue<uint32_t>* roots);
+  void ProcessCallTreeFromRoots(std::queue<uint32_t>* roots);
 
   Pass::Status ProcessImpl();
 
@@ -87,11 +76,11 @@ class RelaxFloatOpsPass : public Pass {
   // Set of sample operations
   std::unordered_set<uint32_t> sample_ops_;
 
-  // Set of dref sample operations
-  std::unordered_set<uint32_t> dref_sample_ops_;
-
   // GLSL 540 extension id
   uint32_t glsl450_ext_id_;
+
+  // Set of ids to be decorated RelaxedPrecision
+  std::unordered_set<uint32_t> ids_to_relax_;
 };
 
 }  // namespace opt
