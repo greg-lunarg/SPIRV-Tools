@@ -398,6 +398,9 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateDeadBranchElimPass());
     RegisterPass(CreateBlockMergePass());
     RegisterPass(CreateAggressiveDCEPass());
+  } else if (pass_name == "inst-buff-addr-check") {
+    RegisterPass(CreateInstBuffAddrCheckPass(7, 23, 2));
+    RegisterPass(CreateAggressiveDCEPass());
   } else if (pass_name == "simplify-instructions") {
     RegisterPass(CreateSimplificationPass());
   } else if (pass_name == "ssa-rewrite") {
@@ -846,6 +849,13 @@ Optimizer::PassToken CreateInstBindlessCheckPass(uint32_t desc_set,
       MakeUnique<opt::InstBindlessCheckPass>(desc_set, shader_id,
                                              input_length_enable,
                                              input_init_enable, version));
+}
+
+Optimizer::PassToken CreateInstBuffAddrCheckPass(uint32_t desc_set,
+                                                 uint32_t shader_id,
+                                                 uint32_t version) {
+  return MakeUnique<Optimizer::PassToken::Impl>(
+      MakeUnique<opt::InstBuffAddrCheckPass>(desc_set, shader_id, version));
 }
 
 Optimizer::PassToken CreateCodeSinkingPass() {
