@@ -191,9 +191,11 @@ static const int kDebugInputDataOffset = 0;
 // and possibly other future validations.
 static const int kDebugOutputBindingStream = 0;
 
-// The binding for the input buffer read by InstBindlessCheckPass and
-// possibly other future validations.
+// The binding for the input buffer read by InstBindlessCheckPass.
 static const int kDebugInputBindingBindless = 1;
+
+// The binding for the input buffer read by InstBindlessCheckPass.
+static const int kDebugInputBindingBuffAddr = 2;
 
 // Bindless Validation Input Buffer Format
 //

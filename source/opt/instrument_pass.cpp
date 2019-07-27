@@ -383,6 +383,8 @@ uint32_t InstrumentPass::GetOutputBufferBinding() {
   switch (validation_id_) {
     case kInstValidationIdBindless:
       return kDebugOutputBindingStream;
+    case kInstValidationIdBuffAddr:
+      return kDebugOutputBindingStream;
     default:
       assert(false && "unexpected validation id");
   }
@@ -393,6 +395,8 @@ uint32_t InstrumentPass::GetInputBufferBinding() {
   switch (validation_id_) {
     case kInstValidationIdBindless:
       return kDebugInputBindingBindless;
+    case kInstValidationIdBuffAddr:
+      return kDebugInputBindingBuffAddr;
     default:
       assert(false && "unexpected validation id");
   }
@@ -550,6 +554,16 @@ uint32_t InstrumentPass::GetUintId() {
     uint_id_ = type_mgr->GetTypeInstruction(reg_uint_ty);
   }
   return uint_id_;
+}
+
+uint32_t InstrumentPass::GetUint64Id() {
+  if (uint64_id_ == 0) {
+    analysis::TypeManager* type_mgr = context()->get_type_mgr();
+    analysis::Integer uint64_ty(64, false);
+    analysis::Type* reg_uint64_ty = type_mgr->GetRegisteredType(&uint64_ty);
+    uint64_id_ = type_mgr->GetTypeInstruction(reg_uint64_ty);
+  }
+  return uint64_id_;
 }
 
 uint32_t InstrumentPass::GetVec4UintId() {
@@ -889,6 +903,7 @@ void InstrumentPass::InitializeInstrument() {
   input_buffer_id_ = 0;
   v4float_id_ = 0;
   uint_id_ = 0;
+  uint64_id_ = 0;
   v4uint_id_ = 0;
   bool_id_ = 0;
   void_id_ = 0;

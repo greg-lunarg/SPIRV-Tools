@@ -219,6 +219,9 @@ class InstrumentPass : public Pass {
   uint32_t GetUintId();
 
   // Return id for 32-bit unsigned type
+  uint32_t GetUint64Id();
+
+  // Return id for 32-bit unsigned type
   uint32_t GetBoolId();
 
   // Return id for void type
@@ -372,6 +375,9 @@ class InstrumentPass : public Pass {
 
   // id for 32-bit unsigned type
   uint32_t uint_id_;
+
+  // id for 32-bit unsigned type
+  uint32_t uint64_id_;
 
   // id for bool type
   uint32_t bool_id_;
