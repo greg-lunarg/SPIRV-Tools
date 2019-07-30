@@ -229,10 +229,17 @@ class InstrumentPass : public Pass {
 
   // Return pointer to type for runtime array of uint
   analysis::Type* GetUintRuntimeArrayType(analysis::DecorationManager* deco_mgr,
-                                          analysis::TypeManager* type_mgr);
+                                          analysis::TypeManager* type_mgr,
+                                          uint32_t width);
 
   // Return id for buffer uint type
-  uint32_t GetBufferUintPtrId();
+  uint32_t GetOutputBufferPtrId();
+
+  // Return id for buffer uint type
+  uint32_t GetInputBufferTypeId();
+
+  // Return id for buffer uint type
+  uint32_t GetInputBufferPtrId();
 
   // Return binding for output buffer for current validation.
   uint32_t GetOutputBufferBinding();
@@ -352,8 +359,11 @@ class InstrumentPass : public Pass {
   // id for output buffer variable
   uint32_t output_buffer_id_;
 
-  // type id for output buffer element
-  uint32_t buffer_uint_ptr_id_;
+  // ptr type id for output buffer element
+  uint32_t output_buffer_ptr_id_;
+
+  // ptr type id for input buffer element
+  uint32_t input_buffer_ptr_id_;
 
   // id for debug output function
   uint32_t output_func_id_;

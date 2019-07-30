@@ -107,7 +107,7 @@ void InstrumentPass::GenDebugOutputFieldCode(uint32_t base_offset_id,
       builder->AddBinaryOp(GetUintId(), SpvOpIAdd, base_offset_id,
                            builder->GetUintConstantId(field_offset));
   uint32_t buf_id = GetOutputBufferId();
-  uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
+  uint32_t buf_uint_ptr_id = GetOutputBufferPtrId();
   Instruction* achain_inst =
       builder->AddTernaryOp(buf_uint_ptr_id, SpvOpAccessChain, buf_id,
                             builder->GetUintConstantId(kDebugOutputDataOffset),
@@ -370,13 +370,25 @@ void InstrumentPass::UpdateSucceedingPhis(
       });
 }
 
-// Return id for output buffer uint ptr type
-uint32_t InstrumentPass::GetBufferUintPtrId() {
-  if (buffer_uint_ptr_id_ == 0) {
-    buffer_uint_ptr_id_ = context()->get_type_mgr()->FindPointerToType(
+uint32_t InstrumentPass::GetOutputBufferPtrId() {
+  if (output_buffer_ptr_id_ == 0) {
+    output_buffer_ptr_id_ = context()->get_type_mgr()->FindPointerToType(
         GetUintId(), SpvStorageClassStorageBuffer);
   }
-  return buffer_uint_ptr_id_;
+  return output_buffer_ptr_id_;
+}
+
+uint32_t InstrumentPass::GetInputBufferTypeId() {
+  return (validation_id_ == kInstValidationIdBuffAddr) ?
+      GetUint64Id() : GetUintId();
+}
+
+uint32_t InstrumentPass::GetInputBufferPtrId() {
+  if (input_buffer_ptr_id_ == 0) {
+    input_buffer_ptr_id_ = context()->get_type_mgr()->FindPointerToType(
+      GetInputBufferTypeId(), SpvStorageClassStorageBuffer);
+  }
+  return input_buffer_ptr_id_;
 }
 
 uint32_t InstrumentPass::GetOutputBufferBinding() {
@@ -404,9 +416,10 @@ uint32_t InstrumentPass::GetInputBufferBinding() {
 }
 
 analysis::Type* InstrumentPass::GetUintRuntimeArrayType(
-    analysis::DecorationManager* deco_mgr, analysis::TypeManager* type_mgr) {
+    analysis::DecorationManager* deco_mgr, analysis::TypeManager* type_mgr,
+    uint32_t width) {
   if (uint_rarr_ty_ == nullptr) {
-    analysis::Integer uint_ty(32, false);
+    analysis::Integer uint_ty(width, false);
     analysis::Type* reg_uint_ty = type_mgr->GetRegisteredType(&uint_ty);
     analysis::RuntimeArray uint_rarr_ty_tmp(reg_uint_ty);
     uint_rarr_ty_ = type_mgr->GetRegisteredType(&uint_rarr_ty_tmp);
@@ -419,7 +432,7 @@ analysis::Type* InstrumentPass::GetUintRuntimeArrayType(
     // invalidated after this pass.
     assert(context()->get_def_use_mgr()->NumUses(uint_arr_ty_id) == 0 &&
            "used RuntimeArray type returned");
-    deco_mgr->AddDecorationVal(uint_arr_ty_id, SpvDecorationArrayStride, 4u);
+    deco_mgr->AddDecorationVal(uint_arr_ty_id, SpvDecorationArrayStride, width/8u);
   }
   return uint_rarr_ty_;
 }
@@ -447,7 +460,7 @@ uint32_t InstrumentPass::GetOutputBufferId() {
     analysis::DecorationManager* deco_mgr = get_decoration_mgr();
     analysis::TypeManager* type_mgr = context()->get_type_mgr();
     analysis::Type* reg_uint_rarr_ty =
-        GetUintRuntimeArrayType(deco_mgr, type_mgr);
+        GetUintRuntimeArrayType(deco_mgr, type_mgr, 32);
     analysis::Integer uint_ty(32, false);
     analysis::Type* reg_uint_ty = type_mgr->GetRegisteredType(&uint_ty);
     analysis::Struct buf_ty({reg_uint_ty, reg_uint_rarr_ty});
@@ -495,8 +508,9 @@ uint32_t InstrumentPass::GetInputBufferId() {
     // If not created yet, create one
     analysis::DecorationManager* deco_mgr = get_decoration_mgr();
     analysis::TypeManager* type_mgr = context()->get_type_mgr();
+    uint32_t width = (validation_id_ == kInstValidationIdBuffAddr) ? 64u : 32u;
     analysis::Type* reg_uint_rarr_ty =
-        GetUintRuntimeArrayType(deco_mgr, type_mgr);
+        GetUintRuntimeArrayType(deco_mgr, type_mgr, width);
     analysis::Struct buf_ty({reg_uint_rarr_ty});
     analysis::Type* reg_buf_ty = type_mgr->GetRegisteredType(&buf_ty);
     uint32_t ibufTyId = type_mgr->GetTypeInstruction(reg_buf_ty);
@@ -645,7 +659,7 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
         (version_ == 1) ? kInstStageOutCnt : kInst2StageOutCnt;
     uint32_t obuf_record_sz = val_spec_offset + val_spec_param_cnt;
     uint32_t buf_id = GetOutputBufferId();
-    uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
+    uint32_t buf_uint_ptr_id = GetOutputBufferPtrId();
     Instruction* obuf_curr_sz_ac_inst =
         builder.AddBinaryOp(buf_uint_ptr_id, SpvOpAccessChain, buf_id,
                             builder.GetUintConstantId(kDebugOutputSizeOffset));
@@ -716,16 +730,17 @@ uint32_t InstrumentPass::GetStreamWriteFunctionId(uint32_t stage_idx,
 uint32_t InstrumentPass::GetDirectReadFunctionId(uint32_t param_cnt) {
   uint32_t func_id = param2input_func_id_[param_cnt];
   if (func_id != 0) return func_id;
-  // Create input function for param_cnt
+  // Create input function for param_cnt.
   func_id = TakeNextId();
   analysis::TypeManager* type_mgr = context()->get_type_mgr();
   std::vector<const analysis::Type*> param_types;
   for (uint32_t c = 0; c < param_cnt; ++c)
     param_types.push_back(type_mgr->GetType(GetUintId()));
-  analysis::Function func_ty(type_mgr->GetType(GetUintId()), param_types);
+  uint32_t ibuf_type_id = GetInputBufferTypeId();
+  analysis::Function func_ty(type_mgr->GetType(ibuf_type_id), param_types);
   analysis::Type* reg_func_ty = type_mgr->GetRegisteredType(&func_ty);
   std::unique_ptr<Instruction> func_inst(new Instruction(
-      get_module()->context(), SpvOpFunction, GetUintId(), func_id,
+      get_module()->context(), SpvOpFunction, ibuf_type_id, func_id,
       {{spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER,
         {SpvFunctionControlMaskNone}},
        {spv_operand_type_t::SPV_OPERAND_TYPE_ID,
@@ -755,22 +770,27 @@ uint32_t InstrumentPass::GetDirectReadFunctionId(uint32_t param_cnt) {
   // loaded value if it exists, and load value from input buffer at new offset.
   // Return last loaded value.
   uint32_t buf_id = GetInputBufferId();
-  uint32_t buf_uint_ptr_id = GetBufferUintPtrId();
+  uint32_t buf_ptr_id = GetInputBufferPtrId();
   uint32_t last_value_id = 0;
   for (uint32_t p = 0; p < param_cnt; ++p) {
     uint32_t offset_id;
     if (p == 0) {
       offset_id = param_vec[0];
     } else {
+      if (ibuf_type_id != GetUintId()) {
+        Instruction* ucvt_inst =
+            builder.AddUnaryOp(GetUintId(), SpvOpUConvert, last_value_id);
+        last_value_id = ucvt_inst->result_id();
+      }
       Instruction* offset_inst = builder.AddBinaryOp(
           GetUintId(), SpvOpIAdd, last_value_id, param_vec[p]);
       offset_id = offset_inst->result_id();
     }
     Instruction* ac_inst = builder.AddTernaryOp(
-        buf_uint_ptr_id, SpvOpAccessChain, buf_id,
+        buf_ptr_id, SpvOpAccessChain, buf_id,
         builder.GetUintConstantId(kDebugInputDataOffset), offset_id);
     Instruction* load_inst =
-        builder.AddUnaryOp(GetUintId(), SpvOpLoad, ac_inst->result_id());
+        builder.AddUnaryOp(ibuf_type_id, SpvOpLoad, ac_inst->result_id());
     last_value_id = load_inst->result_id();
   }
   (void)builder.AddInstruction(MakeUnique<Instruction>(
@@ -897,7 +917,8 @@ bool InstrumentPass::InstProcessEntryPointCallTree(InstProcessFunction& pfn) {
 
 void InstrumentPass::InitializeInstrument() {
   output_buffer_id_ = 0;
-  buffer_uint_ptr_id_ = 0;
+  output_buffer_ptr_id_ = 0;
+  input_buffer_ptr_id_ = 0;
   output_func_id_ = 0;
   output_func_param_cnt_ = 0;
   input_buffer_id_ = 0;

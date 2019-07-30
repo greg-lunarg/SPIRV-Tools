@@ -171,6 +171,7 @@ static const int kInst2MaxOutCnt = kInst2StageOutCnt + 3;
 // These are the possible validation error codes.
 static const int kInstErrorBindlessBounds = 0;
 static const int kInstErrorBindlessUninit = 1;
+static const int kInstErrorBuffAddrUnallocRef = 2;
 
 // Direct Input Buffer Offsets
 //
