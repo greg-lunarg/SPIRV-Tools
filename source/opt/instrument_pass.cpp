@@ -415,15 +415,16 @@ uint32_t InstrumentPass::GetInputBufferBinding() {
   return 0;
 }
 
-analysis::Type* InstrumentPass::GetUintRuntimeArrayType(
-    analysis::DecorationManager* deco_mgr, analysis::TypeManager* type_mgr,
-    uint32_t width) {
-  if (uint_rarr_ty_ == nullptr) {
+analysis::Type* InstrumentPass::GetUintXRuntimeArrayType(
+    uint32_t width, analysis::Type** rarr_ty) {
+  if (*rarr_ty == nullptr) {
+    analysis::DecorationManager* deco_mgr = get_decoration_mgr();
+    analysis::TypeManager* type_mgr = context()->get_type_mgr();
     analysis::Integer uint_ty(width, false);
     analysis::Type* reg_uint_ty = type_mgr->GetRegisteredType(&uint_ty);
     analysis::RuntimeArray uint_rarr_ty_tmp(reg_uint_ty);
-    uint_rarr_ty_ = type_mgr->GetRegisteredType(&uint_rarr_ty_tmp);
-    uint32_t uint_arr_ty_id = type_mgr->GetTypeInstruction(uint_rarr_ty_);
+    *rarr_ty = type_mgr->GetRegisteredType(&uint_rarr_ty_tmp);
+    uint32_t uint_arr_ty_id = type_mgr->GetTypeInstruction(*rarr_ty);
     // By the Vulkan spec, a pre-existing RuntimeArray of uint must be part of
     // a block, and will therefore be decorated with an ArrayStride. Therefore
     // the undecorated type returned here will not be pre-existing and can
@@ -434,7 +435,12 @@ analysis::Type* InstrumentPass::GetUintRuntimeArrayType(
            "used RuntimeArray type returned");
     deco_mgr->AddDecorationVal(uint_arr_ty_id, SpvDecorationArrayStride, width/8u);
   }
-  return uint_rarr_ty_;
+  return *rarr_ty;
+}
+
+analysis::Type* InstrumentPass::GetUintRuntimeArrayType(uint32_t width) {
+  analysis::Type** rarr_ty = (width == 64) ? &uint64_rarr_ty_ : &uint32_rarr_ty_;
+  return GetUintXRuntimeArrayType(width, rarr_ty);
 }
 
 void InstrumentPass::AddStorageBufferExt() {
@@ -459,8 +465,7 @@ uint32_t InstrumentPass::GetOutputBufferId() {
     // If not created yet, create one
     analysis::DecorationManager* deco_mgr = get_decoration_mgr();
     analysis::TypeManager* type_mgr = context()->get_type_mgr();
-    analysis::Type* reg_uint_rarr_ty =
-        GetUintRuntimeArrayType(deco_mgr, type_mgr, 32);
+    analysis::Type* reg_uint_rarr_ty = GetUintRuntimeArrayType(32);
     analysis::Integer uint_ty(32, false);
     analysis::Type* reg_uint_ty = type_mgr->GetRegisteredType(&uint_ty);
     analysis::Struct buf_ty({reg_uint_ty, reg_uint_rarr_ty});
@@ -509,8 +514,7 @@ uint32_t InstrumentPass::GetInputBufferId() {
     analysis::DecorationManager* deco_mgr = get_decoration_mgr();
     analysis::TypeManager* type_mgr = context()->get_type_mgr();
     uint32_t width = (validation_id_ == kInstValidationIdBuffAddr) ? 64u : 32u;
-    analysis::Type* reg_uint_rarr_ty =
-        GetUintRuntimeArrayType(deco_mgr, type_mgr, width);
+    analysis::Type* reg_uint_rarr_ty = GetUintRuntimeArrayType(width);
     analysis::Struct buf_ty({reg_uint_rarr_ty});
     analysis::Type* reg_buf_ty = type_mgr->GetRegisteredType(&buf_ty);
     uint32_t ibufTyId = type_mgr->GetTypeInstruction(reg_buf_ty);
@@ -929,7 +933,8 @@ void InstrumentPass::InitializeInstrument() {
   bool_id_ = 0;
   void_id_ = 0;
   storage_buffer_ext_defined_ = false;
-  uint_rarr_ty_ = nullptr;
+  uint32_rarr_ty_ = nullptr;
+  uint64_rarr_ty_ = nullptr;
 
   // clear collections
   id2function_.clear();

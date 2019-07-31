@@ -195,6 +195,7 @@ uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
         IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
     uint32_t hdr_blk_id = TakeNextId();
     // Branch to search loop header
+    std::unique_ptr<Instruction> hdr_blk_label(NewLabel(hdr_blk_id));
     (void)builder.AddInstruction(MakeUnique<Instruction>(
         context(), SpvOpBranch, 0, 0,
         std::initializer_list<Operand>{ {SPV_OPERAND_TYPE_ID, { hdr_blk_id }}}));
@@ -202,18 +203,34 @@ uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
     input_func->AddBasicBlock(std::move(first_blk_ptr));
     // Linear search loop header block
     // TODO(greg-lunarg): Implement binary search
-    std::unique_ptr<Instruction> hdr_blk_label(NewLabel(hdr_blk_id));
     std::unique_ptr<BasicBlock> hdr_blk_ptr =
         MakeUnique<BasicBlock>(std::move(hdr_blk_label));
     builder.SetInsertPoint(&*hdr_blk_ptr);
     // Phi for search index. Starts with 1.
     uint32_t cont_blk_id = TakeNextId();
-    uint32_t idx_back_id = TakeNextId();
-    Instruction* idx_phi_inst = builder.AddQuadOp(
-        GetUintId(), SpvOpPhi, builder.GetUintConstantId(1u), first_blk_id,
-        idx_back_id, cont_blk_id);
+    uint32_t idx_back_id = TakeNextId(); // TODO: DELETE
+    std::unique_ptr<Instruction> cont_blk_label(NewLabel(cont_blk_id));
+    // Deal with def-use cycle caused by search loop index computation.
+    // Create Add and Phi instructions first, then do Def analysis on Add.
+    // Add Phi and Add instructions and do Use analysis later.
+    uint32_t idx_phi_id = TakeNextId();
+    uint32_t idx_inc_id = TakeNextId();
+    std::unique_ptr<Instruction> idx_inc_inst(new Instruction(
+      context(), SpvOpIAdd, GetUintId(), idx_inc_id,
+      { { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ idx_phi_id } },
+      { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ builder.GetUintConstantId(1u) } } }));
+    std::unique_ptr<Instruction> idx_phi_inst(new Instruction(
+      context(), SpvOpPhi, GetUintId(), idx_phi_id,
+      { { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ builder.GetUintConstantId(1u) } },
+      { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ first_blk_id } },
+      { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ idx_inc_id } },
+      { spv_operand_type_t::SPV_OPERAND_TYPE_ID,{ cont_blk_id } } }));
+    get_def_use_mgr()->AnalyzeInstDef(&*idx_inc_inst);
+    // Add (previously created) search index phi
+    (void)builder.AddInstruction(std::move(idx_phi_inst));
     // LoopMerge
     uint32_t bound_test_blk_id = TakeNextId();
+    std::unique_ptr<Instruction> bound_test_blk_label(NewLabel(bound_test_blk_id));
     (void)builder.AddInstruction(MakeUnique<Instruction>(
         context(), SpvOpLoopMerge, 0, 0,
         std::initializer_list<Operand>{
@@ -228,21 +245,18 @@ uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
     input_func->AddBasicBlock(std::move(hdr_blk_ptr));
     // Continue/Work Block. Read next buffer pointer and break if greater
     // than ref_ptr arg.
-    std::unique_ptr<Instruction> cont_blk_label(NewLabel(cont_blk_id));
     std::unique_ptr<BasicBlock> cont_blk_ptr =
         MakeUnique<BasicBlock>(std::move(cont_blk_label));
     builder.SetInsertPoint(&*cont_blk_ptr);
-    // Increment search index
-    Instruction* idx_inc_inst = builder.AddBinaryOp(
-        GetUintId(), SpvOpIAdd, idx_phi_inst->result_id(),
-        builder.GetUintConstantId(1u));
+    // Add (previously created) search index increment now.
+    (void)builder.AddInstruction(std::move(idx_inc_inst));
     // Load next buffer address from debug input buffer
     uint32_t ibuf_id = GetInputBufferId();
     uint32_t ibuf_ptr_id = GetInputBufferPtrId();
     Instruction* uptr_ac_inst = builder.AddTernaryOp(
         ibuf_ptr_id, SpvOpAccessChain, ibuf_id,
         builder.GetUintConstantId(kDebugInputDataOffset),
-        idx_inc_inst->result_id());
+        idx_inc_id);
     uint32_t ibuf_type_id = GetInputBufferTypeId();
     Instruction* uptr_load_inst =
         builder.AddUnaryOp(ibuf_type_id, SpvOpLoad, uptr_ac_inst->result_id());
@@ -251,19 +265,18 @@ uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
     Instruction* uptr_test_inst = builder.AddBinaryOp(GetBoolId(),
         SpvOpUGreaterThan, uptr_load_inst->result_id(), param_vec[0]);
     (void)builder.AddConditionalBranch(uptr_test_inst->result_id(),
-        bound_test_blk_id, hdr_blk_id, bound_test_blk_id,
+        bound_test_blk_id, hdr_blk_id, kInvalidId,
         SpvSelectionControlMaskNone);
     cont_blk_ptr->SetParent(&*input_func);
     input_func->AddBasicBlock(std::move(cont_blk_ptr));
     // Bounds test block. Read length of selected buffer and test that
     // all len arg bytes are in buffer.
-    std::unique_ptr<Instruction> bound_test_blk_label(NewLabel(bound_test_blk_id));
     std::unique_ptr<BasicBlock> bound_test_blk_ptr =
         MakeUnique<BasicBlock>(std::move(bound_test_blk_label));
     builder.SetInsertPoint(&*bound_test_blk_ptr);
     // Decrement index to point to previous/candidate buffer address
     Instruction* cand_idx_inst = builder.AddBinaryOp(
-        GetUintId(), SpvOpISub, idx_inc_inst->result_id(),
+        GetUintId(), SpvOpISub, idx_inc_id,
         builder.GetUintConstantId(1u));
     // Load candidate buffer address
     Instruction* cand_ac_inst = builder.AddTernaryOp(
@@ -292,7 +305,7 @@ uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
         SpvOpLoad, len_start_ac_inst->result_id());
     Instruction* len_start_32_inst = builder.AddUnaryOp(GetUintId(),
         SpvOpUConvert, len_start_load_inst->result_id());
-    // Decrement search to get candidate buffer length index
+    // Decrement search index to get candidate buffer length index
     Instruction* cand_len_idx_inst = builder.AddBinaryOp(
         GetUintId(), SpvOpISub, cand_idx_inst->result_id(),
         builder.GetUintConstantId(1u));
@@ -333,11 +346,20 @@ uint32_t InstBuffAddrCheckPass::GenSearchAndTest(
     InstructionBuilder* builder,
     uint32_t* ref_uptr_id) {
   // Enable Int64 if necessary
-  if (!get_feature_mgr()->HasCapability(SpvCapabilityInt64))
+  if (!get_feature_mgr()->HasCapability(SpvCapabilityInt64)) {
+    std::unique_ptr<Instruction> cap_int64_inst(new Instruction(
+      context(), SpvOpCapability, 0, 0,
+      std::initializer_list<Operand>{
+        {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityInt64 }}}));
+    get_def_use_mgr()->AnalyzeInstDefUse(&*cap_int64_inst);
+    get_module()->AddCapability(std::move(cap_int64_inst));
+#if 0
     get_module()->AddCapability(MakeUnique<Instruction>(
-        context(), SpvOpCapability, 0, 0,
-        std::initializer_list<Operand>{
-            {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityInt64 }}}));
+      context(), SpvOpCapability, 0, 0,
+      std::initializer_list<Operand>{
+        {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityInt64 }}}));
+#endif
+  }
   // Convert reference pointer to uint64
   uint32_t ref_ptr_id = ref_inst->GetSingleWordInOperand(0);
   Instruction* ref_uptr_inst = builder->AddUnaryOp(GetUint64Id(), SpvOpConvertPtrToU, ref_ptr_id);

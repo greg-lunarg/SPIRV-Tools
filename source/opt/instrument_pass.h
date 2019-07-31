@@ -228,9 +228,11 @@ class InstrumentPass : public Pass {
   uint32_t GetVoidId();
 
   // Return pointer to type for runtime array of uint
-  analysis::Type* GetUintRuntimeArrayType(analysis::DecorationManager* deco_mgr,
-                                          analysis::TypeManager* type_mgr,
-                                          uint32_t width);
+  analysis::Type* GetUintXRuntimeArrayType(uint32_t width,
+                                          analysis::Type** rarr_ty);
+
+  // Return pointer to type for runtime array of uint
+  analysis::Type* GetUintRuntimeArrayType(uint32_t width);
 
   // Return id for buffer uint type
   uint32_t GetOutputBufferPtrId();
@@ -402,7 +404,10 @@ class InstrumentPass : public Pass {
   bool storage_buffer_ext_defined_;
 
   // runtime array of uint type
-  analysis::Type* uint_rarr_ty_;
+  analysis::Type* uint64_rarr_ty_;
+
+  // runtime array of uint type
+  analysis::Type* uint32_rarr_ty_;
 
   // Pre-instrumentation same-block insts
   std::unordered_map<uint32_t, Instruction*> same_block_pre_;
