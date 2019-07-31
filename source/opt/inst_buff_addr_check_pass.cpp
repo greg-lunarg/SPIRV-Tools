@@ -143,7 +143,7 @@ uint32_t InstBuffAddrCheckPass::GetTypeLength(uint32_t type_id) {
     return type_inst->GetSingleWordInOperand(1) * GetTypeLength(type_inst->GetSingleWordInOperand(0));
   case SpvOpTypePointer:
     assert(type_inst->GetSingleWordInOperand(0) == SpvStorageClassPhysicalStorageBufferEXT && "unexpected pointer type");
-    return 64u;
+    return 8u;
   default:
     assert(false && "unexpected buffer reference type");
     return 0;
