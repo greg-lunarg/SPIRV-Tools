@@ -163,7 +163,6 @@ void InstBuffAddrCheckPass::AddParam(
 }
 
 uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
-#define CUTOFF 0
   if (search_test_func_id_ == 0) {
     // Generate function "bool search_and_test(uint64_t ref_ptr, uint32_t len)"
     // which searches input buffer for buffer which most likely contains the
@@ -238,46 +237,12 @@ uint32_t InstBuffAddrCheckPass::GetSearchAndTestFuncId() {
             {SPV_OPERAND_TYPE_ID, { bound_test_blk_id }},
             {SPV_OPERAND_TYPE_ID, {cont_blk_id}},
             {SPV_OPERAND_TYPE_LITERAL_INTEGER, {SpvLoopControlMaskNone}}}));
-#if CUTOFF
-    // Branch to cutoff block
-    uint32_t cut_blk_id = TakeNextId();
-    std::unique_ptr<Instruction> cut_blk_label(NewLabel(cut_blk_id));
-    (void)builder.AddInstruction(MakeUnique<Instruction>(
-        context(), SpvOpBranch, 0, 0,
-        std::initializer_list<Operand>{ {SPV_OPERAND_TYPE_ID, { cut_blk_id }}}));
-    hdr_blk_ptr->SetParent(&*input_func);
-    input_func->AddBasicBlock(std::move(hdr_blk_ptr));
-    // Cutoff Block.
-    std::unique_ptr<BasicBlock> cut_blk_ptr =
-        MakeUnique<BasicBlock>(std::move(cut_blk_label));
-    builder.SetInsertPoint(&*cut_blk_ptr);
-    // Check if search index is past last value and return true.
-    Instruction* idx_test_inst = builder.AddBinaryOp(GetBoolId(),
-        SpvOpUGreaterThan, idx_phi_id, builder.GetUintConstantId(4u));
-    uint32_t ret_blk_id = TakeNextId();
-    std::unique_ptr<Instruction> ret_blk_label(NewLabel(ret_blk_id));
-    (void)builder.AddConditionalBranch(idx_test_inst->result_id(),
-        ret_blk_id, cont_blk_id, cont_blk_id,
-        SpvSelectionControlMaskNone);
-    cut_blk_ptr->SetParent(&*input_func);
-    input_func->AddBasicBlock(std::move(cut_blk_ptr));
-    // Return block. Return true.
-    std::unique_ptr<BasicBlock> ret_blk_ptr =
-        MakeUnique<BasicBlock>(std::move(ret_blk_label));
-    builder.SetInsertPoint(&*ret_blk_ptr);
-    (void)builder.AddInstruction(MakeUnique<Instruction>(
-        context(), SpvOpReturnValue, 0, 0,
-        std::initializer_list<Operand>{ {SPV_OPERAND_TYPE_ID, { idx_test_inst->result_id() }}}));
-    ret_blk_ptr->SetParent(&*input_func);
-    input_func->AddBasicBlock(std::move(ret_blk_ptr));
-#else
     // Branch to continue/work block
     (void)builder.AddInstruction(MakeUnique<Instruction>(
         context(), SpvOpBranch, 0, 0,
         std::initializer_list<Operand>{ {SPV_OPERAND_TYPE_ID, { cont_blk_id }}}));
     hdr_blk_ptr->SetParent(&*input_func);
     input_func->AddBasicBlock(std::move(hdr_blk_ptr));
-#endif CUTOFF
     // Continue/Work Block. Read next buffer pointer and break if greater
     // than ref_ptr arg.
     std::unique_ptr<BasicBlock> cont_blk_ptr =
