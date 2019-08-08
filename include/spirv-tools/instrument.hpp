@@ -157,6 +157,12 @@ static const int kInst2BindlessUninitOutDescIndex = kInst2StageOutCnt + 1;
 static const int kInst2BindlessUninitOutUnused = kInst2StageOutCnt + 2;
 static const int kInst2BindlessUninitOutCnt = kInst2StageOutCnt + 3;
 
+// A buffer address unalloc error will output the 64-bit pointer in
+// two 32-bit pieces, lower bits first.
+static const int kInst2BuffAddrUnallocOutDescPtrLo = kInst2StageOutCnt + 1;
+static const int kInst2BuffAddrUnallocOutDescPtrHi = kInst2StageOutCnt + 2;
+static const int kInst2BuffAddrUnallocOutCnt = kInst2StageOutCnt + 3;
+
 // DEPRECATED
 static const int kInstBindlessOutDescIndex = kInstStageOutCnt + 1;
 static const int kInstBindlessOutDescBound = kInstStageOutCnt + 2;
