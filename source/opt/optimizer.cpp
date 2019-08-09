@@ -393,6 +393,12 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
   } else if (pass_name == "replace-invalid-opcode") {
     RegisterPass(CreateReplaceInvalidOpcodePass());
   } else if (pass_name == "inst-bindless-check") {
+    RegisterPass(CreateInstBindlessCheckPass(7, 23, false, false, 2));
+    RegisterPass(CreateSimplificationPass());
+    RegisterPass(CreateDeadBranchElimPass());
+    RegisterPass(CreateBlockMergePass());
+    RegisterPass(CreateAggressiveDCEPass());
+  } else if (pass_name == "inst-desc-idx-check") {
     RegisterPass(CreateInstBindlessCheckPass(7, 23, true, true, 2));
     RegisterPass(CreateSimplificationPass());
     RegisterPass(CreateDeadBranchElimPass());
