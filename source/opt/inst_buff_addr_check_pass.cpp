@@ -88,7 +88,7 @@ void InstBuffAddrCheckPass::GenCheckCode(
   (void)builder.AddConditionalBranch(check_id, valid_blk_id, invalid_blk_id,
                                      merge_blk_id,
                                      SpvSelectionControlMaskNone);
-  // Gen valid bounds branch
+  // Gen valid branch
   std::unique_ptr<BasicBlock> new_blk_ptr(
       new BasicBlock(std::move(valid_label)));
   builder.SetInsertPoint(&*new_blk_ptr);
@@ -353,12 +353,6 @@ uint32_t InstBuffAddrCheckPass::GenSearchAndTest(
         {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityInt64 }}}));
     get_def_use_mgr()->AnalyzeInstDefUse(&*cap_int64_inst);
     get_module()->AddCapability(std::move(cap_int64_inst));
-#if 0
-    get_module()->AddCapability(MakeUnique<Instruction>(
-      context(), SpvOpCapability, 0, 0,
-      std::initializer_list<Operand>{
-        {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityInt64 }}}));
-#endif
   }
   // Convert reference pointer to uint64
   uint32_t ref_ptr_id = ref_inst->GetSingleWordInOperand(0);
