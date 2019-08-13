@@ -16,28 +16,14 @@
 
 #include "inst_buff_addr_check_pass.h"
 
-namespace {
-
-// Input Operand Indices
-static const int kSpvImageSampleImageIdInIdx = 0;
-static const int kSpvSampledImageImageIdInIdx = 0;
-static const int kSpvSampledImageSamplerIdInIdx = 1;
-static const int kSpvImageSampledImageIdInIdx = 0;
-static const int kSpvLoadPtrIdInIdx = 0;
-static const int kSpvAccessChainBaseIdInIdx = 0;
-static const int kSpvAccessChainIndex0IdInIdx = 1;
-static const int kSpvTypePointerTypeIdInIdx = 1;
-static const int kSpvTypeArrayLengthIdInIdx = 1;
-static const int kSpvConstantValueInIdx = 0;
-static const int kSpvVariableStorageClassInIdx = 0;
-
-}  // anonymous namespace
-
 namespace spvtools {
 namespace opt {
 
 uint32_t InstBuffAddrCheckPass::CloneOriginalReference(
     Instruction* ref_inst, InstructionBuilder* builder) {
+  // Clone original ref with new result id (if load)
+  uint32_t op = ref_inst->opcode();
+  assert((op == SpvOpLoad || op == SpvOpStore) && "unexpected ref");
   std::unique_ptr<Instruction> new_ref_inst(ref_inst->Clone(context()));
   uint32_t ref_result_id = ref_inst->result_id();
   uint32_t new_ref_id = 0;
@@ -69,6 +55,7 @@ bool InstBuffAddrCheckPass::AnalyzeBuffAddrReference(Instruction* ref_inst) {
   return true;
 }
 
+// TODO(greg-lunarg): Refactor with InstBindlessCheckPass::GenCheckCode()
 void InstBuffAddrCheckPass::GenCheckCode(
     uint32_t check_id, uint32_t error_id, uint32_t ref_uptr_id,
     uint32_t stage_idx, Instruction* ref_inst,

@@ -23,8 +23,9 @@
 // communicate with shaders instrumented by passes created by:
 //
 //   CreateInstBindlessCheckPass
+//   CreateInstBuffAddrCheckPass
 //
-// More detailed documentation of this routine can be found in optimizer.hpp
+// More detailed documentation of these routines can be found in optimizer.hpp
 
 namespace spvtools {
 
@@ -224,6 +225,31 @@ static const int kDebugInputBindlessOffsetReserved = 0;
 // descriptors at (set=s, binding=b) is:
 // Data[ Data[ s + kDebugInputBindlessOffsetLengths ] + b ]
 static const int kDebugInputBindlessOffsetLengths = 1;
+
+// Buffer Device Address Input Buffer Format
+//
+// An input buffer for buffer device address validation consists of a single
+// array of unsigned 64-bit integers we will call Data[]. This array is
+// formatted as follows:
+//
+// At offset kDebugInputBuffAddrPtrOffset is a list of sorted valid buffer
+// addresses. The list is terminated with the pointer 0xffffffffffffffff.
+// If 0x0 is not a valid buffer address, this pointer is inserted at the
+// start of the list.
+// 
+static const int kDebugInputBuffAddrPtrOffset = 1;
+//
+// At offset kDebugInputBuffAddrLengthOffset in Data[] is a single uint64 which
+// gives an offset to the start of the buffer length data. More
+// specifically, for a buffer whose pointer is located at input buffer offset
+// i, the length is located at:
+//
+// Data[ i - kDebugInputBuffAddrPtrOffset
+//         + Data[ kDebugInputBuffAddrLengthOffset ] ]
+//
+// The length of the 0xffffffffffffffff pointer is zero. If inserted, the
+// length of the 0x0 pointer is zero.
+static const int kDebugInputBuffAddrLengthOffset = 0;
 
 }  // namespace spvtools
 
