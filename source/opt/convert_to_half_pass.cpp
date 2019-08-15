@@ -60,7 +60,7 @@ bool ConvertToHalfPass::is_float(Instruction* inst, uint32_t width) {
 
 bool ConvertToHalfPass::is_relaxed(Instruction* inst) {
   if (all_floats_relaxed_) return true;
-  uint32_t r_id = inst->opcode();
+  uint32_t r_id = inst->result_id();
   for (auto r_inst : get_decoration_mgr()->GetDecorationsFor(r_id, false))
     if (r_inst->opcode() == SpvOpDecorate &&
         r_inst->GetSingleWordInOperand(1) == SpvDecorationRelaxedPrecision)
@@ -142,6 +142,17 @@ bool ConvertToHalfPass::MatConvertCleanup(Instruction* inst) {
   return true;
 }
 
+void ConvertToHalfPass::RemoveRelaxedDecoration(uint32_t id) {
+  context()->get_decoration_mgr()->RemoveDecorationsFrom(
+      id, [](const Instruction& dec) {
+    if (dec.opcode() == SpvOpDecorate &&
+        dec.GetSingleWordInOperand(1u) == SpvDecorationRelaxedPrecision)
+      return true;
+    else
+      return false;
+  });
+}
+
 bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
   bool modified = false;
   if (is_arithmetic(inst) && is_relaxed(inst)) {
@@ -159,6 +170,7 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       get_def_use_mgr()->AnalyzeInstUse(inst);
     if (is_float(inst, 32)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
+      converted_ids_.push_back(inst->result_id());
       modified = true;
     }
   }
@@ -194,6 +206,7 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
     if (modified)
       get_def_use_mgr()->AnalyzeInstUse(inst);
     inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
+    converted_ids_.push_back(inst->result_id());
     modified = true;
   } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && is_relaxed(inst)) {
     uint32_t comp_id = inst->GetSingleWordInOperand(0);
@@ -212,9 +225,11 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
     // to half
     if (is_float(comp_inst, 16) && is_relaxed(comp_inst)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
+      converted_ids_.push_back(inst->result_id());
       modified = true;
     }
   } else if (inst->opcode() == SpvOpFConvert) {
+    // If operand and result types are the same, change to copy
     uint32_t val_id = inst->GetSingleWordInOperand(0);
     Instruction* val_inst = get_def_use_mgr()->GetDef(val_id);
     if (inst->type_id() == val_inst->type_id()) {
@@ -295,6 +310,9 @@ bool ConvertToHalfPass::ProcessCallTreeFromRoots(
         std::initializer_list<Operand>{
           {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityFloat16 }}}));
   }
+  // Remove RelaxedPrecision decoration from any converted ids
+  for (auto c_id : converted_ids_)
+    RemoveRelaxedDecoration(c_id);
   return modified;
 }
 
@@ -458,6 +476,7 @@ void ConvertToHalfPass::Initialize() {
     if (!strcmp(extension_name, "GLSL.std.450"))
       glsl450_ext_id_ = extension.result_id();
   }
+  converted_ids_.clear();
 }
 
 }  // namespace opt

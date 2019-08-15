@@ -385,9 +385,11 @@ bool Optimizer::RegisterPassFromFlag(const std::string& flag) {
     RegisterPass(CreateDeadBranchElimPass());
     RegisterPass(CreateBlockMergePass());
     RegisterPass(CreateAggressiveDCEPass());
-  } else if (pass_name == "convert-to-half") {
+  } else if (pass_name == "convert-float-to-half") {
+    // This option is deprecated and is provided only for developer
+    // convenience. It is not documented in the help page.
     RegisterPass(CreateConvertToHalfPass());
-  } else if (pass_name == "relaxed-to-half") {
+  } else if (pass_name == "convert-relaxed-to-half") {
     RegisterPass(CreateConvertRelaxedToHalfPass());
   } else if (pass_name == "relax-float-ops") {
     RegisterPass(CreateRelaxFloatOpsPass());

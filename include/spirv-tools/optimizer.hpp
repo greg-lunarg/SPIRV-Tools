@@ -670,7 +670,9 @@ Optimizer::PassToken CreateSSARewritePass();
 
 // Create pass to convert float32 instructions to half precision.
 // This pass converts as many float32 result operations to half as
-// possible. It converts any float32 operands to half if needed.
+// possible. It converts any float32 operands to half if needed. It converts
+// any resulting half precision values back to float32 as needed. No variables
+// are changed. No image operations are changed.
 //
 // Best if run late since some optimizations may not handle half precision.
 // Best if followed by instruction simplification, redundancy elimination and
@@ -682,8 +684,10 @@ Optimizer::PassToken CreateSSARewritePass();
 Optimizer::PassToken CreateConvertToHalfPass();
 
 // Create pass to convert relaxed precision instructions to half precision.
-// This pass converts as many relaxed float32 result operations to half as
-// possible. It converts any float32 operands to half if needed.
+// This pass converts as many relaxed float32 arithmetic operations to half as
+// possible. It converts any float32 operands to half if needed. It converts
+// any resulting half precision values back to float32 as needed. No variables
+// are changed. No image operations are changed.
 //
 // Best if run late since some optimizations may not handle half precision.
 // Best if followed by instruction simplification, redundancy elimination and

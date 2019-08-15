@@ -122,12 +122,14 @@ Options (in lexicographical order):
                on function scope variables referenced only with load, store,
                and constant index access chains in entry point call tree
                functions.
-  --convert-to-half
-               Convert as many full precision float operations as possible to half
-               precision. Add conversions between float and half as needed.
+  --convert-relaxed-to-half
+               Convert all RelaxedPrecision operations to half precision,
+               inserting conversion operations where needed.
                Best to run near end since some optimizations may not handle
                half. Also should run simplify-instructions, redundancy-
-               elimination and DCE to eliminate excess conversions.
+               elimination and DCE to eliminate excess conversions. This
+               conversion is useful when the target platform does not support
+               RelaxedPrecision or ignores it.
   --copy-propagate-arrays
                Does propagation of memory references when an array is a copy of
                another.  It will only propagate an array if the source is never

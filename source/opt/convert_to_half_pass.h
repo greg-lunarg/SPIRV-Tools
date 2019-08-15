@@ -54,6 +54,9 @@ class ConvertToHalfPass : public Pass {
 
    void GenConvert(uint32_t ty_id, uint32_t width, uint32_t* val_idp, InstructionBuilder* builder);
 
+   // Remove RelaxedPrecision decoration of |id|.
+   void RemoveRelaxedDecoration(uint32_t id);
+
    // If |inst| is a gpu instruction of float type, append to |new_insts|
    // the result of relaxing its precision to half. Specifically, generate code
    // to convert any operands to half, execute the instruction with type half,
@@ -100,6 +103,9 @@ class ConvertToHalfPass : public Pass {
 
   // All floats are relaxed
   bool all_floats_relaxed_;
+
+  // Ids of all converted instructions
+  std::vector<uint32_t> converted_ids_;
 };
 
 }  // namespace opt
