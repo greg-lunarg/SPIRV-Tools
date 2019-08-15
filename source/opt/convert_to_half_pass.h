@@ -24,7 +24,9 @@ namespace opt {
 
 class ConvertToHalfPass : public Pass {
  public:
-  ConvertToHalfPass() : Pass() {}
+  ConvertToHalfPass(bool all_floats_relaxed)
+      : Pass(),
+        all_floats_relaxed_(all_floats_relaxed) {}
 
   ~ConvertToHalfPass() override = default;
 
@@ -95,6 +97,9 @@ class ConvertToHalfPass : public Pass {
 
   // GLSL 540 extension id
   uint32_t glsl450_ext_id_;
+
+  // All floats are relaxed
+  bool all_floats_relaxed_;
 };
 
 }  // namespace opt

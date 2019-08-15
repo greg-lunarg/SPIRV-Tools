@@ -668,14 +668,27 @@ Optimizer::PassToken CreateLoopUnrollPass(bool fully_unroll, int factor = 0);
 // processed (see IsSSATargetVar for details).
 Optimizer::PassToken CreateSSARewritePass();
 
-// Create convert to half pass.
-// This pass converts as many full precision float operations to half as
-// possible. Converts operands to half precision (as necessary) and converts
-// result back to full. Best if run late since some optimizations may not
-// handle half precision. Best if followed by instruction simplification,
-// redundancy elimination and DCE to eliminate excess conversions created by
-// this pass.
+// Create pass to convert float32 instructions to half precision.
+// This pass converts as many float32 result operations to half as
+// possible. It converts any float32 operands to half if needed.
+//
+// Best if run late since some optimizations may not handle half precision.
+// Best if followed by instruction simplification, redundancy elimination and
+// DCE.
+//
+// This function is deprecated and provided for compatibility purposes. The
+// user should rather call CreateRelaxFloatOpsPass() followed by
+// CreateConvertRelaxedToHalfPass().
 Optimizer::PassToken CreateConvertToHalfPass();
+
+// Create pass to convert relaxed precision instructions to half precision.
+// This pass converts as many relaxed float32 result operations to half as
+// possible. It converts any float32 operands to half if needed.
+//
+// Best if run late since some optimizations may not handle half precision.
+// Best if followed by instruction simplification, redundancy elimination and
+// DCE.
+Optimizer::PassToken CreateConvertRelaxedToHalfPass();
 
 // Create relax float ops pass.
 // This pass decorates all float32 result instructions with RelaxedPrecision

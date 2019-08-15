@@ -61,7 +61,8 @@ bool RelaxFloatOpsPass::is_float(Instruction* inst, uint32_t width) {
 
 bool RelaxFloatOpsPass::is_relaxed(uint32_t r_id) {
   for (auto r_inst : get_decoration_mgr()->GetDecorationsFor(r_id, false))
-    if (r_inst->GetSingleWordInOperand(0) == SpvOpDecorate)
+    if (r_inst->opcode() == SpvOpDecorate &&
+        r_inst->GetSingleWordInOperand(1) == SpvDecorationRelaxedPrecision)
       return true;
   return false;
 }

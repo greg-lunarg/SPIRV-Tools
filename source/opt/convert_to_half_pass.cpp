@@ -59,11 +59,13 @@ bool ConvertToHalfPass::is_float(Instruction* inst, uint32_t width) {
 }
 
 bool ConvertToHalfPass::is_relaxed(Instruction* inst) {
-  // TODO(greg-lunarg): Currently assumes all float variables
-  // and instructions are relaxed. Add mode to only return true if
-  // instruction is truly decorated relaxed.
-  (void)inst;
-  return true;
+  if (all_floats_relaxed_) return true;
+  uint32_t r_id = inst->opcode();
+  for (auto r_inst : get_decoration_mgr()->GetDecorationsFor(r_id, false))
+    if (r_inst->opcode() == SpvOpDecorate &&
+        r_inst->GetSingleWordInOperand(1) == SpvDecorationRelaxedPrecision)
+      return true;
+  return false;
 }
 
 uint32_t ConvertToHalfPass::get_equiv_float_ty_id(
