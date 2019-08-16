@@ -170,12 +170,12 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       GenConvert(op_inst->type_id(), 16, idp, &builder);
       modified = true;
     });
-    if (modified)
-      get_def_use_mgr()->AnalyzeInstUse(inst);
     if (is_float(inst, 32)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
       modified = true;
     }
+    if (modified)
+      get_def_use_mgr()->AnalyzeInstUse(inst);
   }
   else if (inst->opcode() == SpvOpPhi && is_float(inst, 32) && inst_relaxed) {
     // Add converts of operands and change type to half. Converts need to
@@ -206,9 +206,8 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       }
       ++ocnt;
     });
-    if (modified)
-      get_def_use_mgr()->AnalyzeInstUse(inst);
     inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
+    get_def_use_mgr()->AnalyzeInstUse(inst);
     modified = true;
   } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && inst_relaxed) {
     uint32_t comp_id = inst->GetSingleWordInOperand(0);
@@ -220,16 +219,23 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
           IRContext::kAnalysisDefUse | IRContext::kAnalysisInstrToBlockMapping);
       GenConvert(comp_inst->type_id(), 16, &comp_id, &builder);
       inst->SetInOperand(0, {comp_id});
-      get_def_use_mgr()->AnalyzeInstUse(inst);
       comp_inst = get_def_use_mgr()->GetDef(comp_id);
+      modified = true;
     }
-    // If the composite is a relaxed half type, make sure the type of the
+    // If the composite is a half type, make sure the type of the
     // extract agrees.
     if (is_float(comp_inst, 16) && !is_float(inst, 16)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
       modified = true;
     }
+    if (modified)
+      get_def_use_mgr()->AnalyzeInstUse(inst);
   } else if (inst->opcode() == SpvOpFConvert) {
+    if (is_float(inst, 32) && inst_relaxed) {
+      inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
+      get_def_use_mgr()->AnalyzeInstUse(inst);
+      modified = true;
+    }
     // If operand and result types are the same, change to copy
     uint32_t val_id = inst->GetSingleWordInOperand(0);
     Instruction* val_inst = get_def_use_mgr()->GetDef(val_id);
