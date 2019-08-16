@@ -155,7 +155,11 @@ void ConvertToHalfPass::RemoveRelaxedDecoration(uint32_t id) {
 
 bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
   bool modified = false;
-  if (is_arithmetic(inst) && is_relaxed(inst)) {
+  // Remember id for later deletion of RelaxedPrecision decoration
+  bool inst_relaxed = is_relaxed(inst);
+  if (inst_relaxed)
+    relaxed_ids_.push_back(inst->result_id());
+  if (is_arithmetic(inst) && inst_relaxed) {
     // Convert all float operands to half and change type to half
     InstructionBuilder builder(
         context(), inst,
@@ -170,11 +174,10 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       get_def_use_mgr()->AnalyzeInstUse(inst);
     if (is_float(inst, 32)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
-      converted_ids_.push_back(inst->result_id());
       modified = true;
     }
   }
-  else if (inst->opcode() == SpvOpPhi && is_float(inst, 32) && is_relaxed(inst)) {
+  else if (inst->opcode() == SpvOpPhi && is_float(inst, 32) && inst_relaxed) {
     // Add converts of operands and change type to half. Converts need to
     // be added to preceeding blocks
     uint32_t ocnt = 0;
@@ -206,9 +209,8 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
     if (modified)
       get_def_use_mgr()->AnalyzeInstUse(inst);
     inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
-    converted_ids_.push_back(inst->result_id());
     modified = true;
-  } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && is_relaxed(inst)) {
+  } else if (inst->opcode() == SpvOpCompositeExtract && is_float(inst, 32) && inst_relaxed) {
     uint32_t comp_id = inst->GetSingleWordInOperand(0);
     Instruction* comp_inst = get_def_use_mgr()->GetDef(comp_id);
     // If the composite is a relaxed float type, convert it to half
@@ -225,7 +227,6 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
     // to half
     if (is_float(comp_inst, 16) && is_relaxed(comp_inst)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
-      converted_ids_.push_back(inst->result_id());
       modified = true;
     }
   } else if (inst->opcode() == SpvOpFConvert) {
@@ -310,9 +311,14 @@ bool ConvertToHalfPass::ProcessCallTreeFromRoots(
         std::initializer_list<Operand>{
           {SPV_OPERAND_TYPE_CAPABILITY, { SpvCapabilityFloat16 }}}));
   }
-  // Remove RelaxedPrecision decoration from any converted ids
-  for (auto c_id : converted_ids_)
+  // Remove all RelaxedPrecision decorations from instructions and globals
+  for (auto c_id : relaxed_ids_)
     RemoveRelaxedDecoration(c_id);
+  for (auto& val : get_module()->types_values()) {
+    uint32_t v_id = val.result_id();
+    if (v_id != 0)
+      RemoveRelaxedDecoration(v_id);
+  }
   return modified;
 }
 
@@ -476,7 +482,7 @@ void ConvertToHalfPass::Initialize() {
     if (!strcmp(extension_name, "GLSL.std.450"))
       glsl450_ext_id_ = extension.result_id();
   }
-  converted_ids_.clear();
+  relaxed_ids_.clear();
 }
 
 }  // namespace opt

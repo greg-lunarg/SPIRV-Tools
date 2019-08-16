@@ -105,7 +105,7 @@ class ConvertToHalfPass : public Pass {
   bool all_floats_relaxed_;
 
   // Ids of all converted instructions
-  std::vector<uint32_t> converted_ids_;
+  std::vector<uint32_t> relaxed_ids_;
 };
 
 }  // namespace opt
