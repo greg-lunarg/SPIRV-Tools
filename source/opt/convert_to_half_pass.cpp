@@ -223,9 +223,9 @@ bool ConvertToHalfPass::GenHalfCode(Instruction* inst) {
       get_def_use_mgr()->AnalyzeInstUse(inst);
       comp_inst = get_def_use_mgr()->GetDef(comp_id);
     }
-    // If the composite is a relaxed half type, change the type of the instruction
-    // to half
-    if (is_float(comp_inst, 16) && is_relaxed(comp_inst)) {
+    // If the composite is a relaxed half type, make sure the type of the
+    // extract agrees.
+    if (is_float(comp_inst, 16) && !is_float(inst, 16)) {
       inst->SetResultType(get_equiv_float_ty_id(inst->type_id(), 16));
       modified = true;
     }

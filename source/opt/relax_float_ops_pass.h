@@ -43,8 +43,8 @@ class RelaxFloatOpsPass : public Pass {
    Instruction* get_base_type(uint32_t ty_id);
 
    // Return true if |inst| returns scalar, vector or matrix type with base
-   // float and |width|
-   bool is_float(Instruction* inst, uint32_t width);
+   // float and width 32
+   bool is_float32(Instruction* inst);
 
    // Return true if |r_id| is decorated with RelaxedPrecision
    bool is_relaxed(uint32_t r_id);
@@ -67,8 +67,11 @@ class RelaxFloatOpsPass : public Pass {
   // Map from function id to function pointer.
   std::unordered_map<uint32_t, Function*> id2function_;
 
-  // Set of core operations to be processed
-  std::unordered_set<uint32_t> target_ops_core_;
+  // Set of float result core operations to be processed
+  std::unordered_set<uint32_t> target_ops_core_f_rslt;
+
+  // Set of float operand core operations to be processed
+  std::unordered_set<uint32_t> target_ops_core_f_opnd;
 
   // Set of 450 extension operations to be processed
   std::unordered_set<uint32_t> target_ops_450_;

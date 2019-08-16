@@ -30,7 +30,8 @@ namespace spvtools {
 namespace opt {
 
 bool RelaxFloatOpsPass::is_relaxable(Instruction* inst) {
-  return target_ops_core_.count(inst->opcode()) != 0 ||
+  return target_ops_core_f_rslt.count(inst->opcode()) != 0 ||
+      target_ops_core_f_opnd.count(inst->opcode()) != 0 ||
       sample_ops_.count(inst->opcode()) != 0 ||
       (inst->opcode() == SpvOpExtInst &&
           inst->GetSingleWordInOperand(0) == glsl450_ext_id_ &&
@@ -50,13 +51,20 @@ Instruction* RelaxFloatOpsPass::get_base_type(uint32_t ty_id) {
   return ty_inst;
 }
 
-bool RelaxFloatOpsPass::is_float(Instruction* inst, uint32_t width) {
-  uint32_t ty_id = inst->type_id();
-  if (ty_id == 0) return false;
+bool RelaxFloatOpsPass::is_float32(Instruction* inst) {
+  uint32_t ty_id;
+  if (target_ops_core_f_opnd.count(inst->opcode()) != 0) {
+    uint32_t opnd_id = inst->GetSingleWordInOperand(0);
+    Instruction* opnd_inst = get_def_use_mgr()->GetDef(opnd_id);
+    ty_id = opnd_inst->type_id();
+  } else {
+    ty_id = inst->type_id();
+    if (ty_id == 0) return false;
+  }
   Instruction* ty_inst = get_base_type(ty_id);
   if (ty_inst->opcode() != SpvOpTypeFloat)
     return false;
-  return ty_inst->GetSingleWordInOperand(0) == width;
+  return ty_inst->GetSingleWordInOperand(0) == 32;
 }
 
 bool RelaxFloatOpsPass::is_relaxed(uint32_t r_id) {
@@ -71,7 +79,7 @@ void RelaxFloatOpsPass::ProcessInst(Instruction* r_inst) {
   uint32_t r_id = r_inst->result_id();
   if (r_id == 0)
     return;
-  if (!is_float(r_inst, 32))
+  if (!is_float32(r_inst))
     return;
   if (is_relaxed(r_id))
     return;
@@ -130,12 +138,13 @@ void RelaxFloatOpsPass::Initialize() {
   for (auto& fn : *get_module()) {
     id2function_[fn.result_id()] = &fn;
   }
-  target_ops_core_ = {
+  target_ops_core_f_rslt = {
     SpvOpLoad,
     SpvOpPhi,
     SpvOpVectorExtractDynamic,
     SpvOpVectorInsertDynamic,
     SpvOpVectorShuffle,
+    SpvOpCompositeExtract,
     SpvOpCompositeConstruct,
     SpvOpCompositeInsert,
     SpvOpCopyObject,
@@ -158,6 +167,8 @@ void RelaxFloatOpsPass::Initialize() {
     SpvOpOuterProduct,
     SpvOpDot,
     SpvOpSelect,
+  };
+  target_ops_core_f_opnd = {
     SpvOpFOrdEqual,
     SpvOpFUnordEqual,
     SpvOpFOrdNotEqual,
