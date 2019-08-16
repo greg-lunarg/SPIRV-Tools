@@ -132,6 +132,7 @@ void RelaxFloatOpsPass::Initialize() {
   }
   target_ops_core_ = {
     SpvOpLoad,
+    SpvOpPhi,
     SpvOpVectorExtractDynamic,
     SpvOpVectorInsertDynamic,
     SpvOpVectorShuffle,
