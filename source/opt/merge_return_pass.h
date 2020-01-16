@@ -50,9 +50,9 @@ namespace opt {
  * always exist because a dummy loop is added around the entire function.
  * If the merge block produces any live values it will need to be predicated.
  * While the merge is nested in structured control flow, the predication path
- *should branch to the merge block of the inner-most loop it is contained in.
- *Once structured control flow has been exited, it will be at the merge of the
- *dummy loop, with will simply return.
+ * should branch to the merge block of the inner-most loop it is contained in.
+ * Once structured control flow has been exited, it will be at the merge of the
+ * dummy loop, with will simply return.
  *
  * In the final return block, the return value should be loaded and returned.
  * Memory promotion passes should be able to promote the newly introduced
@@ -274,19 +274,20 @@ class MergeReturnPass : public MemPass {
   void InsertAfterElement(BasicBlock* element, BasicBlock* new_element,
                           std::list<BasicBlock*>* list);
 
-  // Creates a single iteration loop around all of the exectuable code of the
-  // current function and returns after the loop is done. Sets
+  // Creates a single case switch around all of the exectuable code of the
+  // current function where the switch and case value are both zero and the
+  // default is the merge block. Returns after the switch is executed. Sets
   // |final_return_block_|.
-  void AddDummyLoopAroundFunction();
+  void AddDummySwitchAroundFunction();
 
   // Creates a new basic block that branches to |header_label_id|.  Returns the
   // new basic block.  The block will be the second last basic block in the
   // function.
   BasicBlock* CreateContinueTarget(uint32_t header_label_id);
 
-  // Creates a loop around the executable code of the function with
+  // Creates a one case switch around the executable code of the function with
   // |merge_target| as the merge node.
-  void CreateDummyLoop(BasicBlock* merge_target);
+  void CreateDummySwitch(BasicBlock* merge_target);
 
   // Returns true if |function| has an unreachable block that is not a continue
   // target that simply branches back to the header, or a merge block containing

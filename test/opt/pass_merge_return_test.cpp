@@ -268,7 +268,7 @@ TEST_F(MergeReturnPassTest, StructuredControlFlowWithUnreachableMerge) {
 ; CHECK: [[true:%\w+]] = OpConstantTrue
 ; CHECK: OpFunction
 ; CHECK: [[var:%\w+]] = OpVariable [[:%\w+]] Function [[false]]
-; CHECK: OpLoopMerge [[return_block:%\w+]]
+; CHECK: OpSelectionMerge [[return_block:%\w+]]
 ; CHECK: OpSelectionMerge [[merge_lab:%\w+]]
 ; CHECK: OpBranchConditional [[cond:%\w+]] [[if_lab:%\w+]] [[then_lab:%\w+]]
 ; CHECK: [[if_lab]] = OpLabel
@@ -314,7 +314,7 @@ TEST_F(MergeReturnPassTest, StructuredControlFlowAddPhi) {
 ; CHECK: [[true:%\w+]] = OpConstantTrue
 ; CHECK: OpFunction
 ; CHECK: [[var:%\w+]] = OpVariable [[:%\w+]] Function [[false]]
-; CHECK: OpLoopMerge [[dummy_loop_merge:%\w+]]
+; CHECK: OpSelectionMerge [[dummy_loop_merge:%\w+]]
 ; CHECK: OpSelectionMerge [[merge_lab:%\w+]]
 ; CHECK: OpBranchConditional [[cond:%\w+]] [[if_lab:%\w+]] [[then_lab:%\w+]]
 ; CHECK: [[if_lab]] = OpLabel
@@ -364,7 +364,7 @@ TEST_F(MergeReturnPassTest, StructuredControlDecoration) {
 ; CHECK: [[true:%\w+]] = OpConstantTrue
 ; CHECK: OpFunction
 ; CHECK: [[var:%\w+]] = OpVariable [[:%\w+]] Function [[false]]
-; CHECK: OpLoopMerge [[return_block:%\w+]]
+; CHECK: OpSelectionMerge [[return_block:%\w+]]
 ; CHECK: OpSelectionMerge [[merge_lab:%\w+]]
 ; CHECK: OpBranchConditional [[cond:%\w+]] [[if_lab:%\w+]] [[then_lab:%\w+]]
 ; CHECK: [[if_lab]] = OpLabel
@@ -411,7 +411,7 @@ TEST_F(MergeReturnPassTest, SplitBlockUsedInPhi) {
   const std::string before =
       R"(
 ; CHECK: OpFunction
-; CHECK: OpLoopMerge [[dummy_loop_merge:%\w+]]
+; CHECK: OpSelectionMerge [[dummy_loop_merge:%\w+]]
 ; CHECK: OpLoopMerge [[loop_merge:%\w+]]
 ; CHECK: [[loop_merge]] = OpLabel
 ; CHECK: OpBranchConditional {{%\w+}} [[dummy_loop_merge]] [[old_code_path:%\w+]]
@@ -525,7 +525,7 @@ TEST_F(MergeReturnPassTest, StructuredControlFlowBothMergeAndHeader) {
       R"(
 ; CHECK: OpFunction
 ; CHECK: [[ret_flag:%\w+]] = OpVariable %_ptr_Function_bool Function %false
-; CHECK: OpLoopMerge [[dummy_loop_merge:%\w+]]
+; CHECK: OpSelectionMerge [[dummy_loop_merge:%\w+]]
 ; CHECK: OpLoopMerge [[loop1_merge:%\w+]] {{%\w+}}
 ; CHECK-NEXT: OpBranchConditional {{%\w+}} [[if_lab:%\w+]] {{%\w+}}
 ; CHECK: [[if_lab]] = OpLabel
@@ -914,7 +914,7 @@ TEST_F(MergeReturnPassTest, NestedLoopMerge) {
   const std::string test =
       R"(
 ; CHECK: OpFunction
-; CHECK: OpLoopMerge [[dummy_loop_merge:%\w+]]
+; CHECK: OpSelectionMerge [[dummy_loop_merge:%\w+]]
 ; CHECK: OpLoopMerge [[outer_loop_merge:%\w+]]
 ; CHECK: OpLoopMerge [[inner_loop_merge:%\w+]]
 ; CHECK: OpSelectionMerge
@@ -1150,7 +1150,6 @@ TEST_F(MergeReturnPassTest, StructuredControlFlowDontChangeEntryPhi) {
       R"(
 ; CHECK: OpFunction %void
 ; CHECK: OpLabel
-; CHECK: OpLabel
 ; CHECK: [[pre_header:%\w+]] = OpLabel
 ; CHECK: [[header:%\w+]] = OpLabel
 ; CHECK-NEXT: OpPhi %bool {{%\w+}} [[pre_header]] [[iv:%\w+]] [[continue:%\w+]]
@@ -1195,7 +1194,6 @@ TEST_F(MergeReturnPassTest, StructuredControlFlowPartialReplacePhi) {
   const std::string before =
       R"(
 ; CHECK: OpFunction %void
-; CHECK: OpLabel
 ; CHECK: OpLabel
 ; CHECK: [[pre_header:%\w+]] = OpLabel
 ; CHECK: [[header:%\w+]] = OpLabel
@@ -1258,7 +1256,8 @@ TEST_F(MergeReturnPassTest, StructuredControlFlowPartialReplacePhi) {
 TEST_F(MergeReturnPassTest, GeneratePhiInOuterLoop) {
   const std::string before =
       R"(
-      ; CHECK: OpLoopMerge
+      ; CHECK: OpSelectionMerge
+      ; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 {{%\w+}}
       ; CHECK: OpLoopMerge [[merge:%\w+]] [[continue:%\w+]]
       ; CHECK: [[continue]] = OpLabel
       ; CHECK-NEXT: [[undef:%\w+]] = OpUndef
@@ -1322,7 +1321,8 @@ TEST_F(MergeReturnPassTest, SerialLoopsUpdateBlockMapping) {
   // #2455: This test case triggers phi insertions that use previously inserted
   // phis. Without the fix, it fails to validate.
   const std::string spirv = R"(
-; CHECK: OpLoopMerge
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 {{%\w+}}
 ; CHECK: OpLoopMerge
 ; CHECK: OpLoopMerge
 ; CHECK: OpLoopMerge [[merge:%\w+]]
@@ -1430,8 +1430,8 @@ TEST_F(MergeReturnPassTest, SerialLoopsUpdateBlockMapping) {
 TEST_F(MergeReturnPassTest, InnerLoopMergeIsOuterLoopContinue) {
   const std::string before =
       R"(
-      ; CHECK: OpLoopMerge
-      ; CHECK-NEXT: OpBranch [[bb1:%\w+]]
+      ; CHECK: OpSelectionMerge
+      ; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 [[bb1:%\w+]]
       ; CHECK: [[bb1]] = OpLabel
       ; CHECK-NEXT: OpBranch [[outer_loop_header:%\w+]]
       ; CHECK: [[outer_loop_header]] = OpLabel
@@ -1481,7 +1481,8 @@ TEST_F(MergeReturnPassTest, InnerLoopMergeIsOuterLoopContinue) {
 TEST_F(MergeReturnPassTest, BreakFromLoopUseNoLongerDominated) {
   const std::string spirv = R"(
 ; CHECK: [[undef:%\w+]] = OpUndef
-; CHECK: OpLoopMerge
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 {{%\w+}}
 ; CHECK: OpLoopMerge [[merge:%\w+]] [[cont:%\w+]]
 ; CHECK-NEXT: OpBranch [[body:%\w+]]
 ; CHECK: [[body]] = OpLabel
@@ -1541,7 +1542,8 @@ OpFunctionEnd
 TEST_F(MergeReturnPassTest, TwoBreaksFromLoopUsesNoLongerDominated) {
   const std::string spirv = R"(
 ; CHECK: [[undef:%\w+]] = OpUndef
-; CHECK: OpLoopMerge
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 {{%\w+}}
 ; CHECK: OpLoopMerge [[merge:%\w+]] [[cont:%\w+]]
 ; CHECK-NEXT: OpBranch [[body:%\w+]]
 ; CHECK: [[body]] = OpLabel
@@ -1725,7 +1727,8 @@ TEST_F(MergeReturnPassTest, MergeToMergeBranch) {
   const std::string text =
       R"(
 ; CHECK: [[new_undef:%\w+]] = OpUndef %uint
-; CHECK: OpLoopMerge
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 {{%\w+}}
 ; CHECK: OpLoopMerge [[merge1:%\w+]]
 ; CHECK: OpLoopMerge [[merge2:%\w+]]
 ; CHECK: [[merge1]] = OpLabel
@@ -1781,7 +1784,8 @@ TEST_F(MergeReturnPassTest, PhiInSecondMerge) {
   //  Add and use a phi in the second merge block from the return.
   const std::string text =
       R"(
-; CHECK: OpLoopMerge
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} {{%\w+}} 0 {{%\w+}}
 ; CHECK: OpLoopMerge [[merge_bb:%\w+]] [[continue_bb:%\w+]]
 ; CHECK: [[continue_bb]] = OpLabel
 ; CHECK-NEXT: [[val:%\w+]] = OpUndef %float
