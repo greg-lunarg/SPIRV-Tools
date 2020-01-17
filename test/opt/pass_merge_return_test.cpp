@@ -1835,6 +1835,90 @@ TEST_F(MergeReturnPassTest, PhiInSecondMerge) {
   SinglePassRunAndMatch<MergeReturnPass>(text, true);
 }
 
+TEST_F(MergeReturnPassTest, ReturnsInSwitch) {
+  //  Cannot branch directly to dummy switch merge block from original switch.
+  //  Must branch to merge block of original switch and then do predicated
+  //  branch to merge block of dummy switch.
+  const std::string text =
+    R"(
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} [[dummy_merge_bb:%\w+]] 0 {{%\w+}}
+; CHECK: OpSelectionMerge
+; CHECK-NEXT: OpSwitch {{%\w+}} [[inner_merge_bb:%\w+]] 0 {{%\w+}} 1 {{%\w+}}
+; CHECK: OpBranch [[inner_merge_bb]]
+; CHECK: OpBranch [[inner_merge_bb]]
+; CHECK-NEXT: [[inner_merge_bb]] = OpLabel
+; CHECK: OpBranchConditional {{%\w+}} [[dummy_merge_bb]] {{%\w+}}
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %PSMain "PSMain" %_entryPointOutput_color
+               OpExecutionMode %PSMain OriginUpperLeft
+               OpSource HLSL 500
+               OpMemberDecorate %cb 0 Offset 0
+               OpMemberDecorate %cb 1 Offset 16
+               OpMemberDecorate %cb 2 Offset 32
+               OpMemberDecorate %cb 3 Offset 48
+               OpDecorate %cb Block
+               OpDecorate %_ DescriptorSet 0
+               OpDecorate %_ Binding 0
+               OpDecorate %_entryPointOutput_color Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+          %8 = OpTypeFunction %v4float
+        %int = OpTypeInt 32 1
+         %cb = OpTypeStruct %v4float %v4float %v4float %int
+%_ptr_Uniform_cb = OpTypePointer Uniform %cb
+          %_ = OpVariable %_ptr_Uniform_cb Uniform
+      %int_3 = OpConstant %int 3
+%_ptr_Uniform_int = OpTypePointer Uniform %int
+      %int_0 = OpConstant %int 0
+%_ptr_Uniform_v4float = OpTypePointer Uniform %v4float
+      %int_1 = OpConstant %int 1
+      %int_2 = OpConstant %int 2
+    %float_0 = OpConstant %float 0
+    %float_1 = OpConstant %float 1
+         %45 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_1
+%_ptr_Function_v4float = OpTypePointer Function %v4float
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput_color = OpVariable %_ptr_Output_v4float Output
+     %PSMain = OpFunction %void None %3
+          %5 = OpLabel
+         %50 = OpFunctionCall %v4float %BlendValue_
+               OpStore %_entryPointOutput_color %50
+               OpReturn
+               OpFunctionEnd
+%BlendValue_ = OpFunction %v4float None %8
+         %10 = OpLabel
+         %21 = OpAccessChain %_ptr_Uniform_int %_ %int_3
+         %22 = OpLoad %int %21
+               OpSelectionMerge %25 None
+               OpSwitch %22 %25 0 %23 1 %24
+         %23 = OpLabel
+         %28 = OpAccessChain %_ptr_Uniform_v4float %_ %int_0
+         %29 = OpLoad %v4float %28
+               OpReturnValue %29
+         %24 = OpLabel
+         %31 = OpAccessChain %_ptr_Uniform_v4float %_ %int_0
+         %32 = OpLoad %v4float %31
+         %34 = OpAccessChain %_ptr_Uniform_v4float %_ %int_1
+         %35 = OpLoad %v4float %34
+         %37 = OpAccessChain %_ptr_Uniform_v4float %_ %int_2
+         %38 = OpLoad %v4float %37
+         %39 = OpFMul %v4float %35 %38
+         %40 = OpFAdd %v4float %32 %39
+               OpReturnValue %40
+         %25 = OpLabel
+               OpReturnValue %45
+               OpFunctionEnd
+)";
+
+  SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
+  SinglePassRunAndMatch<MergeReturnPass>(text, true);
+}
+
 TEST_F(MergeReturnPassTest, UnreachableMergeAndContinue) {
   // Make sure that the pass can handle a single block that is both a merge and
   // a continue.
