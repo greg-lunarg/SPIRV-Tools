@@ -69,6 +69,34 @@ Pass::Status MergeReturnPass::Process() {
   return modified ? Status::SuccessWithChange : Status::SuccessWithoutChange;
 }
 
+void MergeReturnPass::GenerateState(BasicBlock *block) {
+  if (Instruction* mergeInst = block->GetMergeInst()) {
+    if (mergeInst->opcode() == SpvOpLoopMerge) {
+      // If new loop, break to this loop merge block
+      state_.emplace_back(mergeInst, mergeInst);
+    }
+    else {
+      auto branchInst = mergeInst->NextNode();
+      if (branchInst->opcode() == SpvOpSwitch) {
+        // If switch inside of loop, break to innermost loop merge block.
+        // Otherwise need to break to this switch merge block.
+        auto lastMergeInst = state_.back().BreakMergeInst();
+        if (lastMergeInst && lastMergeInst->opcode() == SpvOpLoopMerge)
+          state_.emplace_back(lastMergeInst, mergeInst);
+        else
+          state_.emplace_back(mergeInst, mergeInst);
+      }
+      else {
+        // If branch conditional inside loop, always break to innermost
+        // loop merge block. If branch conditional inside switch, break to
+        // innermost switch merge block.
+        auto lastMergeInst = state_.back().BreakMergeInst();
+        state_.emplace_back(lastMergeInst, mergeInst);
+      }
+    }
+  }
+}
+
 bool MergeReturnPass::ProcessStructured(
     Function* function, const std::vector<BasicBlock*>& return_blocks) {
   if (HasNontrivialUnreachableBlocks(function)) {
@@ -103,26 +131,8 @@ bool MergeReturnPass::ProcessStructured(
 
     ProcessStructuredBlock(block);
 
-    // Generate state for next block
-    if (Instruction* mergeInst = block->GetMergeInst()) {
-      if (mergeInst->opcode() == SpvOpLoopMerge) {
-        state_.emplace_back(mergeInst, mergeInst);
-      }
-      else {
-        auto branchInst = mergeInst->NextNode();
-        if (branchInst->opcode() == SpvOpSwitch) {
-          auto lastMergeInst = state_.back().LoopMergeInst();
-          if (lastMergeInst && lastMergeInst->opcode() == SpvOpLoopMerge)
-            state_.emplace_back(lastMergeInst, mergeInst);
-          else
-            state_.emplace_back(mergeInst, mergeInst);
-        }
-        else {
-          auto lastMergeInst = state_.back().LoopMergeInst();
-          state_.emplace_back(lastMergeInst, mergeInst);
-        }
-      }
-    }
+    // Generate state for next block if warranted
+    GenerateState(block);
   }
 
   state_.clear();
@@ -147,24 +157,8 @@ bool MergeReturnPass::ProcessStructured(
       }
     }
 
-    // Generate state for next block
-    if (Instruction* mergeInst = block->GetMergeInst()) {
-      if (mergeInst->opcode() == SpvOpLoopMerge) {
-        state_.emplace_back(mergeInst, mergeInst);
-      } else {
-        auto branchInst = mergeInst->NextNode();
-        if (branchInst->opcode() == SpvOpSwitch) {
-          auto lastMergeInst = state_.back().LoopMergeInst();
-          if (lastMergeInst && lastMergeInst->opcode() == SpvOpLoopMerge)
-            state_.emplace_back(lastMergeInst, mergeInst);
-          else
-            state_.emplace_back(mergeInst, mergeInst);
-        } else {
-          auto lastMergeInst = state_.back().LoopMergeInst();
-          state_.emplace_back(lastMergeInst, mergeInst);
-        }
-      }
-    }
+    // Generate state for next block if warranted
+    GenerateState(block);
   }
 
   // We have not kept the dominator tree up-to-date.
@@ -228,8 +222,9 @@ void MergeReturnPass::ProcessStructuredBlock(BasicBlock* block) {
 
   if (tail_opcode == SpvOpReturn || tail_opcode == SpvOpReturnValue ||
       tail_opcode == SpvOpUnreachable) {
-    assert(CurrentState().InLoop() && "Should be in the dummy loop.");
-    BranchToBlock(block, CurrentState().LoopMergeId());
+    assert(CurrentState().InBreakable() &&
+        "Should be in the dummy construct.");
+    BranchToBlock(block, CurrentState().BreakMergeId());
     return_blocks_.insert(block->id());
   }
 }
@@ -363,8 +358,8 @@ bool MergeReturnPass::PredicateBlocks(
   std::unordered_set<BasicBlock*> seen;
   if (block->id() == state->CurrentMergeId()) {
     state++;
-  } else if (block->id() == state->LoopMergeId()) {
-    while (state->LoopMergeId() == block->id()) {
+  } else if (block->id() == state->BreakMergeId()) {
+    while (state->BreakMergeId() == block->id()) {
       state++;
     }
   }
@@ -372,15 +367,16 @@ bool MergeReturnPass::PredicateBlocks(
   while (block != nullptr && block != final_return_block_) {
     if (!predicated->insert(block).second) break;
     // Skip structured subgraphs.
-    assert(state->InLoop() && "Should be in the dummy loop at the very least.");
-    Instruction* current_loop_merge_inst = state->LoopMergeInst();
+    assert(state->InBreakable() &&
+        "Should be in the dummy construct at the very least.");
+    Instruction* break_merge_inst = state->BreakMergeInst();
     uint32_t merge_block_id =
-        current_loop_merge_inst->GetSingleWordInOperand(0);
-    while (state->LoopMergeId() == merge_block_id) {
+        break_merge_inst->GetSingleWordInOperand(0);
+    while (state->BreakMergeId() == merge_block_id) {
       state++;
     }
     if (!BreakFromConstruct(block, predicated, order,
-                            current_loop_merge_inst)) {
+                            break_merge_inst)) {
       return false;
     }
     block = context()->get_instr_block(merge_block_id);
@@ -390,7 +386,7 @@ bool MergeReturnPass::PredicateBlocks(
 
 bool MergeReturnPass::BreakFromConstruct(
     BasicBlock* block, std::unordered_set<BasicBlock*>* predicated,
-    std::list<BasicBlock*>* order, Instruction* loop_merge_inst) {
+    std::list<BasicBlock*>* order, Instruction* break_merge_inst) {
   // Make sure the CFG is build here.  If we don't then it becomes very hard
   // to know which new blocks need to be updated.
   context()->BuildInvalidAnalyses(IRContext::kAnalysisCFG);
@@ -412,7 +408,7 @@ bool MergeReturnPass::BreakFromConstruct(
     }
   }
 
-  uint32_t merge_block_id = loop_merge_inst->GetSingleWordInOperand(0);
+  uint32_t merge_block_id = break_merge_inst->GetSingleWordInOperand(0);
   BasicBlock* merge_block = context()->get_instr_block(merge_block_id);
   if (merge_block->GetLoopMergeInst()) {
     cfg()->SplitLoopHeader(merge_block);
@@ -440,9 +436,10 @@ bool MergeReturnPass::BreakFromConstruct(
 
   // If |block| was a continue target for a loop |old_body| is now the correct
   // continue target.
-  if (loop_merge_inst->GetSingleWordInOperand(1) == block->id()) {
-    loop_merge_inst->SetInOperand(1, {old_body->id()});
-    context()->UpdateDefUse(loop_merge_inst);
+  if (break_merge_inst->opcode() == SpvOpLoopMerge &&
+      break_merge_inst->GetSingleWordInOperand(1) == block->id()) {
+    break_merge_inst->SetInOperand(1, {old_body->id()});
+    context()->UpdateDefUse(break_merge_inst);
   }
 
   // Update |order| so old_block will be traversed.
