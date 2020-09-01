@@ -272,6 +272,10 @@ uint32_t InstBindlessCheckPass::FindStride(uint32_t ty_id,
 uint32_t InstBindlessCheckPass::ByteSize(uint32_t ty_id) {
   analysis::TypeManager* type_mgr = context()->get_type_mgr();
   const analysis::Type* sz_ty = type_mgr->GetType(ty_id);
+  if (sz_ty->kind() == analysis::Type::kPointer) {
+    // Assuming PhysicalStorageBuffer pointer
+    return 8;
+  }
   uint32_t size = 1;
   if (sz_ty->kind() == analysis::Type::kMatrix) {
     const analysis::Matrix* m_ty = sz_ty->AsMatrix();
