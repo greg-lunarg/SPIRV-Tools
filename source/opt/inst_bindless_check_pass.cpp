@@ -276,7 +276,8 @@ uint32_t InstBindlessCheckPass::FindStride(uint32_t ty_id,
   return stride;
 }
 
-uint32_t InstBindlessCheckPass::ByteSize(uint32_t ty_id) {
+uint32_t InstBindlessCheckPass::ByteSize(uint32_t ty_id,
+                                         uint32_t matrix_stride) {
   analysis::TypeManager* type_mgr = context()->get_type_mgr();
   const analysis::Type* sz_ty = type_mgr->GetType(ty_id);
   if (sz_ty->kind() == analysis::Type::kPointer) {
@@ -287,9 +288,8 @@ uint32_t InstBindlessCheckPass::ByteSize(uint32_t ty_id) {
   if (sz_ty->kind() == analysis::Type::kMatrix) {
     const analysis::Matrix* m_ty = sz_ty->AsMatrix();
     size = m_ty->element_count() * size;
-    uint32_t stride = FindStride(ty_id, SpvDecorationMatrixStride);
-    if (stride != 0) return size * stride;
-    sz_ty = m_ty->element_type();
+    assert(matrix_stride != 0 && "missing matrix stride");
+    return size * matrix_stride;
   }
   if (sz_ty->kind() == analysis::Type::kVector) {
     const analysis::Vector* v_ty = sz_ty->AsVector();
@@ -334,6 +334,10 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
   Instruction* ac_inst = get_def_use_mgr()->GetDef(ref->ptr_id);
   uint32_t curr_ty_id = buff_ty_id;
   uint32_t sum_id = 0;
+  uint32_t matrix_stride = 0;
+  bool col_major = false;
+  uint32_t matrix_stride_id = 0u;
+  bool in_matrix = false;
   while (ac_in_idx < ac_inst->NumInOperands()) {
     uint32_t curr_idx_id = ac_inst->GetSingleWordInOperand(ac_in_idx);
     Instruction* curr_idx_inst = get_def_use_mgr()->GetDef(curr_idx_id);
@@ -341,13 +345,9 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
     uint32_t curr_offset_id = 0;
     switch (curr_ty_inst->opcode()) {
       case SpvOpTypeArray:
-      case SpvOpTypeRuntimeArray:
-      case SpvOpTypeMatrix: {
-        // Get array/matrix stride and multiply by current index
-        uint32_t stride_deco = (curr_ty_inst->opcode() == SpvOpTypeMatrix)
-                                   ? SpvDecorationMatrixStride
-                                   : SpvDecorationArrayStride;
-        uint32_t arr_stride = FindStride(curr_ty_id, stride_deco);
+      case SpvOpTypeRuntimeArray: {
+        // Get array stride and multiply by current index
+        uint32_t arr_stride = FindStride(curr_ty_id, SpvDecorationArrayStride);
         uint32_t arr_stride_id = builder->GetUintConstantId(arr_stride);
         Instruction* curr_offset_inst = builder->AddBinaryOp(
             GetUintId(), SpvOpIMul, arr_stride_id, curr_idx_id);
@@ -355,14 +355,42 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
         // Get element type for next step
         curr_ty_id = curr_ty_inst->GetSingleWordInOperand(0);
       } break;
-      case SpvOpTypeVector: {
-        // Stride is size of component type
-        uint32_t comp_ty_id = curr_ty_inst->GetSingleWordInOperand(0u);
-        uint32_t vec_stride = ByteSize(comp_ty_id);
-        uint32_t vec_stride_id = builder->GetUintConstantId(vec_stride);
+      case SpvOpTypeMatrix: {
+        assert(matrix_stride != 0 && "missing matrix stride");
+        matrix_stride_id = builder->GetUintConstantId(matrix_stride);
+        // If column major, multiply matrix stride by current (column) index,
+        // otherwise multiply component size by current index and save matrix
+        // stride for vector (row) index
+        uint32_t col_stride_id;
+        if (col_major) {
+          col_stride_id = matrix_stride_id;
+        } else {
+          uint32_t col_cnt = curr_ty_inst->GetSingleWordInOperand(1);
+          uint32_t col_stride = matrix_stride / col_cnt;
+          col_stride_id = builder->GetUintConstantId(col_stride);
+        }
         Instruction* curr_offset_inst = builder->AddBinaryOp(
-            GetUintId(), SpvOpIMul, vec_stride_id, curr_idx_id);
+            GetUintId(), SpvOpIMul, col_stride_id, curr_idx_id);
         curr_offset_id = curr_offset_inst->result_id();
+        // Get element type for next step
+        curr_ty_id = curr_ty_inst->GetSingleWordInOperand(0);
+        in_matrix = true;
+      } break;
+      case SpvOpTypeVector: {
+        // If inside a row major matrix type, multiply index by matrix stride,
+        // else multiply by component size
+        uint32_t comp_ty_id = curr_ty_inst->GetSingleWordInOperand(0u);
+        if (in_matrix && !col_major) {
+          Instruction* curr_offset_inst = builder->AddBinaryOp(
+              GetUintId(), SpvOpIMul, matrix_stride_id, curr_idx_id);
+          curr_offset_id = curr_offset_inst->result_id();
+        } else {
+          uint32_t comp_ty_sz = ByteSize(comp_ty_id, 0u);
+          uint32_t comp_ty_sz_id = builder->GetUintConstantId(comp_ty_sz);
+          Instruction* curr_offset_inst = builder->AddBinaryOp(
+              GetUintId(), SpvOpIMul, comp_ty_sz_id, curr_idx_id);
+          curr_offset_id = curr_offset_inst->result_id();
+        }
         // Get element type for next step
         curr_ty_id = comp_ty_id;
       } break;
@@ -382,6 +410,29 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
             });
         USE_ASSERT(found && "member offset not found");
         curr_offset_id = builder->GetUintConstantId(member_offset);
+        // Look for matrix stride for this member if there is one. The matrix
+        // stride is not on the matrix type, but in a OpMemberDecorate on the
+        // enclosing struct type at the member index. If none found, reset
+        // stride to 0.
+        found = !get_decoration_mgr()->WhileEachDecoration(
+            curr_ty_id, SpvDecorationMatrixStride,
+            [&member_idx, &matrix_stride](const Instruction& deco_inst) {
+              if (deco_inst.GetSingleWordInOperand(1u) != member_idx)
+                return true;
+              matrix_stride = deco_inst.GetSingleWordInOperand(3u);
+              return false;
+            });
+        if (!found) matrix_stride = 0;
+        // Look for column major decoration
+        found = !get_decoration_mgr()->WhileEachDecoration(
+            curr_ty_id, SpvDecorationColMajor,
+            [&member_idx, &col_major](const Instruction& deco_inst) {
+              if (deco_inst.GetSingleWordInOperand(1u) != member_idx)
+                return true;
+              col_major = true;
+              return false;
+            });
+        if (!found) col_major = false;
         // Get element type for next step
         curr_ty_id = curr_ty_inst->GetSingleWordInOperand(member_idx);
       } break;
@@ -397,7 +448,7 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
     ++ac_in_idx;
   }
   // Add in offset of last byte of referenced object
-  uint32_t bsize = ByteSize(curr_ty_id);
+  uint32_t bsize = ByteSize(curr_ty_id, matrix_stride);
   uint32_t last = bsize - 1;
   uint32_t last_id = builder->GetUintConstantId(last);
   Instruction* sum_inst =
