@@ -900,7 +900,7 @@ Optimizer::PassToken CreateInstBindlessCheckPass(uint32_t desc_set,
   return MakeUnique<Optimizer::PassToken::Impl>(
       MakeUnique<opt::InstBindlessCheckPass>(
           desc_set, shader_id, input_length_enable, input_init_enable,
-          input_buff_oob_enable));
+          input_buff_oob_enable, input_buff_oob_enable));
 }
 
 Optimizer::PassToken CreateInstDebugPrintfPass(uint32_t desc_set,
