@@ -277,23 +277,28 @@ uint32_t InstBindlessCheckPass::FindStride(uint32_t ty_id,
 }
 
 uint32_t InstBindlessCheckPass::ByteSize(uint32_t ty_id,
-                                         uint32_t matrix_stride) {
+                                         uint32_t matrix_stride,
+                                         bool col_major) {
   analysis::TypeManager* type_mgr = context()->get_type_mgr();
   const analysis::Type* sz_ty = type_mgr->GetType(ty_id);
   if (sz_ty->kind() == analysis::Type::kPointer) {
     // Assuming PhysicalStorageBuffer pointer
     return 8;
   }
-  uint32_t size = 1;
   if (sz_ty->kind() == analysis::Type::kMatrix) {
-    const analysis::Matrix* m_ty = sz_ty->AsMatrix();
-    size = m_ty->element_count() * size;
     assert(matrix_stride != 0 && "missing matrix stride");
-    return size * matrix_stride;
+    const analysis::Matrix* m_ty = sz_ty->AsMatrix();
+    if (col_major)
+      return m_ty->element_count() * matrix_stride;
+    sz_ty = m_ty->element_type();
   }
+  uint32_t size = 1;
   if (sz_ty->kind() == analysis::Type::kVector) {
     const analysis::Vector* v_ty = sz_ty->AsVector();
-    size = v_ty->element_count() * size;
+    size = v_ty->element_count();
+    // if inside matrix type and row major, return vector size
+    // (row count) multiplied by matrix stride
+    if (matrix_stride > 0) return size * matrix_stride;
     sz_ty = v_ty->element_type();
   }
   switch (sz_ty->kind()) {
@@ -385,7 +390,7 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
               GetUintId(), SpvOpIMul, matrix_stride_id, curr_idx_id);
           curr_offset_id = curr_offset_inst->result_id();
         } else {
-          uint32_t comp_ty_sz = ByteSize(comp_ty_id, 0u);
+          uint32_t comp_ty_sz = ByteSize(comp_ty_id, 0u, false);
           uint32_t comp_ty_sz_id = builder->GetUintConstantId(comp_ty_sz);
           Instruction* curr_offset_inst = builder->AddBinaryOp(
               GetUintId(), SpvOpIMul, comp_ty_sz_id, curr_idx_id);
@@ -448,7 +453,7 @@ uint32_t InstBindlessCheckPass::GenLastByteIdx(ref_analysis* ref,
     ++ac_in_idx;
   }
   // Add in offset of last byte of referenced object
-  uint32_t bsize = ByteSize(curr_ty_id, matrix_stride);
+  uint32_t bsize = ByteSize(curr_ty_id, matrix_stride, col_major);
   uint32_t last = bsize - 1;
   uint32_t last_id = builder->GetUintConstantId(last);
   Instruction* sum_inst =
