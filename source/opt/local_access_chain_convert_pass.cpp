@@ -333,6 +333,20 @@ bool LocalAccessChainConvertPass::AllExtensionsSupported() const {
     if (extensions_allowlist_.find(extName) == extensions_allowlist_.end())
       return false;
   }
+  // only allow NonSemantic.Vulkan.DebugInfo.100, we cannot safely optimise
+  // around unknown extended
+  // instruction sets even if they are non-semantic
+  for (auto& inst : context()->module()->ext_inst_imports()) {
+    assert(inst.opcode() == SpvOpExtInstImport &&
+           "Expecting an import of an extension's instruction set.");
+    const char* extension_name =
+        reinterpret_cast<const char*>(&inst.GetInOperand(0).words[0]);
+    if (0 == std::strncmp(extension_name, "NonSemantic.", 12) &&
+        0 != std::strncmp(extension_name, "NonSemantic.Vulkan.DebugInfo.100",
+                          32)) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -420,6 +434,7 @@ void LocalAccessChainConvertPass::InitExtensions() {
       "SPV_KHR_terminate_invocation",
       "SPV_KHR_subgroup_uniform_control_flow",
       "SPV_KHR_integer_dot_product",
+      "SPV_KHR_non_semantic_info",
   });
 }
 
