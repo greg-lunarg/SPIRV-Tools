@@ -768,7 +768,7 @@ Pass::Status InstBindlessCheckPass::ProcessImpl() {
   }
   if (texel_buffer_enabled_) {
     // Perform texel buffer bounds check on each entry point function in
-    // module
+    // module. Generate after descriptor bounds and initialization checks.
     pfn = [this](BasicBlock::iterator ref_inst_itr,
       UptrVectorIterator<BasicBlock> ref_block_itr,
       uint32_t stage_idx,

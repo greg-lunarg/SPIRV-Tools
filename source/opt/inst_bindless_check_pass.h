@@ -28,19 +28,6 @@ namespace opt {
 // external design may change as the layer evolves.
 class InstBindlessCheckPass : public InstrumentPass {
  public:
-  // Validation Layer interface
-  InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
-                        bool desc_idx_enable, bool desc_init_enable,
-                        bool buffer_bounds_enable)
-      : InstrumentPass(
-            desc_set, shader_id, kInstValidationIdBindless,
-            desc_idx_enable || desc_init_enable || buffer_bounds_enable),
-        desc_idx_enabled_(desc_idx_enable),
-        desc_init_enabled_(desc_init_enable),
-        buffer_bounds_enabled_(buffer_bounds_enable),
-        texel_buffer_enabled_(true) {}
-
-  // Testing and command line interface
   InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
     bool desc_idx_enable, bool desc_init_enable,
     bool buffer_bounds_enable, bool texel_buffer_enable,
