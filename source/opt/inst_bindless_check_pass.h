@@ -28,16 +28,7 @@ namespace opt {
 // external design may change as the layer evolves.
 class InstBindlessCheckPass : public InstrumentPass {
  public:
-  // Interface to support testing pre-buffer-overrun capability
-  InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
-                        bool desc_idx_enable, bool desc_init_enable)
-      : InstrumentPass(desc_set, shader_id, kInstValidationIdBindless, false),
-        desc_idx_enabled_(desc_idx_enable),
-        desc_init_enabled_(desc_init_enable),
-        buffer_bounds_enabled_(false),
-        texel_buffer_enabled_(false) {}
-
-  // Interface adding buffer overrun checking
+  // Validation Layer interface
   InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
                         bool desc_idx_enable, bool desc_init_enable,
                         bool buffer_bounds_enable)
@@ -47,9 +38,9 @@ class InstBindlessCheckPass : public InstrumentPass {
         desc_idx_enabled_(desc_idx_enable),
         desc_init_enabled_(desc_init_enable),
         buffer_bounds_enabled_(buffer_bounds_enable),
-        texel_buffer_enabled_(false) {}
+        texel_buffer_enabled_(true) {}
 
-  // Interface adding texel buffer overrun checking
+  // Testing and command line interface
   InstBindlessCheckPass(uint32_t desc_set, uint32_t shader_id,
     bool desc_idx_enable, bool desc_init_enable,
     bool buffer_bounds_enable, bool texel_buffer_enable,
