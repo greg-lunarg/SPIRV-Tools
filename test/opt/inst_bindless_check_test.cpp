@@ -105,8 +105,7 @@ OpFunctionEnd
 )";
 
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
-  SinglePassRunAndCheck<InstBindlessCheckPass>(before, before, true, true, 7u,
-                                               23u, false, false);
+  SinglePassRunAndCheck<InstBindlessCheckPass>(before, before, true, true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, NoInstrumentNonBindless) {
@@ -183,7 +182,8 @@ OpFunctionEnd
 
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(whole_file, whole_file, true,
-                                               true, 7u, 23u, false, false);
+                                               true, 7u, 23u, false, false,
+                                               false, false, false);
 }
 
 TEST_F(InstBindlessTest, Simple) {
@@ -412,7 +412,7 @@ OpFunctionEnd
           func_pt2_before,
       entry_after + names_annots + new_annots + consts_types_vars +
           new_consts_types_vars + func_pt1 + func_pt2_after + output_func,
-      true, true, 7u, 23u, false, false);
+      true, true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentMultipleInstructions) {
@@ -707,7 +707,7 @@ OpFunctionEnd
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + output_func, true,
-      true, 7u, 23u, false, false);
+      true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentOpImage) {
@@ -935,7 +935,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + output_func, true,
-      true, 7u, 23u, false, false);
+      true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentSampledImage) {
@@ -1158,7 +1158,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + output_func, true,
-      true, 7u, 23u, false, false);
+      true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentImageWrite) {
@@ -1383,7 +1383,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + output_func, true,
-      true, 7u, 23u, false, false);
+      true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentVertexSimple) {
@@ -1657,7 +1657,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + output_func, true,
-      true, 7u, 23u, false, false);
+      true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentTeseSimple) {
@@ -1933,7 +1933,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + output_func, true,
-      true, 7u, 23u, false, false);
+      true, 7u, 23u, false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, MultipleDebugFunctions) {
@@ -2261,7 +2261,7 @@ OpFunctionEnd
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func1_before + func2_before,
       defs_after + func1_after + func2_after + output_func, true, true, 7u, 23u,
-      false, false);
+      false, false, false, false, false);
 }
 
 TEST_F(InstBindlessTest, RuntimeArray) {
@@ -2557,7 +2557,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstrumentInitCheckOnScalarDescriptor) {
@@ -2793,7 +2793,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, SPV14AddToEntryPoint) {
@@ -2849,7 +2849,8 @@ OpFunctionEnd
 )";
 
   SetTargetEnv(SPV_ENV_VULKAN_1_1_SPIRV_1_4);
-  SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, true, true);
+  SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, true, true,
+                                               false, false, false);
 }
 
 TEST_F(InstBindlessTest, SPV14AddToEntryPoints) {
@@ -2907,7 +2908,8 @@ OpFunctionEnd
 )";
 
   SetTargetEnv(SPV_ENV_VULKAN_1_1_SPIRV_1_4);
-  SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, true, true);
+  SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, true, true,
+                                               false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstBoundsAndInitLoadUnsizedUBOArray) {
@@ -3188,7 +3190,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstBoundsAndInitLoadUnsizedSSBOArrayDeprecated) {
@@ -3469,7 +3471,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstBoundsAndInitLoadUnsizedSSBOArray) {
@@ -3739,7 +3741,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstInitLoadUBOScalar) {
@@ -3964,7 +3966,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstBoundsInitStoreUnsizedSSBOArray) {
@@ -4238,7 +4240,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstBoundsInitLoadSizedUBOArray) {
@@ -4507,7 +4509,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -4829,7 +4831,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -5153,7 +5155,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -5477,7 +5479,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -5801,7 +5803,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -6125,7 +6127,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -6449,7 +6451,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest,
@@ -6773,7 +6775,7 @@ OpFunctionEnd
   // SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, InstBoundsInitSameBlockOpReplication) {
@@ -7182,7 +7184,7 @@ OpFunctionEnd
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndCheck<InstBindlessCheckPass>(
       defs_before + func_before, defs_after + func_after + new_funcs, true,
-      true, 7u, 23u, true, true);
+      true, 7u, 23u, true, true, false, false, false);
 }
 
 TEST_F(InstBindlessTest, MultipleUniformNonAggregateRefsNoDescInit) {
@@ -7456,7 +7458,7 @@ TEST_F(InstBindlessTest, MultipleUniformNonAggregateRefsNoDescInit) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, false,
-                                               false, true);
+                                               false, true, false, true);
 }
 
 TEST_F(InstBindlessTest, UniformArrayRefNoDescInit) {
@@ -7721,7 +7723,7 @@ TEST_F(InstBindlessTest, UniformArrayRefNoDescInit) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, false,
-                                               false, true);
+                                               false, true, false, true);
 }
 
 TEST_F(InstBindlessTest, UniformArrayRefWithDescInit) {
@@ -7978,7 +7980,7 @@ TEST_F(InstBindlessTest, UniformArrayRefWithDescInit) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, true, true,
-                                               true);
+                                               true, false, true);
 }
 
 TEST_F(InstBindlessTest, Descriptor16BitIdxRef) {
@@ -8201,7 +8203,7 @@ TEST_F(InstBindlessTest, Descriptor16BitIdxRef) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, true, true,
-                                               false);
+                                               false, false, true);
 }
 
 TEST_F(InstBindlessTest, UniformArray16bitIdxRef) {
@@ -8471,7 +8473,7 @@ TEST_F(InstBindlessTest, UniformArray16bitIdxRef) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, false,
-                                               false, true);
+                                               false, true, false, true);
 }
 
 TEST_F(InstBindlessTest, UniformMatrixRefRowMajor) {
@@ -8679,7 +8681,7 @@ TEST_F(InstBindlessTest, UniformMatrixRefRowMajor) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, false,
-                                               false, true);
+                                               false, true, false, true);
 }
 
 TEST_F(InstBindlessTest, UniformMatrixRefColumnMajor) {
@@ -8885,7 +8887,7 @@ TEST_F(InstBindlessTest, UniformMatrixRefColumnMajor) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, false,
-                                               false, true);
+                                               false, true, false, true);
 }
 
 TEST_F(InstBindlessTest, UniformMatrixVecRefRowMajor) {
@@ -9107,7 +9109,7 @@ TEST_F(InstBindlessTest, UniformMatrixVecRefRowMajor) {
   SetTargetEnv(SPV_ENV_VULKAN_1_2);
   SetAssembleOptions(SPV_TEXT_TO_BINARY_OPTION_PRESERVE_NUMERIC_IDS);
   SinglePassRunAndMatch<InstBindlessCheckPass>(text, true, 7u, 23u, false,
-                                               false, true);
+                                               false, true, false, true);
 }
 
 // TODO(greg-lunarg): Add tests to verify handling of these cases:
