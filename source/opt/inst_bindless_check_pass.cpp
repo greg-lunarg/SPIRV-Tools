@@ -673,6 +673,7 @@ void InstBindlessCheckPass::GenTexBuffCheckCode(
   SpvOp op = ref_inst->opcode();
   uint32_t num_in_oprnds = ref_inst->NumInOperands();
   if (!((op == SpvOpImageRead && num_in_oprnds == 2) ||
+        (op == SpvOpImageFetch && num_in_oprnds == 2) ||
         (op == SpvOpImageWrite && num_in_oprnds == 3)))
     return;
   // Pull components from descriptor reference
@@ -686,7 +687,6 @@ void InstBindlessCheckPass::GenTexBuffCheckCode(
   if (image_ty_inst->GetSingleWordInOperand(kSpvTypeImageDepth) != 0) return;
   if (image_ty_inst->GetSingleWordInOperand(kSpvTypeImageArrayed) != 0) return;
   if (image_ty_inst->GetSingleWordInOperand(kSpvTypeImageMS) != 0) return;
-  if (image_ty_inst->GetSingleWordInOperand(kSpvTypeImageSampled) != 2) return;
   // Enable ImageQuery Capability if not yet enabled
   if (!get_feature_mgr()->HasCapability(SpvCapabilityInt64)) {
     std::unique_ptr<Instruction> cap_image_query_inst(new Instruction(
