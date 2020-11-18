@@ -173,7 +173,6 @@ static const int kInstErrorBuffAddrUnallocRef = 2;
 static const int kInstErrorBindlessBuffOOB = 3;
 static const int kInstErrorBuffOOBUniform = 4;
 static const int kInstErrorBuffOOBStorage = 5;
-static const int kInstErrorBuffOOBTexel = 6;
 
 // Direct Input Buffer Offsets
 //
