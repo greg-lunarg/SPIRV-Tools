@@ -765,7 +765,7 @@ void InstBindlessCheckPass::GenTexBuffCheckCode(
       builder.AddBinaryOp(GetBoolId(), SpvOpULessThan, coord_id, size_id);
   uint32_t error =
       (image_ty_inst->GetSingleWordInOperand(kSpvTypeImageSampled) == 2) ?
-      kInstErrorBuffOOBStorage : kInstErrorBuffOOBUniform;
+      kInstErrorBuffOOBStorageTexel : kInstErrorBuffOOBUniformTexel;
   uint32_t error_id = builder.GetUintConstantId(error);
   GenCheckCode(ult_inst->result_id(), error_id, coord_id, size_id, stage_idx,
                &ref, new_blocks);
