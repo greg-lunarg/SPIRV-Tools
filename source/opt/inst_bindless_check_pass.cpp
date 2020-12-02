@@ -36,6 +36,7 @@ static const int kSpvTypeImageDim = 1;
 static const int kSpvTypeImageDepth = 2;
 static const int kSpvTypeImageArrayed = 3;
 static const int kSpvTypeImageMS = 4;
+static const int kSpvTypeImageSampled = 5;
 }  // anonymous namespace
 
 // Avoid unused variable warning/error on Linux
