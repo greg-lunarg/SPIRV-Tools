@@ -400,6 +400,13 @@
         { "kind" : "IdRef", "name" : "'Function'" },
         { "kind" : "IdRef", "name" : "'Definition'" }
       ]
+    },
+    {
+      "opname" : "DebugSourceContinued",
+      "opcode" : 102,
+      "operands" : [
+        { "kind" : "IdRef", "name" : "'Text'", "quantifier" : "?" }
+      ]
     }
   ],
   "operand_kinds" : [
