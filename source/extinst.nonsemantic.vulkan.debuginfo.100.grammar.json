@@ -407,6 +407,21 @@
       "operands" : [
         { "kind" : "IdRef", "name" : "'Text'", "quantifier" : "?" }
       ]
+    },
+    {
+      "opname" : "DebugLine",
+      "opcode" : 103,
+      "operands" : [
+        { "kind" : "IdRef", "name" : "'Source'" },
+        { "kind" : "IdRef", "name" : "'LineStart'" },
+        { "kind" : "IdRef", "name" : "'LineEnd'" },
+        { "kind" : "IdRef", "name" : "'ColumnStart'" },
+        { "kind" : "IdRef", "name" : "'ColumnEnd'" }
+      ]
+    },
+    {
+      "opname" : "DebugNoLine",
+      "opcode" : 104
     }
   ],
   "operand_kinds" : [
