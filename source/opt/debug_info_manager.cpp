@@ -117,14 +117,14 @@ void DebugInfoManager::RegisterDbgFunction(Instruction* inst) {
         "Register DebugFunction for a function that already has DebugFunction");
     fn_id_to_dbg_fn_[fn_id] = inst;
   } else if (inst->GetVulkan100DebugOpcode() ==
-             NonSemanticVulkanDebugInfo100DebugFunctionDefinition) {
+             NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
     auto fn_id = inst->GetSingleWordOperand(
         kDebugFunctionDefinitionOperandOpFunctionIndex);
     auto fn_inst = GetDbgInst(inst->GetSingleWordOperand(
         kDebugFunctionDefinitionOperandDebugFunctionIndex));
     assert(fn_inst &&
            fn_inst->GetVulkan100DebugOpcode() ==
-               NonSemanticVulkanDebugInfo100DebugFunction);
+               NonSemanticShaderDebugInfo100DebugFunction);
     assert(fn_id_to_dbg_fn_.find(fn_id) == fn_id_to_dbg_fn_.end() &&
            "Register DebugFunctionDefinition for a function that already has "
            "DebugFunctionDefinition");
@@ -324,7 +324,7 @@ Instruction* DebugInfoManager::GetDebugOperationWithDeref() {
         deref_id,
         {
             {spv_operand_type_t::SPV_OPERAND_TYPE_TYPED_LITERAL_NUMBER,
-             {static_cast<uint32_t>(NonSemanticVulkanDebugInfo100Deref)}},
+             {static_cast<uint32_t>(NonSemanticShaderDebugInfo100Deref)}},
         }));
     if (context()->AreAnalysesValid(IRContext::Analysis::kAnalysisDefUse))
       context()->get_def_use_mgr()->AnalyzeInstDefUse(deref_const.get());
@@ -336,7 +336,7 @@ Instruction* DebugInfoManager::GetDebugOperationWithDeref() {
                        {SPV_OPERAND_TYPE_ID, {GetDbgSetImportId()}},
                        {SPV_OPERAND_TYPE_EXTENSION_INSTRUCTION_NUMBER,
                         {static_cast<uint32_t>(
-                            NonSemanticVulkanDebugInfo100DebugOperation)}},
+                            NonSemanticShaderDebugInfo100DebugOperation)}},
                        {SPV_OPERAND_TYPE_ID, {deref_id}},
                    }));
   }
@@ -620,7 +620,7 @@ uint32_t DebugInfoManager::GetVariableIdOfDebugValueUsedForDeclare(
                 operation->GetSingleWordOperand(
                     kDebugOperationOperandOperationIndex)));
 
-    if (operation_const->GetU32() != NonSemanticVulkanDebugInfo100Deref) {
+    if (operation_const->GetU32() != NonSemanticShaderDebugInfo100Deref) {
       return 0;
     }
   }
@@ -697,7 +697,7 @@ void DebugInfoManager::AnalyzeDebugInst(Instruction* inst) {
 
   if (inst->GetOpenCL100DebugOpcode() == OpenCLDebugInfo100DebugFunction ||
       inst->GetVulkan100DebugOpcode() ==
-          NonSemanticVulkanDebugInfo100DebugFunctionDefinition) {
+           NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
     RegisterDbgFunction(inst);
   }
 
@@ -710,13 +710,13 @@ void DebugInfoManager::AnalyzeDebugInst(Instruction* inst) {
 
   if (deref_operation_ == nullptr &&
       inst->GetVulkan100DebugOpcode() ==
-          NonSemanticVulkanDebugInfo100DebugOperation) {
+          NonSemanticShaderDebugInfo100DebugOperation) {
     const analysis::Constant* operation_const =
         context()->get_constant_mgr()->GetConstantFromInst(
             context()->get_def_use_mgr()->GetDef(inst->GetSingleWordOperand(
                 kDebugOperationOperandOperationIndex)));
 
-    if (operation_const->GetU32() != NonSemanticVulkanDebugInfo100Deref) {
+    if (operation_const->GetU32() != NonSemanticShaderDebugInfo100Deref) {
       deref_operation_ = inst;
     }
   }
@@ -837,7 +837,7 @@ void DebugInfoManager::ClearDebugInfo(Instruction* instr) {
     fn_id_to_dbg_fn_.erase(fn_id);
   }
   if (instr->GetVulkan100DebugOpcode() ==
-      NonSemanticVulkanDebugInfo100DebugFunction) {
+      NonSemanticShaderDebugInfo100DebugFunction) {
     auto fn_id = instr->GetSingleWordOperand(
         kDebugFunctionDefinitionOperandOpFunctionIndex);
     fn_id_to_dbg_fn_.erase(fn_id);
@@ -870,14 +870,14 @@ void DebugInfoManager::ClearDebugInfo(Instruction* instr) {
         break;
       } else if (instr != &*dbg_instr_itr &&
                  dbg_instr_itr->GetVulkan100DebugOpcode() ==
-                     NonSemanticVulkanDebugInfo100DebugOperation) {
+                     NonSemanticShaderDebugInfo100DebugOperation) {
         const analysis::Constant* operation_const =
             context()->get_constant_mgr()->GetConstantFromInst(
                 context()->get_def_use_mgr()->GetDef(
                     dbg_instr_itr->GetSingleWordOperand(
                         kDebugOperationOperandOperationIndex)));
 
-        if (operation_const->GetU32() == NonSemanticVulkanDebugInfo100Deref) {
+        if (operation_const->GetU32() == NonSemanticShaderDebugInfo100Deref) {
           deref_operation_ = &*dbg_instr_itr;
           break;
         }
