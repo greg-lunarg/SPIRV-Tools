@@ -17,7 +17,6 @@
 #include <utility>
 
 #include "DebugInfo.h"
-#include "NonSemanticVulkanDebugInfo100.h"
 #include "OpenCLDebugInfo100.h"
 #include "source/ext_inst.h"
 #include "source/opt/log.h"
@@ -244,14 +243,14 @@ bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
           }
         } else if (inst->ext_inst_type ==
                    SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
-          const NonSemanticVulkanDebugInfo100Instructions ext_inst_key =
-              NonSemanticVulkanDebugInfo100Instructions(ext_inst_index);
+          const NonSemanticShaderDebugInfo100Instructions ext_inst_key =
+            NonSemanticShaderDebugInfo100Instructions(ext_inst_index);
           switch (ext_inst_key) {
-            case NonSemanticVulkanDebugInfo100DebugDeclare:
-            case NonSemanticVulkanDebugInfo100DebugValue:
-            case NonSemanticVulkanDebugInfo100DebugScope:
-            case NonSemanticVulkanDebugInfo100DebugNoScope:
-            case NonSemanticVulkanDebugInfo100DebugFunctionDefinition: {
+            case NonSemanticShaderDebugInfo100DebugDeclare:
+            case NonSemanticShaderDebugInfo100DebugValue:
+            case NonSemanticShaderDebugInfo100DebugScope:
+            case NonSemanticShaderDebugInfo100DebugNoScope:
+            case NonSemanticShaderDebugInfo100DebugFunctionDefinition: {
               if (block_ == nullptr) {  // Inside function but outside blocks
                 Errorf(consumer_, src, loc,
                        "Debug info extension instruction found inside function "
