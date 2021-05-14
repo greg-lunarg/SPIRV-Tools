@@ -20,7 +20,7 @@
 
 #include "spirv/unified1/NonSemanticClspvReflection.h"
 
-#include "NonSemanticVulkanDebugInfo100.h"
+#include "spirv/unified1/NonSemanticShaderDebugInfo100.h"
 #include "OpenCLDebugInfo100.h"
 #include "source/common_debug_info.h"
 #include "source/diagnostic.h"

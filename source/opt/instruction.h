@@ -22,7 +22,7 @@
 #include <utility>
 #include <vector>
 
-#include "NonSemanticVulkanDebugInfo100.h"
+#include "spirv/unified1/NonSemanticShaderDebugInfo100.h"
 #include "OpenCLDebugInfo100.h"
 #include "source/common_debug_info.h"
 #include "source/latest_version_glsl_std_450_header.h"
@@ -554,8 +554,8 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
 
   // Returns debug opcode of an NonSemantic.Vulkan.DebugInfo.100 instruction. If
   // it is not an NonSemantic.Vulkan.DebugInfo.100 instruction, just returns
-  // NonSemanticVulkanDebugInfo100InstructionsMax.
-  NonSemanticVulkanDebugInfo100Instructions GetVulkan100DebugOpcode() const;
+  // NonSemanticShaderDebugInfo100InstructionsMax.
+  NonSemanticShaderDebugInfo100Instructions GetVulkan100DebugOpcode() const;
 
   // Returns debug opcode of an OpenCL.100.DebugInfo or
   // NonSemantic.Vulkan.DebugInfo.100 instruction. Since these overlap, we
@@ -569,7 +569,7 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
   // Returns true if it is an NonSemantic.Vulkan.DebugInfo.100 instruction.
   bool IsVulkan100DebugInstr() const {
     return GetVulkan100DebugOpcode() !=
-           NonSemanticVulkanDebugInfo100InstructionsMax;
+        NonSemanticShaderDebugInfo100InstructionsMax;
   }
   bool IsCommonDebugInstr() const {
     return GetCommonDebugOpcode() != CommonDebugInfoInstructionsMax;

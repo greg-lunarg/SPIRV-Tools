@@ -17,7 +17,7 @@
 #include <cassert>
 
 #include "DebugInfo.h"
-#include "NonSemanticVulkanDebugInfo100.h"
+#include "spirv/unified1/NonSemanticShaderDebugInfo100.h"
 #include "OpenCLDebugInfo100.h"
 #include "source/diagnostic.h"
 #include "source/opcode.h"
@@ -52,14 +52,14 @@ spv_result_t ModuleScopedInstructions(ValidationState_t& _,
           }
         } else if (inst->ext_inst_type() ==
                    SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
-          const NonSemanticVulkanDebugInfo100Instructions ext_inst_key =
-              NonSemanticVulkanDebugInfo100Instructions(ext_inst_index);
-          if (ext_inst_key == NonSemanticVulkanDebugInfo100DebugScope ||
-              ext_inst_key == NonSemanticVulkanDebugInfo100DebugNoScope ||
-              ext_inst_key == NonSemanticVulkanDebugInfo100DebugDeclare ||
-              ext_inst_key == NonSemanticVulkanDebugInfo100DebugValue ||
+          const NonSemanticShaderDebugInfo100Instructions ext_inst_key =
+              NonSemanticShaderDebugInfo100Instructions(ext_inst_index);
+          if (ext_inst_key == NonSemanticShaderDebugInfo100DebugScope ||
+              ext_inst_key == NonSemanticShaderDebugInfo100DebugNoScope ||
+              ext_inst_key == NonSemanticShaderDebugInfo100DebugDeclare ||
+              ext_inst_key == NonSemanticShaderDebugInfo100DebugValue ||
               ext_inst_key ==
-                  NonSemanticVulkanDebugInfo100DebugFunctionDefinition) {
+                  NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
             local_debug_info = true;
           }
         } else {
@@ -257,14 +257,14 @@ spv_result_t FunctionScopedInstructions(ValidationState_t& _,
             }
           } else if (inst->ext_inst_type() ==
                      SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
-            const NonSemanticVulkanDebugInfo100Instructions ext_inst_key =
-                NonSemanticVulkanDebugInfo100Instructions(ext_inst_index);
-            if (ext_inst_key == NonSemanticVulkanDebugInfo100DebugScope ||
-                ext_inst_key == NonSemanticVulkanDebugInfo100DebugNoScope ||
-                ext_inst_key == NonSemanticVulkanDebugInfo100DebugDeclare ||
-                ext_inst_key == NonSemanticVulkanDebugInfo100DebugValue ||
+            const NonSemanticShaderDebugInfo100Instructions ext_inst_key =
+                NonSemanticShaderDebugInfo100Instructions(ext_inst_index);
+            if (ext_inst_key == NonSemanticShaderDebugInfo100DebugScope ||
+                ext_inst_key == NonSemanticShaderDebugInfo100DebugNoScope ||
+                ext_inst_key == NonSemanticShaderDebugInfo100DebugDeclare ||
+                ext_inst_key == NonSemanticShaderDebugInfo100DebugValue ||
                 ext_inst_key ==
-                    NonSemanticVulkanDebugInfo100DebugFunctionDefinition) {
+                    NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
               local_debug_info = true;
             }
           } else {

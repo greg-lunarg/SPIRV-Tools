@@ -16,7 +16,6 @@
 
 #include <initializer_list>
 
-#include "NonSemanticVulkanDebugInfo100.h"
 #include "OpenCLDebugInfo100.h"
 #include "source/disassemble.h"
 #include "source/opt/fold.h"
@@ -620,22 +619,22 @@ OpenCLDebugInfo100Instructions Instruction::GetOpenCL100DebugOpcode() const {
       GetSingleWordInOperand(kExtInstInstructionInIdx));
 }
 
-NonSemanticVulkanDebugInfo100Instructions Instruction::GetVulkan100DebugOpcode()
+NonSemanticShaderDebugInfo100Instructions Instruction::GetVulkan100DebugOpcode()
     const {
   if (opcode() != SpvOpExtInst) {
-    return NonSemanticVulkanDebugInfo100InstructionsMax;
+    return NonSemanticShaderDebugInfo100InstructionsMax;
   }
 
   if (!context()->get_feature_mgr()->GetExtInstImportId_Vulkan100DebugInfo()) {
-    return NonSemanticVulkanDebugInfo100InstructionsMax;
+    return NonSemanticShaderDebugInfo100InstructionsMax;
   }
 
   if (GetSingleWordInOperand(kExtInstSetIdInIdx) !=
       context()->get_feature_mgr()->GetExtInstImportId_Vulkan100DebugInfo()) {
-    return NonSemanticVulkanDebugInfo100InstructionsMax;
+    return NonSemanticShaderDebugInfo100InstructionsMax;
   }
 
-  return NonSemanticVulkanDebugInfo100Instructions(
+  return NonSemanticShaderDebugInfo100Instructions(
       GetSingleWordInOperand(kExtInstInstructionInIdx));
 }
 
