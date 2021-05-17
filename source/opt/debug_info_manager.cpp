@@ -18,7 +18,7 @@
 
 #include "source/opt/ir_context.h"
 
-// Constants for OpenCL.DebugInfo.100 & NonSemantic.Vulkan.DebugInfo.100
+// Constants for OpenCL.DebugInfo.100 & NonSemantic.Shader.DebugInfo.100
 // extension instructions.
 
 static const uint32_t kOpLineOperandLineIndex = 1;
@@ -116,14 +116,14 @@ void DebugInfoManager::RegisterDbgFunction(Instruction* inst) {
         fn_id_to_dbg_fn_.find(fn_id) == fn_id_to_dbg_fn_.end() &&
         "Register DebugFunction for a function that already has DebugFunction");
     fn_id_to_dbg_fn_[fn_id] = inst;
-  } else if (inst->GetVulkan100DebugOpcode() ==
+  } else if (inst->GetShader100DebugOpcode() ==
              NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
     auto fn_id = inst->GetSingleWordOperand(
         kDebugFunctionDefinitionOperandOpFunctionIndex);
     auto fn_inst = GetDbgInst(inst->GetSingleWordOperand(
         kDebugFunctionDefinitionOperandDebugFunctionIndex));
     assert(fn_inst &&
-           fn_inst->GetVulkan100DebugOpcode() ==
+           fn_inst->GetShader100DebugOpcode() ==
                NonSemanticShaderDebugInfo100DebugFunction);
     assert(fn_id_to_dbg_fn_.find(fn_id) == fn_id_to_dbg_fn_.end() &&
            "Register DebugFunctionDefinition for a function that already has "
@@ -155,7 +155,7 @@ uint32_t DebugInfoManager::CreateDebugInlinedAt(const Instruction* line,
   spv_operand_type_t line_number_type =
       spv_operand_type_t::SPV_OPERAND_TYPE_LITERAL_INTEGER;
 
-  // in NonSemantic.Vulkan.DebugInfo.100, all constants are IDs of OpConstant,
+  // in NonSemantic.Shader.DebugInfo.100, all constants are IDs of OpConstant,
   // not literals
   if (setId ==
       context()->get_feature_mgr()->GetExtInstImportId_Vulkan100DebugInfo())
@@ -696,7 +696,7 @@ void DebugInfoManager::AnalyzeDebugInst(Instruction* inst) {
   RegisterDbgInst(inst);
 
   if (inst->GetOpenCL100DebugOpcode() == OpenCLDebugInfo100DebugFunction ||
-      inst->GetVulkan100DebugOpcode() ==
+      inst->GetShader100DebugOpcode() ==
            NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
     RegisterDbgFunction(inst);
   }
@@ -709,7 +709,7 @@ void DebugInfoManager::AnalyzeDebugInst(Instruction* inst) {
   }
 
   if (deref_operation_ == nullptr &&
-      inst->GetVulkan100DebugOpcode() ==
+      inst->GetShader100DebugOpcode() ==
           NonSemanticShaderDebugInfo100DebugOperation) {
     const analysis::Constant* operation_const =
         context()->get_constant_mgr()->GetConstantFromInst(
@@ -836,7 +836,7 @@ void DebugInfoManager::ClearDebugInfo(Instruction* instr) {
         instr->GetSingleWordOperand(kDebugFunctionOperandFunctionIndex);
     fn_id_to_dbg_fn_.erase(fn_id);
   }
-  if (instr->GetVulkan100DebugOpcode() ==
+  if (instr->GetShader100DebugOpcode() ==
       NonSemanticShaderDebugInfo100DebugFunction) {
     auto fn_id = instr->GetSingleWordOperand(
         kDebugFunctionDefinitionOperandOpFunctionIndex);
@@ -869,7 +869,7 @@ void DebugInfoManager::ClearDebugInfo(Instruction* instr) {
         deref_operation_ = &*dbg_instr_itr;
         break;
       } else if (instr != &*dbg_instr_itr &&
-                 dbg_instr_itr->GetVulkan100DebugOpcode() ==
+                 dbg_instr_itr->GetShader100DebugOpcode() ==
                      NonSemanticShaderDebugInfo100DebugOperation) {
         const analysis::Constant* operation_const =
             context()->get_constant_mgr()->GetConstantFromInst(
