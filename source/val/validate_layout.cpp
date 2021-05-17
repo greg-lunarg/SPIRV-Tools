@@ -51,7 +51,7 @@ spv_result_t ModuleScopedInstructions(ValidationState_t& _,
             local_debug_info = true;
           }
         } else if (inst->ext_inst_type() ==
-                   SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
+                   SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100) {
           const NonSemanticShaderDebugInfo100Instructions ext_inst_key =
               NonSemanticShaderDebugInfo100Instructions(ext_inst_index);
           if (ext_inst_key == NonSemanticShaderDebugInfo100DebugScope ||
@@ -256,7 +256,7 @@ spv_result_t FunctionScopedInstructions(ValidationState_t& _,
               local_debug_info = true;
             }
           } else if (inst->ext_inst_type() ==
-                     SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
+                     SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100) {
             const NonSemanticShaderDebugInfo100Instructions ext_inst_key =
                 NonSemanticShaderDebugInfo100Instructions(ext_inst_index);
             if (ext_inst_key == NonSemanticShaderDebugInfo100DebugScope ||

@@ -32,7 +32,7 @@ const uint32_t kLoadBaseIndex = 0;
 const uint32_t kPointerTypeStorageClassIndex = 0;
 const uint32_t kTypeImageSampledIndex = 5;
 
-// Constants for OpenCL.DebugInfo.100 / NonSemantic.Vulkan.DebugInfo.100
+// Constants for OpenCL.DebugInfo.100 / NonSemantic.Shader.DebugInfo.100
 // extension instructions.
 const uint32_t kExtInstSetIdInIdx = 0;
 const uint32_t kExtInstInstructionInIdx = 1;
@@ -619,7 +619,7 @@ OpenCLDebugInfo100Instructions Instruction::GetOpenCL100DebugOpcode() const {
       GetSingleWordInOperand(kExtInstInstructionInIdx));
 }
 
-NonSemanticShaderDebugInfo100Instructions Instruction::GetVulkan100DebugOpcode()
+NonSemanticShaderDebugInfo100Instructions Instruction::GetShader100DebugOpcode()
     const {
   if (opcode() != SpvOpExtInst) {
     return NonSemanticShaderDebugInfo100InstructionsMax;
