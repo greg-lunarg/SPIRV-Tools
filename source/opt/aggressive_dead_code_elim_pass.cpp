@@ -145,7 +145,7 @@ bool AggressiveDCEPass::AllExtensionsSupported() const {
     if (extensions_allowlist_.find(extName) == extensions_allowlist_.end())
       return false;
   }
-  // only allow NonSemantic.Vulkan.DebugInfo.100, we cannot safely optimise
+  // only allow NonSemantic.Shader.DebugInfo.100, we cannot safely optimise
   // around unknown extended
   // instruction sets even if they are non-semantic
   for (auto& inst : context()->module()->ext_inst_imports()) {
@@ -154,7 +154,7 @@ bool AggressiveDCEPass::AllExtensionsSupported() const {
     const char* extension_name =
         reinterpret_cast<const char*>(&inst.GetInOperand(0).words[0]);
     if (0 == std::strncmp(extension_name, "NonSemantic.", 12) &&
-        0 != std::strncmp(extension_name, "NonSemantic.Vulkan.DebugInfo.100",
+        0 != std::strncmp(extension_name, "NonSemantic.Shader.DebugInfo.100",
                           32)) {
       return false;
     }

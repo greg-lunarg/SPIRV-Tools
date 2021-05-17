@@ -405,7 +405,7 @@ bool InlinePass::InlineEntryBlock(
   while (callee_inst_itr != callee_first_block->end()) {
     // don't inline function definition links, the calling function is not a
     // definition
-    if (callee_inst_itr->GetVulkan100DebugOpcode() ==
+    if (callee_inst_itr->GetShader100DebugOpcode() ==
         NonSemanticShaderDebugInfo100DebugFunctionDefinition) {
       ++callee_inst_itr;
       continue;

@@ -55,7 +55,7 @@ bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
     const uint32_t ext_inst_index = inst->words[kExtInstSetIndex];
     if (inst->ext_inst_type == SPV_EXT_INST_TYPE_OPENCL_DEBUGINFO_100 ||
         inst->ext_inst_type ==
-            SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
+            SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100) {
       const CommonDebugInfoInstructions ext_inst_key =
           CommonDebugInfoInstructions(ext_inst_index);
       if (ext_inst_key == CommonDebugInfoDebugScope) {
@@ -242,7 +242,7 @@ bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
             }
           }
         } else if (inst->ext_inst_type ==
-                   SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100) {
+                   SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100) {
           const NonSemanticShaderDebugInfo100Instructions ext_inst_key =
             NonSemanticShaderDebugInfo100Instructions(ext_inst_index);
           switch (ext_inst_key) {

@@ -56,7 +56,7 @@ static const spv_ext_inst_group_t kGroups_1_0[] = {
      debuginfo_entries},
     {SPV_EXT_INST_TYPE_OPENCL_DEBUGINFO_100,
      ARRAY_SIZE(opencl_debuginfo_100_entries), opencl_debuginfo_100_entries},
-    {SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100,
+    {SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100,
      ARRAY_SIZE(nonsemantic_vulkan_debuginfo_100_entries),
      nonsemantic_vulkan_debuginfo_100_entries},
     {SPV_EXT_INST_TYPE_NONSEMANTIC_CLSPVREFLECTION,
@@ -130,8 +130,8 @@ spv_ext_inst_type_t spvExtInstImportTypeGet(const char* name) {
   if (!strcmp("OpenCL.DebugInfo.100", name)) {
     return SPV_EXT_INST_TYPE_OPENCL_DEBUGINFO_100;
   }
-  if (!strcmp("NonSemantic.Vulkan.DebugInfo.100", name)) {
-    return SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100;
+  if (!strcmp("NonSemantic.Shader.DebugInfo.100", name)) {
+    return SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100;
   }
   if (!strncmp("NonSemantic.ClspvReflection.", name, 28)) {
     return SPV_EXT_INST_TYPE_NONSEMANTIC_CLSPVREFLECTION;
@@ -146,7 +146,7 @@ spv_ext_inst_type_t spvExtInstImportTypeGet(const char* name) {
 
 bool spvExtInstIsNonSemantic(const spv_ext_inst_type_t type) {
   if (type == SPV_EXT_INST_TYPE_NONSEMANTIC_UNKNOWN ||
-      type == SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100 ||
+      type == SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100 ||
       type == SPV_EXT_INST_TYPE_NONSEMANTIC_CLSPVREFLECTION) {
     return true;
   }
@@ -155,7 +155,7 @@ bool spvExtInstIsNonSemantic(const spv_ext_inst_type_t type) {
 
 bool spvExtInstIsDebugInfo(const spv_ext_inst_type_t type) {
   if (type == SPV_EXT_INST_TYPE_OPENCL_DEBUGINFO_100 ||
-      type == SPV_EXT_INST_TYPE_NONSEMANTIC_VULKAN_DEBUGINFO_100 ||
+      type == SPV_EXT_INST_TYPE_NONSEMANTIC_SHADER_DEBUGINFO_100 ||
       type == SPV_EXT_INST_TYPE_DEBUGINFO) {
     return true;
   }
