@@ -72,7 +72,7 @@ Instruction::Instruction(IRContext* c, const spv_parsed_instruction_t& inst,
       unique_id_(c->TakeNextUniqueId()),
       dbg_line_insts_(std::move(dbg_line)),
       dbg_scope_(kNoDebugScope, kNoInlinedAt) {
-  assert((!IsDebugLineInst(opcode_) || dbg_line.empty()) &&
+  assert((!IsDebugLineInst() || dbg_line.empty()) &&
          "Op(No)Line attaching to Op(No)Line found");
   for (uint32_t i = 0; i < inst.num_operands; ++i) {
     const auto& current_payload = inst.operands[i];
@@ -507,7 +507,7 @@ void Instruction::UpdateLexicalScope(uint32_t scope) {
   for (auto& i : dbg_line_insts_) {
     i.dbg_scope_.SetLexicalScope(scope);
   }
-  if (!IsDebugLineInst(opcode()) &&
+  if (!IsDebugLineInst() &&
       context()->AreAnalysesValid(IRContext::kAnalysisDebugInfo)) {
     context()->get_debug_info_mgr()->AnalyzeDebugInst(this);
   }
@@ -518,7 +518,7 @@ void Instruction::UpdateDebugInlinedAt(uint32_t new_inlined_at) {
   for (auto& i : dbg_line_insts_) {
     i.dbg_scope_.SetInlinedAt(new_inlined_at);
   }
-  if (!IsDebugLineInst(opcode()) &&
+  if (!IsDebugLineInst() &&
       context()->AreAnalysesValid(IRContext::kAnalysisDebugInfo)) {
     context()->get_debug_info_mgr()->AnalyzeDebugInst(this);
   }
@@ -530,10 +530,32 @@ void Instruction::UpdateDebugInfoFrom(const Instruction* from) {
   if (!from->dbg_line_insts().empty())
     dbg_line_insts().push_back(from->dbg_line_insts().back());
   SetDebugScope(from->GetDebugScope());
-  if (!IsDebugLineInst(opcode()) &&
+  if (!IsDebugLineInst() &&
       context()->AreAnalysesValid(IRContext::kAnalysisDebugInfo)) {
     context()->get_debug_info_mgr()->AnalyzeDebugInst(this);
   }
+}
+
+bool Instruction::IsDebugLineInst() {
+  if (spvtools::opt::IsDebugLineInst(opcode()))
+    return true;
+  NonSemanticShaderDebugInfo100Instructions ext_opt = GetShader100DebugOpcode();
+  return ((ext_opt == NonSemanticShaderDebugInfo100DebugLine) ||
+    (ext_opt == NonSemanticShaderDebugInfo100DebugNoLine));
+}
+
+bool Instruction::IsLine() {
+  if (opcode() == SpvOpLine)
+    return true;
+  NonSemanticShaderDebugInfo100Instructions ext_opt = GetShader100DebugOpcode();
+  return ext_opt == NonSemanticShaderDebugInfo100DebugLine;
+}
+
+bool Instruction::IsNoLine() {
+  if (opcode() == SpvOpNoLine)
+    return true;
+  NonSemanticShaderDebugInfo100Instructions ext_opt = GetShader100DebugOpcode();
+  return ext_opt == NonSemanticShaderDebugInfo100DebugNoLine;
 }
 
 Instruction* Instruction::InsertBefore(std::unique_ptr<Instruction>&& inst) {
