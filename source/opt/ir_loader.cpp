@@ -37,9 +37,9 @@ IrLoader::IrLoader(const MessageConsumer& consumer, Module* m)
       inst_index_(0),
       last_dbg_scope_(kNoDebugScope, kNoInlinedAt) {}
 
-bool IsDebugLineInst(const spv_parsed_instruction_t* inst) {
+bool IsLineInst(const spv_parsed_instruction_t* inst) {
   const auto opcode = static_cast<SpvOp>(inst->opcode);
-  if (IsDebugLineInst(opcode))
+  if (IsOpLineInst(opcode))
     return true;
   if (opcode != SpvOpExtInst)
     return false;
@@ -54,7 +54,7 @@ bool IsDebugLineInst(const spv_parsed_instruction_t* inst) {
 
 bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
   ++inst_index_;
-  if (IsDebugLineInst(inst)) {
+  if (IsLineInst(inst)) {
     module()->SetContainsDebugInfo();
     last_line_inst_.reset();
     dbg_line_info_.push_back(
