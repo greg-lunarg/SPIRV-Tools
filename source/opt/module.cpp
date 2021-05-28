@@ -151,8 +151,7 @@ void Module::ToBinary(std::vector<uint32_t>* binary, bool skip_nop) const {
                      this](const Instruction* i) {
     // Skip emitting line instructions between merge and branch instructions.
     auto opcode = i->opcode();
-    if (between_merge_and_branch &&
-        (opcode == SpvOpLine || opcode == SpvOpNoLine)) {
+    if (between_merge_and_branch && i->IsLineInst()) {
       return;
     }
     between_merge_and_branch = false;
