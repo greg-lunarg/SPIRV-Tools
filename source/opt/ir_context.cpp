@@ -930,7 +930,7 @@ void IRContext::EmitErrorMessage(std::string message, Instruction* inst) {
   while (line_inst != nullptr) {  // Stop at the beginning of the basic block.
     if (!line_inst->dbg_line_insts().empty()) {
       line_inst = &line_inst->dbg_line_insts().back();
-      if (line_inst->opcode() == SpvOpNoLine) {
+      if (line_inst->IsNoLine()) {
         line_inst = nullptr;
       }
       break;

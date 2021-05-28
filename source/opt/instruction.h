@@ -308,6 +308,12 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
   inline const DebugScope& GetDebugScope() const { return dbg_scope_; }
   // Updates DebugInlinedAt of DebugScope and OpLine.
   void UpdateDebugInlinedAt(uint32_t new_inlined_at);
+  // Return true if Op[No]Line or Shader100:Debug[No]Line
+  bool IsDebugLineInst();
+  // Return true if OpLine or Shader100:DebugLine
+  bool IsLine();
+  // Return true if OpNoLine or Shader100:DebugNoLine
+  bool IsNoLine();
   inline uint32_t GetDebugInlinedAt() const {
     return dbg_scope_.GetInlinedAt();
   }
