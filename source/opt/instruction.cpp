@@ -536,12 +536,16 @@ void Instruction::UpdateDebugInfoFrom(const Instruction* from) {
   }
 }
 
-bool Instruction::IsLineInst() const {
-  if (spvtools::opt::IsOpLineInst(opcode()))
-    return true;
+bool Instruction::IsDebugLineInst() const {
   NonSemanticShaderDebugInfo100Instructions ext_opt = GetShader100DebugOpcode();
   return ((ext_opt == NonSemanticShaderDebugInfo100DebugLine) ||
     (ext_opt == NonSemanticShaderDebugInfo100DebugNoLine));
+}
+
+bool Instruction::IsLineInst() const {
+  if (spvtools::opt::IsOpLineInst(opcode()))
+    return true;
+  return IsDebugLineInst();
 }
 
 bool Instruction::IsLine() const {
@@ -647,12 +651,12 @@ NonSemanticShaderDebugInfo100Instructions Instruction::GetShader100DebugOpcode()
     return NonSemanticShaderDebugInfo100InstructionsMax;
   }
 
-  if (!context()->get_feature_mgr()->GetExtInstImportId_Vulkan100DebugInfo()) {
+  if (!context()->get_feature_mgr()->GetExtInstImportId_Shader100DebugInfo()) {
     return NonSemanticShaderDebugInfo100InstructionsMax;
   }
 
   if (GetSingleWordInOperand(kExtInstSetIdInIdx) !=
-      context()->get_feature_mgr()->GetExtInstImportId_Vulkan100DebugInfo()) {
+      context()->get_feature_mgr()->GetExtInstImportId_Shader100DebugInfo()) {
     return NonSemanticShaderDebugInfo100InstructionsMax;
   }
 
@@ -667,16 +671,16 @@ CommonDebugInfoInstructions Instruction::GetCommonDebugOpcode() const {
 
   const uint32_t opencl_set_id =
       context()->get_feature_mgr()->GetExtInstImportId_OpenCL100DebugInfo();
-  const uint32_t vulkan_set_id =
-      context()->get_feature_mgr()->GetExtInstImportId_Vulkan100DebugInfo();
+  const uint32_t shader_set_id =
+      context()->get_feature_mgr()->GetExtInstImportId_Shader100DebugInfo();
 
-  if (!opencl_set_id && !vulkan_set_id) {
+  if (!opencl_set_id && !shader_set_id) {
     return CommonDebugInfoInstructionsMax;
   }
 
   const uint32_t used_set_id = GetSingleWordInOperand(kExtInstSetIdInIdx);
 
-  if (used_set_id != opencl_set_id && used_set_id != vulkan_set_id) {
+  if (used_set_id != opencl_set_id && used_set_id != shader_set_id) {
     return CommonDebugInfoInstructionsMax;
   }
 
