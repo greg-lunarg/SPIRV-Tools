@@ -218,6 +218,8 @@ Instruction* IRContext::KillInst(Instruction* inst) {
 void IRContext::CollectNonSemanticTree(
     Instruction* inst, std::unordered_set<Instruction*>* to_kill) {
   if (!inst->HasResultId()) return;
+  // Debug[No]Line result id is not used, so we are done
+  if (inst->IsDebugLineInst()) return;
   std::vector<Instruction*> work_list;
   std::unordered_set<Instruction*> seen;
   work_list.push_back(inst);
