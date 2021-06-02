@@ -72,8 +72,6 @@ Instruction::Instruction(IRContext* c, const spv_parsed_instruction_t& inst,
       unique_id_(c->TakeNextUniqueId()),
       dbg_line_insts_(std::move(dbg_line)),
       dbg_scope_(kNoDebugScope, kNoInlinedAt) {
-  assert((!IsLineInst() || dbg_line.empty()) &&
-         "Op(No)Line attaching to Op(No)Line found");
   for (uint32_t i = 0; i < inst.num_operands; ++i) {
     const auto& current_payload = inst.operands[i];
     std::vector<uint32_t> words(
@@ -81,6 +79,8 @@ Instruction::Instruction(IRContext* c, const spv_parsed_instruction_t& inst,
         inst.words + current_payload.offset + current_payload.num_words);
     operands_.emplace_back(current_payload.type, std::move(words));
   }
+  assert((!IsLineInst() || dbg_line.empty()) &&
+    "Op(No)Line attaching to Op(No)Line found");
 }
 
 Instruction::Instruction(IRContext* c, const spv_parsed_instruction_t& inst,
@@ -123,6 +123,7 @@ Instruction::Instruction(IRContext* c, SpvOp op, uint32_t ty_id,
 
 Instruction::Instruction(Instruction&& that)
     : utils::IntrusiveNodeBase<Instruction>(),
+      context_(that.context_),
       opcode_(that.opcode_),
       has_type_id_(that.has_type_id_),
       has_result_id_(that.has_result_id_),
@@ -136,6 +137,7 @@ Instruction::Instruction(Instruction&& that)
 }
 
 Instruction& Instruction::operator=(Instruction&& that) {
+  context_ = that.context_;
   opcode_ = that.opcode_;
   has_type_id_ = that.has_type_id_;
   has_result_id_ = that.has_result_id_;

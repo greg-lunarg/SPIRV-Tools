@@ -57,8 +57,7 @@ bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
   if (IsLineInst(inst)) {
     module()->SetContainsDebugInfo();
     last_line_inst_.reset();
-    dbg_line_info_.push_back(
-        Instruction(module()->context(), *inst, last_dbg_scope_));
+    dbg_line_info_.emplace_back(module()->context(), *inst, last_dbg_scope_);
     return true;
   }
 
