@@ -156,6 +156,8 @@ Instruction* Instruction::Clone(IRContext* c) const {
   clone->unique_id_ = c->TakeNextUniqueId();
   clone->operands_ = operands_;
   clone->dbg_line_insts_ = dbg_line_insts_;
+  for (auto& i : clone->dbg_line_insts_)
+    i.unique_id_ = c->TakeNextUniqueId();
   clone->dbg_scope_ = dbg_scope_;
   return clone;
 }
@@ -526,11 +528,21 @@ void Instruction::UpdateDebugInlinedAt(uint32_t new_inlined_at) {
   }
 }
 
+void Instruction::ClearDbgLineInsts() {
+  for (auto &l_inst : dbg_line_insts_)
+    context()->get_def_use_mgr()->ClearInst(&l_inst);
+  clear_dbg_line_insts();
+}
+
 void Instruction::UpdateDebugInfoFrom(const Instruction* from) {
   if (from == nullptr) return;
-  clear_dbg_line_insts();
-  if (!from->dbg_line_insts().empty())
+  ClearDbgLineInsts();
+  if (!from->dbg_line_insts().empty()) {
     dbg_line_insts().push_back(from->dbg_line_insts().back());
+    dbg_line_insts().back().unique_id_ = context()->TakeNextUniqueId();
+  }
+  //for (auto &l_inst : dbg_line_insts())
+  //  context()->get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
   SetDebugScope(from->GetDebugScope());
   if (!IsLineInst() &&
       context()->AreAnalysesValid(IRContext::kAnalysisDebugInfo)) {
