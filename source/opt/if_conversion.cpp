@@ -129,7 +129,10 @@ Pass::Status IfConversion::Process() {
         Instruction* select = builder.AddSelect(phi->type_id(), condition,
                                                 true_value->result_id(),
                                                 false_value->result_id());
+        context()->get_def_use_mgr()->AnalyzeInstDefUse(select);
         select->UpdateDebugInfoFrom(phi);
+        for (auto &l_inst : select->dbg_line_insts())
+          context()->get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
         context()->ReplaceAllUsesWith(phi->result_id(), select->result_id());
         to_kill.push_back(phi);
         modified = true;

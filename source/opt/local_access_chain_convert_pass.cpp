@@ -96,6 +96,8 @@ bool LocalAccessChainConvertPass::ReplaceAccessChainLoad(
   }
 
   new_inst[0]->UpdateDebugInfoFrom(original_load);
+  for (auto &l_inst : new_inst[0]->dbg_line_insts())
+    context()->get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
   context()->get_decoration_mgr()->CloneDecorations(
       original_load->result_id(), ldResultId, {SpvDecorationRelaxedPrecision});
   original_load->InsertBefore(std::move(new_inst));
@@ -280,10 +282,14 @@ Pass::Status LocalAccessChainConvertPass::ConvertLocalAccessChains(
           ii = ii.InsertBefore(std::move(newInsts));
           for (size_t i = 0; i < num_of_instructions_to_skip; ++i) {
             ii->UpdateDebugInfoFrom(store);
+            for (auto &l_inst : ii->dbg_line_insts())
+              context()->get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
             context()->get_debug_info_mgr()->AnalyzeDebugInst(&*ii);
             ++ii;
           }
           ii->UpdateDebugInfoFrom(store);
+          for (auto &l_inst : ii->dbg_line_insts())
+            context()->get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
           context()->get_debug_info_mgr()->AnalyzeDebugInst(&*ii);
           modified = true;
         } break;
