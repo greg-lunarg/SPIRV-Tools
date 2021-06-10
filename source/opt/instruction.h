@@ -619,9 +619,9 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
   uint32_t unique_id_;  // Unique instruction id
   // All logical operands, including result type id and result id.
   OperandList operands_;
-  // Opline and OpNoLine instructions preceding this instruction. Note that for
-  // Instructions representing OpLine or OpNonLine itself, this field should be
-  // empty.
+  // Op[No]Line or Debug[No]Line instructions preceding this instruction. Note
+  // that for Instructions representing Op[No]Line or Debug[No]Line themselves,
+  // this field should be empty.
   std::vector<Instruction> dbg_line_insts_;
 
   // DebugScope that wraps this instruction.
