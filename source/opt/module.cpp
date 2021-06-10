@@ -192,7 +192,7 @@ void Module::ToBinary(std::vector<uint32_t>* binary, bool skip_nop) const {
     if (opcode == SpvOpLabel) {
       between_label_and_phi_var = true;
     } else if (opcode != SpvOpVariable && opcode != SpvOpPhi &&
-               !i->IsLineInst()) {
+               !spvtools::opt::IsOpLineInst(opcode)) {
       between_label_and_phi_var = false;
     }
 
