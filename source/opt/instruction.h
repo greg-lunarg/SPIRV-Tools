@@ -306,6 +306,8 @@ class Instruction : public utils::IntrusiveNodeBase<Instruction> {
   // Sets DebugScope.
   inline void SetDebugScope(const DebugScope& scope);
   inline const DebugScope& GetDebugScope() const { return dbg_scope_; }
+  // Add debug line inst. Renew result id if Debug[No]Line
+  void AddDebugLine(const Instruction* inst);
   // Updates DebugInlinedAt of DebugScope and OpLine.
   void UpdateDebugInlinedAt(uint32_t new_inlined_at);
   // Clear line-related debug instructions attached to this instruction
