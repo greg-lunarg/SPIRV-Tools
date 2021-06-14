@@ -250,6 +250,8 @@ bool ScalarReplacementPass::ReplaceWholeLoad(
     get_def_use_mgr()->AnalyzeInstDefUse(&*where);
     context()->set_instr_block(&*where, block);
     where->UpdateDebugInfoFrom(load);
+    for (auto &l_inst : where->dbg_line_insts())
+      get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
     loads.push_back(&*where);
   }
 
@@ -269,6 +271,8 @@ bool ScalarReplacementPass::ReplaceWholeLoad(
   where = where.InsertBefore(std::move(compositeConstruct));
   get_def_use_mgr()->AnalyzeInstDefUse(&*where);
   where->UpdateDebugInfoFrom(load);
+  for (auto &l_inst : where->dbg_line_insts())
+    get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
   context()->set_instr_block(&*where, block);
   context()->ReplaceAllUsesWith(load->result_id(), compositeId);
   return true;
@@ -506,6 +510,8 @@ void ScalarReplacementPass::CreateVariable(
 
   // Update the DebugInfo debug information.
   inst->UpdateDebugInfoFrom(varInst);
+  for (auto &l_inst : inst->dbg_line_insts())
+    get_def_use_mgr()->AnalyzeInstDefUse(&l_inst);
 
   replacements->push_back(inst);
 }

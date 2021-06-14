@@ -266,6 +266,16 @@ void DefUseManager::EraseUseRecordsOfOperandIds(const Instruction* inst) {
 
 bool operator==(const DefUseManager& lhs, const DefUseManager& rhs) {
   if (lhs.id_to_def_ != rhs.id_to_def_) {
+    for (auto p : lhs.id_to_def_) {
+      if (rhs.id_to_def_.find(p.first) == rhs.id_to_def_.end()) {
+        return false;
+      }
+    }
+    for (auto p : rhs.id_to_def_) {
+      if (lhs.id_to_def_.find(p.first) == lhs.id_to_def_.end()) {
+        return false;
+      }
+    }
     return false;
   }
 
