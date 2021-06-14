@@ -113,6 +113,8 @@ bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
         (!spv_inst->dbg_line_insts().back().IsNoLine())) {
       last_line_inst_ = std::unique_ptr<Instruction>(
           spv_inst->dbg_line_insts().back().Clone(module()->context()));
+      if (last_line_inst_->IsDebugLineInst())
+        last_line_inst_->SetResultId(module()->context()->TakeNextId());
     }
     dbg_line_info_.clear();
   } else if (last_line_inst_ != nullptr) {
@@ -120,6 +122,8 @@ bool IrLoader::AddInstruction(const spv_parsed_instruction_t* inst) {
     spv_inst->dbg_line_insts().push_back(*last_line_inst_);
     last_line_inst_ = std::unique_ptr<Instruction>(
         spv_inst->dbg_line_insts().back().Clone(module()->context()));
+    if (last_line_inst_->IsDebugLineInst())
+      last_line_inst_->SetResultId(module()->context()->TakeNextId());
   }
 
   const char* src = source_.c_str();
