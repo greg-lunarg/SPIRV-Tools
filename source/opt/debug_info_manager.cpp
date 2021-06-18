@@ -777,8 +777,12 @@ void DebugInfoManager::ConvertDebugGlobalToLocalVariable(
           {spv_operand_type_t::SPV_OPERAND_TYPE_ID,
            {GetEmptyDebugExpression()->result_id()}},
       }));
+  // Must insert after all OpVariables in block
+  Instruction* insert_before = local_var;
+  while (insert_before->opcode() == SpvOpVariable)
+    insert_before = insert_before->NextNode();
   auto* added_dbg_decl =
-      local_var->NextNode()->InsertBefore(std::move(new_dbg_decl));
+      insert_before->InsertBefore(std::move(new_dbg_decl));
   if (context()->AreAnalysesValid(IRContext::Analysis::kAnalysisDefUse))
     context()->get_def_use_mgr()->AnalyzeInstDefUse(added_dbg_decl);
   if (context()->AreAnalysesValid(
