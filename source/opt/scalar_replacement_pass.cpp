@@ -874,6 +874,11 @@ bool ScalarReplacementPass::CheckUsesRelaxed(const Instruction* inst) const {
           case SpvOpImageTexelPointer:
             if (!CheckImageTexelPointer(index)) ok = false;
             break;
+          case SpvOpExtInst:
+            if (user->GetCommonDebugOpcode() != CommonDebugInfoDebugDeclare ||
+                !CheckDebugDeclare(user, index))
+              ok = false;
+            break;
           default:
             ok = false;
             break;
@@ -904,6 +909,13 @@ bool ScalarReplacementPass::CheckStore(const Instruction* inst,
     return false;
   return true;
 }
+
+bool ScalarReplacementPass::CheckDebugDeclare(const Instruction* inst,
+  uint32_t index) const {
+  if (index != 5u) return false;
+  return true;
+}
+
 bool ScalarReplacementPass::IsLargerThanSizeLimit(uint64_t length) const {
   if (max_num_elements_ == 0) {
     return false;
